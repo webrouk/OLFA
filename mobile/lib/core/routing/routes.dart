@@ -1,0 +1,42 @@
+/// Route map for the 26 core screens. Paths are stable identifiers used by
+/// deep links, push notifications and analytics — do not rename casually.
+abstract final class Routes {
+  // 1. Authentication & onboarding (6)
+  static const splash = '/';
+  static const onboarding = '/onboarding';
+  static const language = '/language';
+  static const phone = '/auth/phone';
+  static const otp = '/auth/otp';
+  static const age = '/auth/age';
+
+  // 2. Profile setup (5)
+  static const gender = '/setup/gender';
+  static const profileInfo = '/setup/info';
+  static const preferences = '/setup/preferences';
+  static const photos = '/setup/photos';
+  static const verification = '/setup/verification';
+
+  // 3. Discovery (6) — tabs live inside the floating-nav shell
+  static const discover = '/discover';
+  static const profileDetails = '/discover/profile/:id';
+  static const search = '/discover/search';
+  static const likes = '/likes';
+  static const matches = '/matches';
+  static const myProfile = '/me';
+
+  // 4. Communication (3)
+  static const conversations = '/messages';
+  static const chat = '/messages/:conversationId';
+  static const notifications = '/notifications';
+
+  // 5. Account & services (6)
+  static const editProfile = '/me/edit';
+  static const plans = '/me/plans';
+  static const payments = '/me/payments';
+  static const privacy = '/me/privacy';
+  static const help = '/me/help';
+  static const settings = '/me/settings';
+
+  static String profile(String id) => '/discover/profile/$id';
+  static String chatWith(String conversationId) => '/messages/$conversationId';
+}

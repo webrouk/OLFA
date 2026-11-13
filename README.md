@@ -14,29 +14,19 @@
 
 ## الحالة الحالية
 
-**المرحلة 1 — Product Architecture & System Planning (Script 01)**: بانتظار الاعتماد.
+**المرحلة 1 — التأسيس والهوية والمعاينة الحية** (بانتظار الاعتماد)
 
-وفق قاعدة Script 01: *ممنوع البدء بكتابة كميات كبيرة من الأكواد قبل اعتماد البنية المعمارية.*
-لذلك يحتوي المستودع حاليًا على:
-
-- الوثائق المعمارية العشر في [`docs/`](docs/).
-- مخطط قاعدة البيانات الكامل (Prisma) في [`backend/prisma/schema.prisma`](backend/prisma/schema.prisma).
-- الهيكل الأولي للمشاريع الثلاثة (بدون منطق أعمال بعد).
-- Design Tokens للهوية البصرية في `mobile/lib/core/theme/` و`admin/src/styles/`.
+- **معاينة حية تفاعلية** لجميع الصفحات الـ26 ولوحة التحكم بأقسامها الـ12 (عربي RTL / إنجليزي LTR، 6 مقاسات أجهزة): [`preview/index.html`](preview/).
+- **أساس Flutter** في [`mobile/`](mobile/): Design Tokens، Typography، Material 3 theme، المكونات المشتركة، الشريط السفلي العائم، الترجمة ARB، GoRouter لـ26 مسارًا، 8 شاشات منفذة، اختبارات Widgets.
+- **أصول الهوية** في [`mobile/assets/brand/`](mobile/assets/brand/).
+- **مخطط قاعدة البيانات** (Prisma) في [`backend/prisma/schema.prisma`](backend/prisma/schema.prisma).
+- **الوثائق**: PRD وSystem Architecture.
 
 ## الوثائق
 
 1. [PRD — وثيقة متطلبات المنتج](docs/01-PRD.md)
 2. [System Architecture](docs/02-system-architecture.md)
-3. [Database ERD](docs/03-database-erd.md)
-4. [API Architecture](docs/04-api-architecture.md)
-5. [User Journey](docs/05-user-journey.md)
-6. [Matching Algorithm](docs/06-matching-algorithm.md)
-7. [Subscription Architecture](docs/07-subscription-architecture.md)
-8. [Security Architecture](docs/08-security-architecture.md)
-9. [Project Folder Structure](docs/09-folder-structure.md)
-10. [Development Roadmap](docs/10-roadmap.md)
-11. [سجل القرارات التقنية ADR](docs/adr/)
+3. Database ERD · API · Matching · Subscriptions · Security · Roadmap — قيد الإعداد (المرحلة 2)
 
 ## التشغيل المحلي (بعد المرحلة 3)
 
@@ -45,9 +35,9 @@ cp .env.example .env
 docker compose up -d          # PostgreSQL + Redis + MinIO
 cd backend && npm i && npx prisma migrate dev && npm run start:dev
 cd admin && npm i && npm run dev
-cd mobile && flutter pub get && flutter run
+cd mobile && bash scripts/fetch_fonts.sh && flutter pub get && flutter run -d chrome
 ```
 
 ## قواعد التطوير الإلزامية
 
-راجع [`docs/10-roadmap.md#global-development-rules`](docs/10-roadmap.md#global-development-rules).
+الالتزام بالهوية (4 ألوان فقط، بدون Gradients أو 3D)، وعدم ترك أزرار شكلية، وعدم وضع مفاتيح أو كلمات مرور داخل الكود، واختبار كل مرحلة قبل الانتقال إلى التالية.
