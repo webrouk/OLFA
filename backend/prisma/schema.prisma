@@ -1,0 +1,688 @@
+// OLFA — Database Schema (PostgreSQL 16)
+// See docs/03-database-erd.md for the ERD and design notes.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────── Enums ─────────────────────────────
+
+enum AccountStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  REJECTED
+  SUSPENDED
+  RESTRICTED
+  DELETED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum MaritalStatus {
+  NEVER_MARRIED
+  DIVORCED
+  WIDOWED
+  MARRIED // only where permitted by local law & AppSettings
+}
+
+enum EducationLevel {
+  HIGH_SCHOOL
+  DIPLOMA
+  BACHELOR
+  MASTER
+  DOCTORATE
+  OTHER
+}
+
+enum MarriageTimeline {
+  WITHIN_6_MONTHS
+  WITHIN_1_YEAR
+  WITHIN_2_YEARS
+  NOT_SURE
+}
+
+enum Locale {
+  ar
+  en
+}
+
+enum PhotoStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum VerificationType {
+  PROFILE_REVIEW   // profile + photos moderation
+  LIVENESS_SELFIE  // "real person" check
+  IDENTITY         // government-ID check (later phase)
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum MatchStatus {
+  ACTIVE
+  UNMATCHED
+  BLOCKED
+}
+
+enum MessageType {
+  TEXT
+  SYSTEM
+}
+
+enum PlanCode {
+  FREE
+  PLUS
+  PREMIUM
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  GRACE_PERIOD
+  BILLING_RETRY
+  CANCELLED // auto-renew off, still valid until expiresAt
+  EXPIRED
+  REFUNDED
+  REVOKED
+}
+
+enum PaymentProvider {
+  APPLE
+  GOOGLE
+  WEB
+  ADMIN_GRANT
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum NotificationType {
+  NEW_LIKE
+  NEW_MATCH
+  NEW_MESSAGE
+  VERIFICATION_APPROVED
+  VERIFICATION_REJECTED
+  SUBSCRIPTION
+  SYSTEM
+}
+
+enum ReportTarget {
+  USER
+  PHOTO
+  MESSAGE
+}
+
+enum ReportReason {
+  FAKE_PROFILE
+  INAPPROPRIATE_PHOTO
+  HARASSMENT
+  SPAM_SCAM
+  UNDERAGE
+  NOT_SERIOUS
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  IN_REVIEW
+  ACTION_TAKEN
+  DISMISSED
+}
+
+enum TicketCategory {
+  PAYMENT
+  ACCOUNT
+  VERIFICATION
+  TECHNICAL
+  OTHER
+}
+
+enum TicketStatus {
+  OPEN
+  PENDING_USER
+  RESOLVED
+  CLOSED
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  MODERATOR
+  SUPPORT
+  FINANCE
+  VIEWER
+}
+
+// ───────────────────────────── Identity ─────────────────────────────
+
+model User {
+  id                String        @id @default(uuid()) @db.Uuid
+  phoneE164         String        @unique
+  phoneCountryCode  String        @db.VarChar(4)
+  phoneVerifiedAt   DateTime?
+  status            AccountStatus @default(PENDING_VERIFICATION)
+  locale            Locale        @default(ar)
+  timezone          String        @default("UTC")
+  countryCode       String?       @db.Char(2) // user-selected residence
+  ageConfirmedAt    DateTime?
+  termsVersion      String?
+  termsAcceptedAt   DateTime?
+  privacyVersion    String?
+  isPhotosReviewed  Boolean       @default(false)
+  isLivenessVerified Boolean      @default(false)
+  isIdentityVerified Boolean      @default(false)
+  restrictions      Json          @default("{}") // e.g. {"chat":true,"likes":true}
+  lastActiveAt      DateTime?
+  deletionRequestedAt DateTime?
+  deletedAt         DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  profile           UserProfile?
+  preferences       UserPreference?
+  photos            UserPhoto[]
+  interests         UserInterest[]
+  devices           UserDevice[]
+  sessions          UserSession[]
+  verificationRequests VerificationRequest[]
+  likesSent         Like[]        @relation("LikeFrom")
+  likesReceived     Like[]        @relation("LikeTo")
+  passesSent        Pass[]        @relation("PassFrom")
+  passesReceived    Pass[]        @relation("PassTo")
+  matchesA          Match[]       @relation("MatchUserA")
+  matchesB          Match[]       @relation("MatchUserB")
+  messages          Message[]
+  subscriptions     Subscription[]
+  payments          Payment[]
+  dailyUsage        DailyUsage[]
+  notifications     Notification[]
+  reportsFiled      Report[]      @relation("Reporter")
+  reportsAgainst    Report[]      @relation("Reported")
+  blocksMade        BlockedUser[] @relation("Blocker")
+  blocksReceived    BlockedUser[] @relation("Blocked")
+  tickets           SupportTicket[]
+
+  @@index([status, countryCode])
+  @@index([lastActiveAt])
+}
+
+model OtpChallenge {
+  id          String    @id @default(uuid()) @db.Uuid
+  phoneE164   String
+  codeHash    String    // argon2/HMAC — never plaintext
+  attempts    Int       @default(0)
+  ipHash      String?
+  deviceId    String?
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([phoneE164, createdAt])
+}
+
+model UserDevice {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  deviceId    String   // app-generated install id
+  platform    String   // ios | android
+  fcmToken    String?
+  appVersion  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@index([fcmToken])
+}
+
+model UserSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @db.Uuid
+  deviceId         String?
+  refreshTokenHash String    @unique
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ───────────────────────────── Profile ─────────────────────────────
+
+model UserProfile {
+  userId           String           @id @db.Uuid
+  displayName      String           @db.VarChar(40)
+  birthDate        DateTime         @db.Date
+  gender           Gender
+  countryCode      String           @db.Char(2)
+  city             String           @db.VarChar(80)
+  showLocation     Boolean          @default(true)
+  maritalStatus    MaritalStatus
+  hasChildren      Boolean?
+  wantsChildren    Boolean?
+  education        EducationLevel?
+  occupation       String?          @db.VarChar(80)
+  heightCm         Int?
+  religion         String?          @db.VarChar(40)
+  religiosity      Int?             // 1..5 self-reported
+  smoking          Boolean?
+  marriageTimeline MarriageTimeline @default(NOT_SURE)
+  willingToRelocate Boolean?
+  bio              String?          @db.VarChar(500)
+  lifestyle        Json             @default("{}")
+  completeness     Int              @default(0) // 0..100
+  updatedAt        DateTime         @updatedAt
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([gender, countryCode, birthDate])
+  @@index([countryCode, city])
+}
+
+model UserPreference {
+  userId            String            @id @db.Uuid
+  ageMin            Int               @default(18)
+  ageMax            Int               @default(60)
+  countryCodes      String[]          // empty = any
+  cities            String[]
+  maritalStatuses   MaritalStatus[]   // empty = any
+  educationLevels   EducationLevel[]  // premium filter
+  occupations       String[]          // premium filter
+  wantsChildren     Boolean?
+  smokingOk         Boolean?
+  updatedAt         DateTime          @updatedAt
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Interest {
+  id        Int            @id @default(autoincrement())
+  key       String         @unique // stable key, e.g. "reading"
+  nameAr    String
+  nameEn    String
+  category  String
+  isBasic   Boolean        @default(true) // available in free filters
+  isActive  Boolean        @default(true)
+  users     UserInterest[]
+}
+
+model UserInterest {
+  userId     String   @db.Uuid
+  interestId Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interest   Interest @relation(fields: [interestId], references: [id])
+
+  @@id([userId, interestId])
+  @@index([interestId])
+}
+
+model UserPhoto {
+  id             String      @id @default(uuid()) @db.Uuid
+  userId         String      @db.Uuid
+  storageKey     String      // original (private bucket)
+  variants       Json        @default("{}") // {"thumb":"...","card":"...","full":"..."}
+  position       Int         // 0 = primary
+  status         PhotoStatus @default(PENDING)
+  rightsConfirmed Boolean    @default(false)
+  phash          String?     // perceptual hash for duplicate detection
+  moderation     Json?       // automated scan result
+  rejectReason   String?
+  createdAt      DateTime    @default(now())
+  reviewedAt     DateTime?
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, position])
+  @@index([phash])
+}
+
+// ───────────────────────────── Verification ─────────────────────────────
+
+model VerificationRequest {
+  id            String             @id @default(uuid()) @db.Uuid
+  userId        String             @db.Uuid
+  type          VerificationType
+  status        VerificationStatus @default(PENDING)
+  selfieKey     String?
+  autoResult    Json?              // automated checks summary
+  rejectReason  String?
+  rejectCode    String?            // i18n key for user-facing fix steps
+  reviewedById  String?            @db.Uuid
+  submittedAt   DateTime           @default(now())
+  reviewedAt    DateTime?
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy    AdminUser?         @relation(fields: [reviewedById], references: [id])
+
+  @@index([status, type, submittedAt])
+  @@index([userId])
+}
+
+// ───────────────────────────── Swipes & Matches ─────────────────────────────
+
+model Like {
+  id         String   @id @default(uuid()) @db.Uuid
+  fromUserId String   @db.Uuid
+  toUserId   String   @db.Uuid
+  isSuper    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  undoneAt   DateTime?
+  from       User     @relation("LikeFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  to         User     @relation("LikeTo", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@unique([fromUserId, toUserId]) // prevents duplicate likes
+  @@index([toUserId, createdAt])
+}
+
+model Pass {
+  id         String   @id @default(uuid()) @db.Uuid
+  fromUserId String   @db.Uuid
+  toUserId   String   @db.Uuid
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime? // optional resurfacing after N days (AppSettings)
+  from       User     @relation("PassFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  to         User     @relation("PassTo", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@unique([fromUserId, toUserId])
+}
+
+model Match {
+  id           String        @id @default(uuid()) @db.Uuid
+  userAId      String        @db.Uuid // always the smaller UUID
+  userBId      String        @db.Uuid
+  status       MatchStatus   @default(ACTIVE)
+  score        Int?          // compatibility at match time
+  createdAt    DateTime      @default(now())
+  endedAt      DateTime?
+  userA        User          @relation("MatchUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB        User          @relation("MatchUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  conversation Conversation?
+
+  @@unique([userAId, userBId])
+  @@index([userBId])
+}
+
+// ───────────────────────────── Chat ─────────────────────────────
+
+model Conversation {
+  id             String    @id @default(uuid()) @db.Uuid
+  matchId        String    @unique @db.Uuid
+  startedById    String?   @db.Uuid // who spent the "start conversation" credit
+  startedAt      DateTime?
+  lastMessageAt  DateTime?
+  lastReadA      DateTime?
+  lastReadB      DateTime?
+  createdAt      DateTime  @default(now())
+  match          Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  messages       Message[]
+
+  @@index([lastMessageAt])
+}
+
+model Message {
+  id              String      @id @default(uuid()) @db.Uuid
+  conversationId  String      @db.Uuid
+  senderId        String      @db.Uuid
+  clientMessageId String      @db.Uuid // idempotency
+  type            MessageType @default(TEXT)
+  body            String      @db.VarChar(2000)
+  deliveredAt     DateTime?
+  readAt          DateTime?
+  flagged         Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+  deletedAt       DateTime?
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender          User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, senderId, clientMessageId])
+  @@index([conversationId, createdAt(sort: Desc)])
+}
+
+// ───────────────────────────── Plans, Subscriptions & Payments ─────────────────────────────
+
+model Plan {
+  id            String    @id @default(uuid()) @db.Uuid
+  code          PlanCode  @unique
+  nameAr        String
+  nameEn        String
+  dailyLikes    Int
+  dailyMessages Int       // credits to START new conversations
+  dailyUndos    Int       @default(0)
+  features      Json      @default("{}") // {"advancedFilters":true,"seeWhoLikedYou":true,...}
+  isActive      Boolean   @default(true)
+  sortOrder     Int       @default(0)
+  updatedAt     DateTime  @updatedAt
+  products      PlanProduct[]
+  subscriptions Subscription[]
+}
+
+model PlanProduct {
+  id            String          @id @default(uuid()) @db.Uuid
+  planId        String          @db.Uuid
+  provider      PaymentProvider
+  productId     String          // App Store / Play product id or web price id
+  durationDays  Int
+  webPriceMinor Int?            // web only; stores handle their own regional pricing
+  webCurrency   String?         @db.Char(3)
+  isActive      Boolean         @default(true)
+  plan          Plan            @relation(fields: [planId], references: [id])
+
+  @@unique([provider, productId])
+}
+
+model Promotion {
+  id          String    @id @default(uuid()) @db.Uuid
+  code        String    @unique
+  description String?
+  planCode    PlanCode?
+  percentOff  Int?
+  bonusDays   Int?
+  startsAt    DateTime
+  endsAt      DateTime
+  maxUses     Int?
+  usedCount   Int       @default(0)
+  isActive    Boolean   @default(true)
+}
+
+model Subscription {
+  id                    String             @id @default(uuid()) @db.Uuid
+  userId                String             @db.Uuid
+  planId                String             @db.Uuid
+  provider              PaymentProvider
+  status                SubscriptionStatus
+  originalTransactionId String?            // Apple original tx / Google purchaseToken
+  productId             String?
+  startsAt              DateTime
+  expiresAt             DateTime
+  autoRenew             Boolean            @default(true)
+  cancelledAt           DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                  Plan               @relation(fields: [planId], references: [id])
+  payments              Payment[]
+
+  @@unique([provider, originalTransactionId])
+  @@index([userId, status, expiresAt])
+}
+
+model Payment {
+  id             String          @id @default(uuid()) @db.Uuid
+  userId         String          @db.Uuid
+  subscriptionId String?         @db.Uuid
+  provider       PaymentProvider
+  providerTxId   String
+  amountMinor    Int?
+  currency       String?         @db.Char(3)
+  status         PaymentStatus
+  rawEventRef    String?         // pointer to stored webhook/receipt (not the secret)
+  createdAt      DateTime        @default(now())
+  refundedAt     DateTime?
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription   Subscription?   @relation(fields: [subscriptionId], references: [id])
+
+  @@unique([provider, providerTxId])
+  @@index([userId, createdAt])
+}
+
+model DailyUsage {
+  userId          String   @db.Uuid
+  day             DateTime @db.Date // in the user's timezone
+  likes           Int      @default(0)
+  messagesStarted Int      @default(0)
+  undos           Int      @default(0)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, day])
+}
+
+// ───────────────────────────── Notifications ─────────────────────────────
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @db.Uuid
+  type      NotificationType
+  titleKey  String           // i18n key — rendered in user's locale
+  bodyKey   String
+  params    Json             @default("{}")
+  data      Json             @default("{}")
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+// ───────────────────────────── Safety ─────────────────────────────
+
+model Report {
+  id             String       @id @default(uuid()) @db.Uuid
+  reporterId     String       @db.Uuid
+  reportedUserId String       @db.Uuid
+  targetType     ReportTarget
+  targetId       String?      @db.Uuid // photo or message id
+  reason         ReportReason
+  details        String?      @db.VarChar(1000)
+  status         ReportStatus @default(OPEN)
+  priority       Int          @default(0) // UNDERAGE/HARASSMENT get higher priority
+  resolution     String?
+  handledById    String?      @db.Uuid
+  createdAt      DateTime     @default(now())
+  resolvedAt     DateTime?
+  reporter       User         @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUser   User         @relation("Reported", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  handledBy      AdminUser?   @relation(fields: [handledById], references: [id])
+
+  @@index([status, priority, createdAt])
+  @@index([reportedUserId])
+}
+
+model BlockedUser {
+  blockerId String   @db.Uuid
+  blockedId String   @db.Uuid
+  createdAt DateTime @default(now())
+  blocker   User     @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+// ───────────────────────────── Support ─────────────────────────────
+
+model SupportTicket {
+  id           String          @id @default(uuid()) @db.Uuid
+  userId       String          @db.Uuid
+  category     TicketCategory
+  subject      String          @db.VarChar(150)
+  status       TicketStatus    @default(OPEN)
+  assignedToId String?         @db.Uuid
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedTo   AdminUser?      @relation(fields: [assignedToId], references: [id])
+  messages     TicketMessage[]
+
+  @@index([status, category])
+}
+
+model TicketMessage {
+  id        String        @id @default(uuid()) @db.Uuid
+  ticketId  String        @db.Uuid
+  authorType String       // USER | ADMIN
+  authorId  String        @db.Uuid
+  body      String        @db.VarChar(4000)
+  createdAt DateTime      @default(now())
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+}
+
+model FaqItem {
+  id         String   @id @default(uuid()) @db.Uuid
+  category   String
+  questionAr String
+  questionEn String
+  answerAr   String
+  answerEn   String
+  sortOrder  Int      @default(0)
+  isActive   Boolean  @default(true)
+  updatedAt  DateTime @updatedAt
+}
+
+// ───────────────────────────── Admin ─────────────────────────────
+
+model AdminUser {
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String    @unique
+  name          String
+  passwordHash  String    // argon2id
+  totpSecretEnc String?   // encrypted at rest
+  role          AdminRole
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  verificationsReviewed VerificationRequest[]
+  reportsHandled        Report[]
+  ticketsAssigned       SupportTicket[]
+  auditLogs             AuditLog[]
+}
+
+model AuditLog {
+  id         BigInt    @id @default(autoincrement())
+  adminId    String?   @db.Uuid // null = system/automation
+  action     String    // e.g. "user.suspend", "plan.update"
+  entityType String
+  entityId   String
+  before     Json?
+  after      Json?
+  reason     String?
+  ipHash     String?
+  createdAt  DateTime  @default(now())
+  admin      AdminUser? @relation(fields: [adminId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([adminId, createdAt])
+}
+
+model AppSetting {
+  key         String   @id // e.g. "quota.chat.continuationDailyLimit"
+  value       Json
+  description String?
+  updatedById String?  @db.Uuid
+  updatedAt   DateTime @updatedAt
+}

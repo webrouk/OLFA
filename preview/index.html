@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OLFA — Live Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--p:#8B0D2B;--k:#1A1A1A;--g:#E9E9E9;--w:#FFFFFF;
+--p8:rgba(139,13,43,.08);--p16:rgba(139,13,43,.16);--k60:rgba(26,26,26,.62);--k40:rgba(26,26,26,.4);--k08:rgba(26,26,26,.06);--w60:rgba(255,255,255,.6)}
+html[lang=ar]{--f:'Tajawal',system-ui,sans-serif}
+html[lang=en]{--f:'Montserrat',system-ui,sans-serif}
+html,body{height:100%}
+body{font-family:var(--f);color:var(--k);background:var(--g);-webkit-font-smoothing:antialiased;overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+svg{flex:none}
+.ltr{direction:ltr;unicode-bidi:isolate}
+[dir=rtl] .flip{transform:scaleX(-1)}
+
+/* ── preview chrome ── */
+.tool{position:fixed;top:0;left:0;right:0;height:60px;background:var(--w);border-bottom:1px solid var(--g);display:flex;align-items:center;gap:10px;padding:0 16px;z-index:20}
+.tool .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;margin-inline-end:auto;white-space:nowrap}
+.tool .brand small{font-weight:500;color:var(--k60);font-size:12px}
+.seg{display:inline-flex;background:var(--g);border-radius:12px;padding:3px;gap:2px}
+.seg button{border:0;background:none;height:32px;padding:0 12px;border-radius:9px;font-size:13px;font-weight:500;color:var(--k60);white-space:nowrap}
+.seg button.on{background:var(--w);color:var(--k);font-weight:600;box-shadow:0 1px 2px var(--k08)}
+.tsel{height:38px;border-radius:10px;border:1px solid var(--g);background:var(--w);padding:0 10px;font-size:13px;max-width:190px}
+.side{position:fixed;top:60px;bottom:0;inset-inline-start:0;width:250px;background:var(--w);border-inline-end:1px solid var(--g);overflow:auto;padding:12px 10px 40px;z-index:10}
+.side h4{font-size:11px;font-weight:600;color:var(--k40);margin:16px 10px 6px;letter-spacing:.02em}
+.side button{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;text-align:start;padding:8px 10px;border-radius:10px;font-size:13.5px;color:var(--k)}
+.side button span.n{width:22px;height:22px;border-radius:7px;background:var(--g);font-size:11px;display:grid;place-items:center;font-weight:600;flex:none}
+.side button.on{background:var(--p8);color:var(--p);font-weight:600}
+.side button.on span.n{background:var(--p);color:var(--w)}
+.stage{position:fixed;top:60px;bottom:0;inset-inline-start:250px;inset-inline-end:0;overflow:auto;display:flex;align-items:center;justify-content:center;padding:28px}
+.stage.grid{display:block}
+.gridwrap{display:flex;flex-wrap:wrap;gap:28px 22px;justify-content:center;padding-bottom:40px}
+.gcell{display:flex;flex-direction:column;align-items:center;gap:10px}
+.gcell .cap2{font-size:12px;font-weight:600;color:var(--k60)}
+.gcell .scaler{cursor:pointer}
+.gtitle{width:100%;font-size:14px;font-weight:700;margin:18px 0 4px;text-align:center}
+.scaler{position:relative;flex:none}
+.scaler>.device,.scaler>.adm{position:absolute;top:0;left:0;transform-origin:0 0}
+.demo{font-size:11px;color:var(--k60);background:var(--g);border-radius:8px;padding:4px 8px;white-space:nowrap}
+.adm-mode .side{display:none}.adm-mode .stage{inset-inline-start:0}
+@media(max-width:900px){.side{display:none}.stage{inset-inline-start:0}.tool .brand small,.demo{display:none}}
+@media(max-width:620px){.tool{gap:6px;padding:0 8px;height:auto;min-height:60px;flex-wrap:wrap;padding-block:8px}.stage{top:104px}.tool .brand{flex-basis:100%}}
+
+/* ── device ── */
+.device{width:var(--W);height:var(--H);background:var(--w);border-radius:var(--rad);position:relative;overflow:hidden;box-shadow:0 0 0 9px var(--k),0 0 0 10px #000,0 24px 60px rgba(26,26,26,.22)}
+.sbar{position:absolute;top:0;left:0;right:0;height:var(--sat);display:flex;align-items:flex-end;justify-content:space-between;padding:0 28px 8px;font-size:14px;font-weight:600;z-index:30;pointer-events:none;font-family:'Montserrat',system-ui,sans-serif;direction:ltr}
+.sbar.light{color:var(--w)}
+.sbar.sm{padding-bottom:4px;font-size:12px;padding-inline:16px}
+.island{position:absolute;top:11px;left:50%;width:122px;height:35px;margin-left:-61px;border-radius:20px;background:#000;z-index:31}
+.punch{position:absolute;top:12px;left:50%;width:14px;height:14px;margin-left:-7px;border-radius:50%;background:#000;z-index:31}
+.homebar{position:absolute;bottom:8px;left:50%;width:134px;height:5px;margin-left:-67px;border-radius:3px;background:var(--k);z-index:31;pointer-events:none}
+.homebar.and{width:108px;height:4px;margin-left:-54px;opacity:.6}
+.homebar.light{background:var(--w)}
+.scr{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;background:var(--w)}
+.scr::-webkit-scrollbar{display:none}
+.scr.navd{padding-bottom:calc(var(--sab) + 100px)}
+.full{min-height:100%;display:flex;flex-direction:column}
+.safe-top{height:var(--sat);flex:none}
+.pad{padding-inline:20px}
+.grow{flex:1}
+.foot{padding:16px 20px calc(var(--sab) + 16px);display:flex;flex-direction:column;gap:10px}
+.sticky-foot{position:sticky;bottom:0;background:var(--w);border-top:1px solid var(--g);z-index:3}
+
+/* ── typography ── */
+.display{font-size:34px;font-weight:700;line-height:1.2}
+.h1{font-size:28px;font-weight:700;line-height:1.25}
+.h2{font-size:22px;font-weight:700;line-height:1.3}
+.h3{font-size:17px;font-weight:600;line-height:1.35}
+.bl{font-size:16px;line-height:1.6}
+.bm{font-size:15px;line-height:1.6}
+.bs{font-size:13px;line-height:1.55}
+.cap{font-size:12.5px;line-height:1.5;color:var(--k60)}
+.mut{color:var(--k60)}
+html[lang=en] .h1,html[lang=en] .display{letter-spacing:-.02em}
+html[lang=en] .h1{font-size:26px}html[lang=en] .display{font-size:31px}
+
+/* ── components ── */
+.btn{height:52px;border-radius:14px;border:0;background:var(--p);color:var(--w);font-weight:600;font-size:16px;padding:0 22px;display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;transition:transform .15s,opacity .2s}
+.btn:active{transform:scale(.98)}
+.btn[disabled]{opacity:.3;pointer-events:none}
+.btn.out{background:var(--w);color:var(--k);box-shadow:inset 0 0 0 1.5px var(--g)}
+.btn.ghost{background:none;color:var(--k60);height:44px}
+.btn.dark{background:var(--k)}
+.btn.wh{background:var(--w);color:var(--p)}
+.btn.sm{height:38px;font-size:13.5px;width:auto;padding:0 14px;border-radius:11px}
+.link{color:var(--p);font-weight:600;background:none;border:0;padding:0}
+.bar{position:sticky;top:0;z-index:5;background:var(--w);padding-top:var(--sat)}
+.bar .in{height:56px;display:flex;align-items:center;gap:6px;padding:0 10px}
+.bar h1{flex:1;font-size:17px;font-weight:700;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .sp{width:44px;flex:none}
+.bar.line{border-bottom:1px solid var(--g)}
+.ib{width:44px;height:44px;border-radius:14px;border:0;background:none;display:grid;place-items:center;flex:none;color:var(--k)}
+.ib.soft{background:var(--g)}
+.ib.wh{background:var(--w);box-shadow:0 2px 10px rgba(26,26,26,.12)}
+.lbl{font-size:13px;font-weight:500;margin-bottom:8px;display:block}
+.inp{width:100%;height:52px;border-radius:14px;border:1.5px solid transparent;background:var(--g);padding:0 16px;font-size:16px;outline:none;transition:.15s}
+.inp:focus{border-color:var(--p);background:var(--w)}
+.inp.err{border-color:var(--p);background:var(--p8)}
+select.inp{appearance:none;-webkit-appearance:none}
+textarea.inp{height:104px;padding:14px 16px;resize:none;line-height:1.6}
+.fld{margin-bottom:18px}
+.errtx{font-size:12.5px;color:var(--p);margin-top:6px;font-weight:500}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{height:38px;padding:0 14px;border-radius:19px;border:1.5px solid var(--g);background:var(--w);font-size:14px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.chip.on{border-color:var(--p);background:var(--p8);color:var(--p);font-weight:600}
+.chip.sm{height:30px;font-size:12.5px;padding:0 10px;border-radius:15px}
+.chip.lock{opacity:.5}
+.tag{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 9px;border-radius:12px;font-size:11.5px;font-weight:600;background:var(--g);color:var(--k);white-space:nowrap}
+.tag.p{background:var(--p8);color:var(--p)}
+.tag.k{background:var(--k);color:var(--w)}
+.tag.pf{background:var(--p);color:var(--w)}
+.list{background:var(--w);border-radius:18px;box-shadow:0 0 0 1px var(--g);overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;padding:12px 16px;min-height:58px;border:0;border-bottom:1px solid var(--g);width:100%;background:none;text-align:start}
+.row:last-child{border-bottom:0}
+.row .ico{width:38px;height:38px;border-radius:12px;background:var(--g);display:grid;place-items:center;flex:none}
+.row .ico.p{background:var(--p8);color:var(--p)}
+.row .tx{flex:1;min-width:0}
+.row .t1{font-size:15px;font-weight:500}
+.row .t2{font-size:12.5px;color:var(--k60);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .chev{color:var(--k40)}
+.row.danger .t1{color:var(--p)}
+.sec{font-size:13px;font-weight:600;color:var(--k60);margin:26px 4px 10px}
+.tg{width:48px;height:28px;border-radius:14px;background:var(--g);position:relative;flex:none;border:0}
+.tg::after{content:'';position:absolute;top:3px;inset-inline-start:3px;width:22px;height:22px;border-radius:50%;background:var(--w);box-shadow:0 1px 3px rgba(26,26,26,.2);transition:.2s}
+.tg.on{background:var(--p)}
+.tg.on::after{inset-inline-start:23px}
+.check{display:flex;gap:12px;align-items:flex-start;background:none;border:0;text-align:start;width:100%;padding:6px 0;font-size:14px;line-height:1.55}
+.check .bx{width:22px;height:22px;border-radius:7px;border:1.5px solid var(--k40);flex:none;display:grid;place-items:center;margin-top:1px;color:var(--w)}
+.check.on .bx{background:var(--p);border-color:var(--p)}
+.radio{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--k40);flex:none;position:relative}
+.radio.on{border-color:var(--p)}
+.radio.on::after{content:'';position:absolute;inset:4px;border-radius:50%;background:var(--p)}
+.opt{display:flex;align-items:center;gap:14px;padding:18px;border-radius:18px;border:1.5px solid var(--g);background:var(--w);width:100%;text-align:start;margin-bottom:12px;transition:.15s}
+.opt.on{border-color:var(--p);background:var(--p8)}
+.opt .big{font-size:18px;font-weight:700}
+.progress{height:4px;border-radius:2px;background:var(--g);overflow:hidden;flex:1}
+.progress i{display:block;height:100%;background:var(--p);border-radius:2px;transition:width .3s}
+.av{border-radius:50%;background:var(--g);display:grid;place-items:center;overflow:hidden;flex:none;position:relative;color:rgba(26,26,26,.18)}
+.av b{position:absolute;font-size:40%;color:var(--k60);font-weight:700}
+.ph{background:var(--g);position:relative;overflow:hidden;display:grid;place-items:center;color:rgba(26,26,26,.13)}
+.ph .sil{width:62%;height:auto;margin-top:18%}
+.vbadge{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--p);color:var(--w);flex:none}
+.empty{display:flex;flex-direction:column;align-items:center;text-align:center;padding:40px 28px;gap:10px}
+.empty .eic{width:84px;height:84px;border-radius:28px;background:var(--g);display:grid;place-items:center;color:var(--p);margin-bottom:8px}
+.banner{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:16px;background:var(--g);font-size:13.5px;line-height:1.55}
+.banner.p{background:var(--p8);color:var(--k)}
+.banner svg{color:var(--p);margin-top:2px}
+.sk{background:var(--g);border-radius:10px;animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.45}}
+.fade{animation:fade .35s ease both}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}}
+.toast{position:absolute;left:50%;bottom:calc(var(--sab) + 96px);transform:translateX(-50%);background:var(--k);color:var(--w);padding:11px 18px;border-radius:14px;font-size:13.5px;font-weight:500;z-index:60;white-space:nowrap;animation:fade .25s both;max-width:90%}
+
+/* sheet */
+.scrim{position:absolute;inset:0;background:rgba(26,26,26,.42);z-index:50;animation:fadeo .2s both}
+@keyframes fadeo{from{opacity:0}}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--w);border-radius:26px 26px 0 0;z-index:51;padding:10px 20px calc(var(--sab) + 18px);max-height:86%;overflow:auto;animation:up .28s cubic-bezier(.2,.8,.2,1) both}
+@keyframes up{from{transform:translateY(100%)}}
+.sheet .grab{width:40px;height:4px;border-radius:2px;background:var(--g);margin:0 auto 14px}
+
+/* nav */
+.nav{position:absolute;inset-inline:14px;bottom:calc(var(--sab) + 12px);height:68px;background:var(--w);border-radius:24px;box-shadow:0 0 0 1px var(--g),0 10px 30px rgba(26,26,26,.10);display:flex;align-items:center;padding:0 6px;z-index:20}
+.nav button{flex:1;height:54px;border:0;background:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--k40);font-size:10.5px;font-weight:500;border-radius:17px;position:relative;margin:0 2px;min-width:0}
+.nav button span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.nav button.on{color:var(--p);background:var(--p8);font-weight:700}
+.nav .dot{position:absolute;top:8px;left:calc(50% + 6px);width:9px;height:9px;border-radius:50%;background:var(--p);border:2px solid var(--w)}
+
+/* splash/onboarding */
+.splash{background:var(--p);color:var(--w);min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;position:relative;cursor:pointer}
+.splash .wm{text-align:center}
+.splash .wm .ar{font-family:'Tajawal',sans-serif;font-weight:800;font-size:46px;line-height:1.1}
+.splash .wm .en{font-family:'Montserrat',sans-serif;font-weight:600;font-size:15px;letter-spacing:.42em;margin-top:6px;padding-inline-start:.42em;opacity:.9}
+.splash .tl{position:absolute;bottom:calc(var(--sab) + 40px);font-size:13px;opacity:.8;text-align:center;padding:0 30px}
+.pulse-in{animation:pin .8s cubic-bezier(.2,.8,.2,1) both}
+@keyframes pin{from{opacity:0;transform:scale(.85)}}
+.illu{aspect-ratio:1/0.9;max-height:44%;margin:12px 24px 0;border-radius:32px;background:var(--g);display:grid;place-items:center;position:relative;overflow:hidden;flex:none}
+.dots{display:flex;gap:6px;justify-content:center}
+.dots i{width:7px;height:7px;border-radius:4px;background:var(--g);transition:.25s}
+.dots i.on{width:22px;background:var(--p)}
+
+/* otp */
+.otp{display:flex;gap:8px;justify-content:center;direction:ltr}
+.otp input{width:48px;height:58px;border-radius:14px;border:1.5px solid transparent;background:var(--g);text-align:center;font-size:22px;font-weight:700;outline:none;font-family:'Montserrat',sans-serif}
+.otp input:focus{border-color:var(--p);background:var(--w)}
+.otp.err input{border-color:var(--p);background:var(--p8)}
+
+/* discover */
+.dhead{display:flex;align-items:center;gap:10px;padding:8px 16px 4px}
+.deck{position:relative;flex:1;margin:8px 16px 0;min-height:320px}
+.card{position:absolute;inset:0;border-radius:26px;overflow:hidden;background:var(--w);box-shadow:0 0 0 1px var(--g),0 8px 28px rgba(26,26,26,.08);display:flex;flex-direction:column;touch-action:pan-y;user-select:none;transition:transform .3s cubic-bezier(.2,.8,.2,1)}
+.card.back{transform:scale(.95) translateY(12px);pointer-events:none}
+.card.drag{transition:none}
+.card .ph{flex:1;min-height:0}
+.card .bars{position:absolute;top:10px;inset-inline:12px;display:flex;gap:4px;z-index:2}
+.card .bars i{flex:1;height:3px;border-radius:2px;background:var(--w60)}
+.card .bars i.on{background:var(--w)}
+.card .pnum{position:absolute;bottom:12px;inset-inline-end:12px;z-index:2}
+.card .info{padding:14px 16px 16px;flex:none}
+.card .nm{display:flex;align-items:center;gap:8px;font-size:22px;font-weight:700}
+.card .nm .age{font-weight:500}
+.stamp{position:absolute;top:34px;z-index:3;padding:6px 14px;border-radius:12px;font-size:22px;font-weight:800;border:3px solid;opacity:0;background:var(--w)}
+.stamp.like{inset-inline-start:20px;color:var(--p);border-color:var(--p);transform:rotate(-12deg)}
+.stamp.pass{inset-inline-end:20px;color:var(--k);border-color:var(--k);transform:rotate(12deg)}
+.acts{display:flex;justify-content:center;align-items:center;gap:16px;padding:14px 0 6px;flex:none}
+.acts button{border:0;border-radius:50%;display:grid;place-items:center;background:var(--w);box-shadow:0 0 0 1px var(--g),0 4px 14px rgba(26,26,26,.08);transition:transform .15s}
+.acts button:active{transform:scale(.92)}
+.acts .s{width:48px;height:48px;color:var(--k60)}
+.acts .l{width:64px;height:64px}
+.acts .lk{background:var(--p);color:var(--w);box-shadow:0 6px 18px rgba(139,13,43,.28)}
+.acts button[disabled]{opacity:.35}
+.match{position:absolute;inset:0;background:var(--p);color:var(--w);z-index:55;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px;gap:14px;animation:fadeo .3s both}
+.match .avs{display:flex;margin:18px 0}
+.match .avs .av{box-shadow:0 0 0 4px var(--p),0 0 0 6px var(--w)}
+.match .avs .av+.av{margin-inline-start:-22px}
+
+/* profile details */
+.pd-photo{aspect-ratio:4/5;position:relative}
+.pd-photo .ph{position:absolute;inset:0}
+.pd-top{position:absolute;top:calc(var(--sat) + 6px);inset-inline:12px;display:flex;justify-content:space-between;z-index:3}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.kv div{background:var(--g);border-radius:14px;padding:12px 14px}
+.kv small{display:block;font-size:11.5px;color:var(--k60);margin-bottom:2px}
+.kv b{font-size:14px;font-weight:600}
+
+/* grids */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.lcard{border-radius:20px;overflow:hidden;position:relative;aspect-ratio:3/4;background:var(--g)}
+.lcard .ph{position:absolute;inset:0}
+.lcard .lb{position:absolute;bottom:0;inset-inline:0;padding:10px 12px;background:var(--w);font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px}
+.lcard.blur .ph{filter:blur(9px)}
+.lcard .lock{position:absolute;inset:0;display:grid;place-items:center;color:var(--w);z-index:2}
+.lcard .lock span{width:46px;height:46px;border-radius:50%;background:var(--p);display:grid;place-items:center}
+.slot{aspect-ratio:3/4;border-radius:18px;border:1.5px dashed var(--k40);display:grid;place-items:center;background:var(--w);position:relative;overflow:hidden;color:var(--k60)}
+.slot.f{border:0}
+.slot .ph{position:absolute;inset:0}
+.slot .tagp{position:absolute;bottom:8px;inset-inline-start:8px;z-index:2}
+.slot .rm{position:absolute;top:6px;inset-inline-end:6px;z-index:2;width:28px;height:28px;border-radius:50%;background:var(--w);border:0;display:grid;place-items:center}
+
+/* chat */
+.chat{height:100%;display:flex;flex-direction:column}
+.msgs{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:6px;scrollbar-width:none}
+.bub{max-width:78%;padding:10px 14px;border-radius:20px;font-size:15px;line-height:1.5;position:relative}
+.bub.me{align-self:flex-end;background:var(--p);color:var(--w);border-end-end-radius:6px}
+.bub.th{align-self:flex-start;background:var(--g);border-end-start-radius:6px}
+.bub .mt{display:flex;gap:4px;align-items:center;justify-content:flex-end;font-size:10.5px;margin-top:2px;opacity:.75;font-family:'Montserrat',sans-serif}
+.sysm{align-self:center;font-size:12px;color:var(--k60);background:var(--g);padding:5px 12px;border-radius:12px;margin:8px 0}
+.typing{align-self:flex-start;background:var(--g);border-radius:20px;padding:14px 16px;display:flex;gap:4px}
+.typing i{width:7px;height:7px;border-radius:50%;background:var(--k40);animation:bl 1s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes bl{50%{opacity:.25;transform:translateY(-2px)}}
+.composer{display:flex;gap:8px;align-items:center;padding:10px 12px calc(var(--sab) + 10px);border-top:1px solid var(--g);background:var(--w)}
+.composer input{flex:1;height:46px;border-radius:23px;border:0;background:var(--g);padding:0 18px;font-size:15px;outline:none}
+.send{width:46px;height:46px;border-radius:50%;border:0;background:var(--p);color:var(--w);display:grid;place-items:center}
+.unread{min-width:20px;height:20px;border-radius:10px;background:var(--p);color:var(--w);font-size:11px;font-weight:700;display:grid;place-items:center;padding:0 6px;font-family:'Montserrat',sans-serif}
+.online{position:absolute;bottom:1px;inset-inline-end:1px;width:12px;height:12px;border-radius:50%;background:var(--p);border:2px solid var(--w)}
+
+/* plans */
+.plan{border-radius:22px;border:1.5px solid var(--g);padding:18px;margin-bottom:12px;position:relative;background:var(--w);width:100%;text-align:start;display:block}
+.plan.on{border-color:var(--p);box-shadow:0 0 0 1px var(--p)}
+.plan.hl{background:var(--k);color:var(--w);border-color:var(--k)}
+.plan.hl.on{box-shadow:0 0 0 3px var(--p)}
+.plan .pt{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.plan ul{list-style:none;margin-top:12px;display:grid;gap:8px;font-size:14px}
+.plan li{display:flex;gap:8px;align-items:center}
+.plan li svg{color:var(--p)}
+.plan.hl li svg{color:var(--w)}
+.acc{border-bottom:1px solid var(--g)}
+.acc button{width:100%;display:flex;justify-content:space-between;gap:12px;align-items:center;background:none;border:0;padding:16px 0;font-size:15px;font-weight:600;text-align:start}
+.acc p{font-size:14px;line-height:1.7;color:var(--k60);padding-bottom:16px}
+.acc svg{transition:.2s}.acc.open svg{transform:rotate(180deg)}
+.meter{height:8px;border-radius:4px;background:var(--g);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--p);border-radius:4px}
+.range2{display:flex;align-items:center;gap:10px}
+.step{display:flex;align-items:center;justify-content:space-between;background:var(--g);border-radius:14px;height:52px;padding:0 6px;flex:1}
+.step button{width:40px;height:40px;border-radius:11px;border:0;background:var(--w);font-size:20px;font-weight:600}
+.step b{font-size:17px;font-family:'Montserrat',sans-serif}
+.tl2{display:grid;gap:0}
+.tl2 .ti{display:flex;gap:14px;align-items:flex-start;position:relative;padding-bottom:22px}
+.tl2 .ti:not(:last-child)::before{content:'';position:absolute;top:28px;bottom:2px;inset-inline-start:13px;width:2px;background:var(--g)}
+.tl2 .ti.done:not(:last-child)::before{background:var(--p)}
+.tl2 .c{width:28px;height:28px;border-radius:50%;background:var(--g);display:grid;place-items:center;flex:none;color:var(--k60);font-size:12px;font-weight:700}
+.tl2 .done .c{background:var(--p);color:var(--w)}
+.tl2 .cur .c{background:var(--w);box-shadow:inset 0 0 0 2px var(--p);color:var(--p)}
+
+/* ── admin ── */
+.adm{width:var(--W);height:var(--H);background:var(--w);display:flex;overflow:hidden;border-radius:14px;box-shadow:0 0 0 1px var(--g),0 24px 60px rgba(26,26,26,.14)}
+.adm aside{width:244px;flex:none;border-inline-end:1px solid var(--g);display:flex;flex-direction:column;padding:18px 12px;overflow:auto;background:var(--w)}
+.adm aside .lg{display:flex;align-items:center;gap:10px;padding:0 8px 18px;font-weight:700}
+.adm aside button{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;padding:10px 10px;border-radius:11px;font-size:13.5px;text-align:start;color:var(--k);margin-bottom:2px}
+.adm aside button svg{color:var(--k60)}
+.adm aside button.on{background:var(--p8);color:var(--p);font-weight:600}
+.adm aside button.on svg{color:var(--p)}
+.adm aside .cnt{margin-inline-start:auto;font-size:11px;font-weight:700;background:var(--p);color:var(--w);border-radius:9px;padding:1px 7px;font-family:'Montserrat',sans-serif}
+.adm main{flex:1;display:flex;flex-direction:column;min-width:0;background:#FFFFFF}
+.adm .top{height:64px;flex:none;border-bottom:1px solid var(--g);display:flex;align-items:center;gap:12px;padding:0 24px}
+.adm .top .srch{flex:1;max-width:420px;height:40px;border-radius:12px;background:var(--g);border:0;padding:0 14px;font-size:13.5px;outline:none}
+.adm .body{flex:1;overflow:auto;padding:24px;background:var(--w)}
+.adm .ph1{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.adm .ph1 h2{font-size:22px;font-weight:700}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;margin-bottom:20px}
+.kpi{border:1px solid var(--g);border-radius:16px;padding:16px}
+.kpi small{font-size:12.5px;color:var(--k60);display:flex;align-items:center;gap:6px}
+.kpi b{display:block;font-size:24px;font-weight:700;margin-top:6px;font-family:'Montserrat',sans-serif}
+.kpi .d{font-size:12px;color:var(--p);font-weight:600}
+.pnl{border:1px solid var(--g);border-radius:18px;padding:18px;margin-bottom:16px;min-width:0}
+.pnl h3{font-size:15px;font-weight:700;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.cols{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+.bars2{display:flex;align-items:flex-end;gap:12px;height:170px;padding-top:10px}
+.bars2 div{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end}
+.bars2 i{width:100%;max-width:38px;background:var(--p);border-radius:8px 8px 3px 3px}
+.bars2 i.k{background:var(--g)}
+.bars2 small{font-size:11px;color:var(--k60)}
+table.t{width:100%;border-collapse:collapse;font-size:13.5px}
+table.t th{font-size:12px;color:var(--k60);font-weight:600;text-align:start;padding:10px 12px;border-bottom:1px solid var(--g);white-space:nowrap}
+table.t td{padding:12px;border-bottom:1px solid var(--g);vertical-align:middle;white-space:nowrap}
+table.t tr:last-child td{border-bottom:0}
+.tw{overflow:auto}
+.uc{display:flex;align-items:center;gap:10px}
+.ainp{height:36px;border-radius:10px;border:1px solid var(--g);padding:0 10px;font-size:13.5px;width:90px;outline:none;background:var(--w);font-family:'Montserrat',sans-serif}
+.ainp:focus{border-color:var(--p)}
+.mod{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+.mcard{border:1px solid var(--g);border-radius:16px;overflow:hidden}
+.mcard .ph{aspect-ratio:3/4}
+.mcard .mb{padding:12px;display:grid;gap:8px;font-size:12.5px}
+.vq{display:grid;grid-template-columns:300px 1fr;gap:16px}
+.qi{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;border:0;background:none;width:100%;text-align:start}
+.qi.on{background:var(--p8)}
+.perm{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:7px;background:var(--p);color:var(--w)}
+.perm.no{background:var(--g);color:var(--k40)}
+.adm.narrow aside{width:72px;padding:18px 8px}
+.adm.narrow aside button span,.adm.narrow aside .lg span,.adm.narrow aside .cnt{display:none}
+.adm.narrow aside button{justify-content:center}
+.adm.narrow .cols,.adm.narrow .vq{grid-template-columns:1fr}
+</style>
+</head>
+<body>
+<div class="tool" id="tool"></div>
+<nav class="side" id="side"></nav>
+<main class="stage" id="stage"></main>
+
+<script>
+/* ═══════════ ICONS (single stroke set, 24px) ═══════════ */
+const P={
+ discover:'<path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z"/><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z"/>',
+ heart:'<path d="M12 20s-7.5-4.6-7.5-10A4.5 4.5 0 0 1 12 7.2 4.5 4.5 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10Z"/>',
+ heartf:'<path fill="currentColor" d="M12 20s-7.5-4.6-7.5-10A4.5 4.5 0 0 1 12 7.2 4.5 4.5 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10Z"/>',
+ match:'<circle cx="8.5" cy="8" r="3"/><circle cx="15.5" cy="8" r="3"/><path d="M3 19c.6-3 2.8-5 5.5-5 1.4 0 2.6.5 3.5 1.4.9-.9 2.1-1.4 3.5-1.4 2.7 0 4.9 2 5.5 5"/>',
+ chat:'<path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.1A8 8 0 1 1 20 12Z"/>',
+ user:'<circle cx="12" cy="8" r="4"/><path d="M4 20c1-3.6 4.2-6 8-6s7 2.4 8 6"/>',
+ back:'<path d="m15 18-6-6 6-6"/>', fwd:'<path d="m9 18 6-6-6-6"/>',
+ close:'<path d="M18 6 6 18M6 6l12 12"/>', check:'<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+ undo:'<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+ info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+ settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>',
+ bell:'<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
+ search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+ filter:'<path d="M4 6h16M7 12h10M10 18h4"/>',
+ camera:'<path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.8l1.4-2h6.6l1.4 2h1.8A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z"/><circle cx="12" cy="13" r="3.5"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>', lock:'<rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+ shield:'<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.3 7.5 9.5 4.3-1.2 7.5-4.9 7.5-9.5V6Z"/><path d="m9 12 2 2 4-4"/>',
+ card:'<rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 15h3"/>',
+ help:'<circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.3-2.5 3.9M12 17h.01"/>',
+ trash:'<path d="M4 7h16M10 11v6M14 11v6M5.5 7l1 12a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>',
+ globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+ send:'<path d="M5 12h13M13 6l6 6-6 6"/>', more:'<circle cx="5.5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="18.5" cy="12" r="1.3" fill="currentColor"/>',
+ flag:'<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>', block:'<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>',
+ eye:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',
+ down:'<path d="m6 9 6 6 6-6"/>', clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+ star:'<path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8Z"/>',
+ pin:'<path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/>',
+ edit:'<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16Z"/><path d="m13.5 6.5 4 4"/>',
+ logout:'<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"/>',
+ doc:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
+ phone:'<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
+ grid:'<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+ chart:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>', ticket:'<path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2.5a2.5 2.5 0 0 0 0 5V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2.5a2.5 2.5 0 0 0 0-5Z"/>',
+ image:'<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><circle cx="9" cy="9" r="1.8"/><path d="m20.5 15-5-5-11 10.5"/>',
+ users:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.4 3.4-5.5 6.5-5.5s5.7 2.1 6.5 5.5M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.7c1.8.7 3 2.6 3.5 5.3"/>',
+ crown:'<path d="m3.5 8 4.5 4 4-6 4 6 4.5-4-2 10.5h-13Z"/>', moon:'<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/>',
+ key:'<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3"/>', download:'<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+ hour:'<path d="M6 3h12M6 21h12M7 3c0 5 5 6 5 9s-5 4-5 9M17 3c0 5-5 6-5 9s5 4 5 9"/>',
+ male:'<circle cx="10" cy="14" r="5.5"/><path d="M14 10l6-6M15 4h5v5"/>', female:'<circle cx="12" cy="9" r="5.5"/><path d="M12 14.5V21M9 18h6"/>'
+};
+const I=(n,s=22,w=1.8)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${P[n]||''}</svg>`;
+const DIR=new Set(['back','fwd','send','undo','logout']);
+const Ix=(n,s,w)=>DIR.has(n)?`<span class="flip" style="display:inline-grid">${I(n,s,w)}</span>`:I(n,s,w);
+
+/* OLFA symbol: two partners whose bodies form one shared heart */
+const SYM=(c='#FFFFFF')=>`<circle cx="17.2" cy="11.4" r="3.4" fill="${c}"/><circle cx="30.8" cy="11.4" r="3.4" fill="${c}"/><path d="M24 38.2 13.4 27.6a6 6 0 0 1 8.5-8.5L24 21.2l2.1-2.1a6 6 0 0 1 8.5 8.5Z" fill="none" stroke="${c}" stroke-width="3" stroke-linejoin="round"/>`;
+const LOGO=(sz=48,bg='#8B0D2B',fg='#FFFFFF')=>`<svg width="${sz}" height="${sz}" viewBox="0 0 48 48">${bg?`<rect width="48" height="48" rx="11" fill="${bg}"/>`:''}<g transform="translate(0 1)">${SYM(fg)}</g></svg>`;
+const SIL='<svg class="sil" viewBox="0 0 100 100" fill="currentColor"><circle cx="50" cy="34" r="20"/><path d="M8 100c3-24 20-38 42-38s39 14 42 38Z"/></svg>';
+const ph=(p,cls='',st='')=>`<div class="ph ${cls}" style="${st}">${SIL}</div>`;
+const av=(p,s=48)=>`<div class="av" style="width:${s}px;height:${s}px">${SIL.replace('class="sil"','style="width:70%;margin-top:30%"')}</div>`;
+
+/* ═══════════ I18N ═══════════ */
+const T={
+ar:{appName:'أُلْفَة',tagline:'للتعارف الجاد بهدف الزواج',demo:'جميع البيانات المعروضة تجريبية',
+ g1:'التسجيل والبداية',g2:'إعداد الحساب',g3:'الاستخدام الأساسي',g4:'التواصل',g5:'الحساب والخدمات',
+ s_splash:'شاشة البداية',s_onboarding:'التعريف بالتطبيق',s_language:'اختيار اللغة',s_phone:'التسجيل برقم الهاتف',s_otp:'رمز التحقق',s_age:'تأكيد العمر',s_gender:'اختيار الجنس',s_info:'المعلومات الشخصية',s_prefs:'تفضيلات الشريك',s_photos:'رفع الصور',s_verify:'حالة التوثيق',s_discover:'الاكتشاف',s_details:'تفاصيل الملف',s_search:'البحث والفلاتر',s_likes:'الإعجابات',s_matches:'التوافقات',s_me:'ملفي',s_convs:'المحادثات',s_chat:'محادثة خاصة',s_notifs:'الإشعارات',s_edit:'تعديل الملف',s_plans:'خطط الاشتراك',s_payments:'سجل المدفوعات',s_privacy:'الخصوصية والأمان',s_faq:'الأسئلة والمساعدة',s_settings:'الإعدادات وحذف الحساب',
+ vApp:'التطبيق',vAdmin:'لوحة التحكم',vOne:'صفحة',vAll:'كل الصفحات',
+ nDiscover:'اكتشف',nLikes:'الإعجابات',nMatches:'التوافقات',nMessages:'الرسائل',nProfile:'ملفي',
+ tapToStart:'اضغط للمتابعة',skip:'تخطي',next:'التالي',start:'ابدأ الآن',cont:'متابعة',save:'حفظ',cancel:'إلغاء',
+ ob1t:'تعارف جاد بهدف الزواج',ob1d:'مجتمع لأشخاص يبحثون عن شريك حياة، بعيدًا عن العلاقات العابرة.',
+ ob2t:'توافق متبادل حقيقي',ob2d:'لن يظهر ملفك إلا لمن يناسب تفضيلاتك وتناسب تفضيلاته.',
+ ob3t:'خصوصية وأمان أولًا',ob3d:'ملفات تُراجع قبل ظهورها، وتحكم كامل في ما يراه الآخرون.',
+ langT:'اختر لغتك',langD:'يمكنك تغيير اللغة لاحقًا من الإعدادات.',
+ phoneT:'ما رقم هاتفك؟',phoneD:'سنرسل لك رمز تحقق لتأكيد ملكية الرقم.',phoneL:'رقم الهاتف',country:'الدولة',
+ agreeTerms:'أوافق على <a class="link">شروط الاستخدام</a> و<a class="link">سياسة الخصوصية</a>',sendCode:'إرسال الرمز',chooseCountry:'اختر الدولة',
+ otpT:'أدخل رمز التحقق',otpD:'أرسلنا رمزًا مكوّنًا من 6 أرقام إلى',otpErr:'الرمز غير صحيح. تبقّى لديك 4 محاولات.',resendIn:'إعادة الإرسال خلال',resend:'إعادة إرسال الرمز',verify:'تحقق',changeNum:'تغيير الرقم',otpHint:'للتجربة: أي 6 أرقام. الرمز 000000 يعرض حالة الخطأ.',
+ ageT:'تأكيد العمر',ageD:'أُلْفَة مخصصة للبالغين الراغبين في الزواج. يجب أن يكون عمرك 18 عامًا أو أكثر.',dob:'تاريخ الميلاد',day:'اليوم',month:'الشهر',year:'السنة',ageConfirm:'أؤكد أن عمري 18 عامًا أو أكثر',ageSerious:'أؤكد أنني أستخدم أُلْفَة بهدف التعارف الجاد للزواج',under18:'لا يمكن إنشاء حساب لمن هم دون 18 عامًا.',
+ step:'الخطوة',of:'من',genderT:'أنا',genderD:'سنعرض لك ملفات من الجنس الآخر فقط.',man:'رجل',woman:'امرأة',genderNote:'لا يمكن تغيير الجنس بعد اعتماد الملف إلا عبر الدعم.',
+ infoT:'عرّفنا بنفسك',name:'الاسم الظاهر',namePh:'مثال: أحمد',city:'المدينة',marital:'الحالة الاجتماعية',education:'المستوى التعليمي',job:'المهنة',jobPh:'مثال: مهندس',timeline:'متى تخطط للزواج؟',bio:'نبذة عنك',bioPh:'اكتب بإيجاز عن شخصيتك وما تبحث عنه في شريك الحياة.',interests:'الاهتمامات',upTo8:'اختر حتى 8',
+ m_never:'لم يسبق الزواج',m_div:'مطلق/ة',m_wid:'أرمل/ة',e_hs:'ثانوي',e_dip:'دبلوم',e_ba:'بكالوريوس',e_ma:'ماجستير',e_phd:'دكتوراه',t_6:'خلال 6 أشهر',t_1:'خلال سنة',t_2:'خلال سنتين',t_ns:'غير متأكد',
+ prefsT:'من تبحث عنه؟',prefsD:'تُستخدم هذه التفضيلات للتوافق المتبادل.',ageRange:'الفئة العمرية',to:'إلى',prefCountry:'الدولة',sameCountry:'دولتي فقط',anyCountry:'أي دولة',acceptMarital:'الحالة الاجتماعية المقبولة',children:'الأطفال',wantKids:'يرغب في الأطفال',noPref:'لا يهم',mutualNote:'لن تظهر إلا لمن تناسب تفضيلاته، ولن يظهر لك إلا من يناسب تفضيلاتك.',
+ photosT:'أضف صورك',photosD:'أضف صورتين على الأقل. الصورة الأولى هي الرئيسية.',primary:'الرئيسية',add:'إضافة',ph1:'وجهك واضح وحديث',ph2:'بدون صور جماعية أو فلاتر',ph3:'ملابس محتشمة ولائقة',rights:'أؤكد أن هذه صوري الشخصية ولدي الحق في استخدامها',policy:'أوافق على سياسة الصور والمحتوى',selfieT:'التحقق بصورة سيلفي',selfieD:'اختياري — يضيف شارة "شخص حقيقي" إلى ملفك.',submitReview:'إرسال للمراجعة',optional:'اختياري',
+ vPending:'ملفك قيد المراجعة',vPendingD:'نراجع كل ملف يدويًا قبل ظهوره لضمان مجتمع جاد وآمن. عادةً خلال 24 ساعة.',vRejected:'نحتاج بعض التعديلات',vRejectedD:'لم نتمكن من اعتماد ملفك بعد. صحّح ما يلي ثم أعد الإرسال.',vApproved:'تم اعتماد ملفك',vApprovedD:'ملفك ظاهر الآن لمن يناسبك. نتمنى لك توفيقًا في رحلتك.',
+ tSub:'تم الإرسال',tAuto:'الفحص التلقائي',tHuman:'المراجعة البشرية',tLive:'ظهور الملف',reason:'سبب الرفض',r1:'الصورة الرئيسية غير واضحة — يجب أن يظهر وجهك بوضوح.',fix:'خطوات التصحيح',fix1:'استبدل الصورة الرئيسية بصورة حديثة وواضحة',fix2:'تأكد من الإضاءة الجيدة وعدم وجود نظارات شمسية',fixResubmit:'تعديل وإعادة الإرسال',startDiscover:'ابدأ الاستكشاف',previewStates:'معاينة الحالات',photosReviewed:'صور مُراجَعة',notIdentity:'هذه الشارة تعني مراجعة الصور فقط، وليست توثيقًا للهوية.',editWhileWait:'تعديل الملف',
+ discoverT:'اكتشف',likesLeft:'إعجابات متبقية اليوم',like:'إعجاب',pass:'تخطي',noMore:'لا مزيد من الترشيحات اليوم',noMoreD:'عُد غدًا لترشيحات جديدة، أو وسّع تفضيلاتك.',adjust:'تعديل الفلاتر',reset:'إعادة العرض',years:'سنة',
+ matchT:'توافق متبادل!',matchD:'أعجب كلٌّ منكما بالآخر. يمكنكما الآن بدء محادثة خاصة.',startChat:'ابدأ المحادثة',keep:'متابعة الاستكشاف',
+ about:'نبذة',basics:'المعلومات الأساسية',lifestyle:'نمط الحياة',verifs:'التوثيق',idVerified:'هوية موثقة',idNot:'لم يتم توثيق الهوية بعد',live:'شخص حقيقي (سيلفي)',reportBlock:'إبلاغ أو حظر',smoking:'التدخين',no:'لا',yes:'نعم',relocate:'الانتقال لبلد آخر',maybe:'ممكن',
+ report:'إبلاغ',block:'حظر',reportT:'لماذا تبلغ عن هذا الملف؟',rr1:'ملف مزيف',rr2:'صور غير لائقة',rr3:'إزعاج أو تحرش',rr4:'احتيال أو طلب أموال',rr5:'يبدو دون 18 عامًا',rr6:'غير جاد',submitReport:'إرسال البلاغ',reported:'تم استلام البلاغ وسيراجعه فريقنا',blocked:'تم الحظر. لن يظهر لك هذا الشخص مجددًا.',blockAlso:'حظر هذا المستخدم أيضًا',
+ searchT:'البحث والفلاتر',basicF:'فلاتر أساسية',advF:'فلاتر متقدمة',applyF:'عرض النتائج',resetF:'إعادة ضبط',occupation:'المهنة',multiInterests:'اهتمامات متعددة',compat:'نسبة توافق لا تقل عن',upgradeF:'متاحة في Plus و Premium',upgrade:'ترقية',
+ likesT:'أعجبوا بك',likesD:'شخصًا أعجب بملفك',seeWho:'اعرف من أعجب بك',seeWhoD:'اشترك في Plus لترى الإعجابات وترد عليها مباشرة.',
+ matchesT:'التوافقات',newM:'جديدة',creditsLeft:'رصيد بدء المحادثات اليوم',startConv:'بدء محادثة',openChat:'فتح المحادثة',compatP:'توافق',
+ meT:'ملفي',complete:'اكتمال الملف',currentPlan:'خطتك الحالية',editP:'تعديل الملف',myPrefs:'تفضيلات الشريك',subs:'الاشتراك',payHist:'سجل المدفوعات',privacy:'الخصوصية والأمان',notifs:'الإشعارات',help:'المساعدة',settings:'الإعدادات',reviewed:'مُراجَع',
+ convsT:'الرسائل',searchConv:'ابحث في المحادثات',online:'متصل الآن',typing:'يكتب…',msgPh:'اكتب رسالة…',today:'اليوم',matchedOn:'تم التوافق اليوم — ابدأ بالتحية',
+ notifsT:'الإشعارات',earlier:'سابقًا',markAll:'تحديد الكل كمقروء',
+ n1:'توافق جديد مع سارة',n2:'لديك 3 إعجابات جديدة',n3:'تم اعتماد ملفك وصورك',n4:'رسالة جديدة من مريم',n5:'تذكير: أكمل ملفك لزيادة فرص التوافق',
+ editT:'تعديل الملف',reviewNote:'تعديل الاسم أو الصور يعيد ملفك للمراجعة قبل ظهوره.',saved:'تم الحفظ',
+ plansT:'خطط الاشتراك',plansD:'اختر الخطة المناسبة لرحلتك.',free:'مجاني',popular:'الأكثر اختيارًا',likesDay:'إعجاب يوميًا',msgsDay:'رسائل لبدء محادثات يوميًا',msgDay:'رسالة لبدء محادثة يوميًا',basicFilters:'فلاتر أساسية',extraFilters:'فلاتر إضافية',allFilters:'جميع الفلاتر المتقدمة',seeLikes:'رؤية من أعجب بك',boost:'أولوية في الظهور',undo:'تراجع عن التخطي',priceStore:'السعر حسب متجر بلدك',subscribe:'اشترك',current:'خطتك الحالية',restore:'استعادة المشتريات',legal:'يتجدد الاشتراك تلقائيًا ما لم يُلغَ قبل 24 ساعة من نهاية الفترة. يمكنك إدارة الاشتراك من إعدادات المتجر.',subscribed:'تم تفعيل الخطة (تجريبي)',month:'شهر',
+ payT:'سجل المدفوعات',noPay:'لا توجد عمليات دفع',noPayD:'ستظهر هنا جميع عمليات الشراء والتجديد.',manageStore:'إدارة الاشتراك من المتجر',paid:'مدفوع',
+ privT:'الخصوصية والأمان',visibility:'الظهور',showCity:'إظهار المدينة في ملفي',blurPhotos:'إخفاء صوري حتى حدوث توافق',showOnline:'إظهار حالة الاتصال',readRec:'إشعارات القراءة',incognito:'التصفح المخفي',security:'الأمان',blockedUsers:'المستخدمون المحظورون',sessions:'الأجهزة المتصلة',myData:'تنزيل بياناتي',
+ faqT:'المساعدة',faqSearch:'ابحث عن سؤال',contact:'تواصل مع الدعم',ticketT:'إنشاء تذكرة دعم',category:'التصنيف',c_pay:'الدفع',c_acc:'الحساب',c_ver:'التوثيق',c_tech:'مشكلة تقنية',message:'الرسالة',sendT:'إرسال',ticketSent:'تم إنشاء التذكرة #1042. سنرد عليك قريبًا.',
+ q1:'كيف تتم مراجعة الملفات؟',a1:'يراجع فريقنا كل ملف وصوره قبل ظهوره للآخرين، مع فحص تلقائي للصور. تتم المراجعة عادةً خلال 24 ساعة.',
+ q2:'متى يمكنني بدء محادثة؟',a2:'بعد حدوث إعجاب متبادل فقط. يُستخدم رصيد الرسائل اليومي لبدء محادثات جديدة، ويمكنك متابعة المحادثات القائمة بحرية.',
+ q3:'هل تتجدد الحصص اليومية؟',a3:'نعم، تتجدد الإعجابات ورصيد الرسائل يوميًا حسب منطقتك الزمنية، ولا يُرحَّل الرصيد غير المستخدم.',
+ q4:'كيف أحذف حسابي؟',a4:'من الإعدادات ← حذف الحساب. يُخفى حسابك فورًا ويُحذف نهائيًا بعد 30 يومًا ما لم تسجّل الدخول مجددًا.',
+ setT:'الإعدادات',general:'عام',language:'اللغة',pushN:'إشعارات الهاتف',nMatchesN:'التوافقات والرسائل',nLikesN:'الإعجابات الجديدة',about2:'حول',terms:'شروط الاستخدام',privPol:'سياسة الخصوصية',version:'الإصدار',logout:'تسجيل الخروج',delAcc:'حذف الحساب',
+ delT:'حذف الحساب',delD:'سيتم إخفاء حسابك فورًا، وحذف بياناتك وصورك نهائيًا بعد 30 يومًا. إلغاء الاشتراك يتم من المتجر.',delWhy:'ما سبب المغادرة؟ (اختياري)',d1:'وجدت شريك حياتي',d2:'لم أجد من يناسبني',d3:'أخذ استراحة',d4:'سبب آخر',delConfirm:'حذف الحساب نهائيًا',delDone:'تم جدولة حذف حسابك',delDoneD:'يمكنك التراجع بتسجيل الدخول خلال 30 يومًا.',
+ // admin
+ a_dash:'لوحة المعلومات',a_users:'إدارة المستخدمين',a_mod:'مراجعة الملفات والصور',a_ver:'طلبات التوثيق',a_an:'تحليلات الإعجاب والتوافق',a_conv:'مراقبة المحادثات',a_sub:'إدارة الاشتراكات',a_pay:'المدفوعات والعمليات',a_rep:'البلاغات والشكاوى',a_not:'إدارة الإشعارات',a_sup:'الأسئلة والدعم',a_set:'إعدادات النظام والصلاحيات',
+ k1:'إجمالي المستخدمين',k2:'المستخدمون النشطون',k3:'مستخدمون جدد اليوم',k4:'حسابات معلقة',k5:'طلبات توثيق',k6:'حسابات مرفوضة',k7:'التوافقات',k8:'المحادثات',k9:'اشتراكات نشطة',k10:'الإيرادات (الشهر)',k11:'عمليات الدفع',k12:'بلاغات مفتوحة',
+ newUsers7:'المستخدمون الجدد — آخر 7 أيام',latestVer:'أحدث طلبات التوثيق',review:'مراجعة',approve:'اعتماد',reject:'رفض',user:'المستخدم',status:'الحالة',plan:'الخطة',joined:'الانضمام',actions:'إجراءات',suspend:'إيقاف',reactivate:'إعادة تفعيل',view:'عرض',
+ st_active:'نشط',st_pending:'قيد المراجعة',st_susp:'موقوف',st_rej:'مرفوض',st_restr:'مقيّد',autoScan:'الفحص الآلي',face:'وجه واضح',nsfw:'محتوى غير لائق',dup:'صورة مكررة',none:'لا يوجد',approved:'تم الاعتماد',rejected:'تم الرفض',queue:'قائمة الانتظار',selfie:'سيلفي',rejReason:'سبب الرفض',
+ likesToday:'إعجابات اليوم',matchRate:'نسبة التوافق',convRate:'محادثات من التوافقات',avgMsgs:'متوسط الرسائل لكل محادثة',flagged:'رسائل مُبلَّغ عنها',privNote:'لا تُعرض المحادثات الخاصة إلا عند وجود بلاغ مرتبط بها.',
+ planEdit:'تعديل الخطط والحصص',likesD2:'إعجابات/يوم',msgsD2:'رسائل/يوم',undos:'تراجع/يوم',advFilters:'فلاتر متقدمة',active:'مفعّلة',saveChanges:'حفظ التغييرات',syncNote:'التعديلات تنعكس فورًا على شاشة خطط الاشتراك في التطبيق — جرّب ذلك.',contLimit:'حد الرسائل داخل المحادثة القائمة يوميًا',
+ provider:'المزود',amount:'المبلغ',date:'التاريخ',refund:'استرداد',succeeded:'ناجحة',refunded:'مستردة',failed:'فاشلة',
+ priority:'الأولوية',high:'عالية',normal:'عادية',open:'مفتوح',dismiss:'تجاهل',
+ compose:'إرسال إشعار',audience:'الجمهور',allUsers:'كل المستخدمين',titleAr:'العنوان (عربي)',titleEn:'العنوان (إنجليزي)',sendNow:'إرسال',history:'السجل',sent:'تم الإرسال',
+ tickets:'تذاكر الدعم',faqM:'إدارة الأسئلة الشائعة',subject:'الموضوع',assign:'إسناد',
+ appSettings:'إعدادات التطبيق',minAge:'الحد الأدنى للعمر',minPhotos:'الحد الأدنى للصور',otpLimit:'محاولات OTP لكل 10 دقائق',oppositeOnly:'عرض الجنس الآخر فقط',roles:'الأدوار والصلاحيات',role:'الدور',
+ r_super:'مدير عام',r_mod:'مشرف محتوى',r_sup:'دعم فني',r_fin:'مالية',p_users:'المستخدمون',p_mod:'المراجعة',p_pay:'المدفوعات',p_set:'الإعدادات',audit:'سجل التدقيق',adminName:'مدير النظام'
+},
+en:{appName:'OLFA',tagline:'Serious connections, made for marriage',demo:'All data shown is demo data',
+ g1:'Sign up & start',g2:'Account setup',g3:'Core experience',g4:'Communication',g5:'Account & services',
+ s_splash:'Splash',s_onboarding:'Onboarding',s_language:'Language',s_phone:'Phone registration',s_otp:'OTP verification',s_age:'Age confirmation',s_gender:'Gender',s_info:'Profile information',s_prefs:'Partner preferences',s_photos:'Photo upload',s_verify:'Verification status',s_discover:'Discover',s_details:'Profile details',s_search:'Search & filters',s_likes:'Likes received',s_matches:'Matches',s_me:'My profile',s_convs:'Conversations',s_chat:'Private chat',s_notifs:'Notifications',s_edit:'Edit profile',s_plans:'Subscription plans',s_payments:'Payment history',s_privacy:'Privacy & security',s_faq:'FAQ & help',s_settings:'Settings & deletion',
+ vApp:'App',vAdmin:'Admin',vOne:'Screen',vAll:'All screens',
+ nDiscover:'Discover',nLikes:'Likes',nMatches:'Matches',nMessages:'Messages',nProfile:'Profile',
+ tapToStart:'Tap to continue',skip:'Skip',next:'Next',start:'Get started',cont:'Continue',save:'Save',cancel:'Cancel',
+ ob1t:'Serious, with marriage in mind',ob1d:'A community of people looking for a life partner — not a fling.',
+ ob2t:'Truly mutual compatibility',ob2d:'Your profile is only shown to people who fit your preferences — and whose preferences you fit.',
+ ob3t:'Privacy and safety first',ob3d:'Every profile is reviewed before it goes live, and you control what others see.',
+ langT:'Choose your language',langD:'You can change it later in Settings.',
+ phoneT:"What's your phone number?",phoneD:"We'll text you a code to confirm it's yours.",phoneL:'Phone number',country:'Country',
+ agreeTerms:'I agree to the <a class="link">Terms of Use</a> and <a class="link">Privacy Policy</a>',sendCode:'Send code',chooseCountry:'Choose country',
+ otpT:'Enter verification code',otpD:'We sent a 6-digit code to',otpErr:'Incorrect code. 4 attempts left.',resendIn:'Resend in',resend:'Resend code',verify:'Verify',changeNum:'Change number',otpHint:'Demo: any 6 digits. 000000 shows the error state.',
+ ageT:'Confirm your age',ageD:'OLFA is for adults seeking marriage. You must be 18 or older.',dob:'Date of birth',day:'Day',month:'Month',year:'Year',ageConfirm:'I confirm I am 18 years or older',ageSerious:'I confirm I am using OLFA to find a spouse',under18:'Accounts are not available to anyone under 18.',
+ step:'Step',of:'of',genderT:'I am a',genderD:'We only show you profiles of the opposite gender.',man:'Man',woman:'Woman',genderNote:'Gender can only be changed through Support once your profile is approved.',
+ infoT:'Tell us about yourself',name:'Display name',namePh:'e.g. Ahmed',city:'City',marital:'Marital status',education:'Education',job:'Occupation',jobPh:'e.g. Engineer',timeline:'When do you plan to marry?',bio:'About you',bioPh:'Briefly describe your personality and what you look for in a spouse.',interests:'Interests',upTo8:'Choose up to 8',
+ m_never:'Never married',m_div:'Divorced',m_wid:'Widowed',e_hs:'High school',e_dip:'Diploma',e_ba:"Bachelor's",e_ma:"Master's",e_phd:'Doctorate',t_6:'Within 6 months',t_1:'Within a year',t_2:'Within 2 years',t_ns:'Not sure',
+ prefsT:'Who are you looking for?',prefsD:'These preferences are used for mutual matching.',ageRange:'Age range',to:'to',prefCountry:'Country',sameCountry:'My country only',anyCountry:'Any country',acceptMarital:'Accepted marital status',children:'Children',wantKids:'Wants children',noPref:"Doesn't matter",mutualNote:"You'll only be shown to people whose preferences you fit, and only see people who fit yours.",
+ photosT:'Add your photos',photosD:'Add at least 2 photos. The first one is your main photo.',primary:'Main',add:'Add',ph1:'Clear, recent face photo',ph2:'No group photos or filters',ph3:'Modest, appropriate clothing',rights:'I confirm these are my own photos and I have the right to use them',policy:'I agree to the photo & content policy',selfieT:'Selfie verification',selfieD:'Optional — adds a "Real person" badge to your profile.',submitReview:'Submit for review',optional:'Optional',
+ vPending:'Your profile is under review',vPendingD:'We review every profile by hand before it goes live, to keep OLFA serious and safe. Usually within 24 hours.',vRejected:'A few changes needed',vRejectedD:"We couldn't approve your profile yet. Fix the items below and resubmit.",vApproved:'Your profile is approved',vApprovedD:'Your profile is now visible to compatible members. Best of luck on your journey.',
+ tSub:'Submitted',tAuto:'Automated check',tHuman:'Human review',tLive:'Profile live',reason:'Reason',r1:'Main photo is unclear — your face must be clearly visible.',fix:'How to fix it',fix1:'Replace your main photo with a clear, recent one',fix2:'Use good lighting and no sunglasses',fixResubmit:'Edit & resubmit',startDiscover:'Start discovering',previewStates:'Preview states',photosReviewed:'Photos reviewed',notIdentity:'This badge means photos were reviewed — it is not identity verification.',editWhileWait:'Edit profile',
+ discoverT:'Discover',likesLeft:'likes left today',like:'LIKE',pass:'PASS',noMore:"You're all caught up for today",noMoreD:'Come back tomorrow for new suggestions, or broaden your preferences.',adjust:'Adjust filters',reset:'Show again',years:'',
+ matchT:"It's a match!",matchD:'You both liked each other. You can now start a private conversation.',startChat:'Start conversation',keep:'Keep discovering',
+ about:'About',basics:'Basics',lifestyle:'Lifestyle',verifs:'Verification',idVerified:'Identity verified',idNot:'Identity not verified yet',live:'Real person (selfie)',reportBlock:'Report or block',smoking:'Smoking',no:'No',yes:'Yes',relocate:'Open to relocating',maybe:'Maybe',
+ report:'Report',block:'Block',reportT:'Why are you reporting this profile?',rr1:'Fake profile',rr2:'Inappropriate photos',rr3:'Harassment',rr4:'Scam or asking for money',rr5:'Appears under 18',rr6:'Not serious',submitReport:'Submit report',reported:'Report received — our team will review it',blocked:"Blocked. You won't see this person again.",blockAlso:'Also block this user',
+ searchT:'Search & filters',basicF:'Basic filters',advF:'Advanced filters',applyF:'Show results',resetF:'Reset',occupation:'Occupation',multiInterests:'Multiple interests',compat:'Minimum compatibility',upgradeF:'Available on Plus & Premium',upgrade:'Upgrade',
+ likesT:'Liked you',likesD:'people liked your profile',seeWho:'See who likes you',seeWhoD:'Subscribe to Plus to see your likes and respond right away.',
+ matchesT:'Matches',newM:'New',creditsLeft:'Conversation starters left today',startConv:'Start chat',openChat:'Open chat',compatP:'match',
+ meT:'My profile',complete:'Profile completeness',currentPlan:'Your plan',editP:'Edit profile',myPrefs:'Partner preferences',subs:'Subscription',payHist:'Payment history',privacy:'Privacy & security',notifs:'Notifications',help:'Help',settings:'Settings',reviewed:'Reviewed',
+ convsT:'Messages',searchConv:'Search conversations',online:'Online now',typing:'typing…',msgPh:'Write a message…',today:'Today',matchedOn:'You matched today — say hello',
+ notifsT:'Notifications',earlier:'Earlier',markAll:'Mark all as read',
+ n1:'New match with Sara',n2:'You have 3 new likes',n3:'Your profile and photos were approved',n4:'New message from Mariam',n5:'Reminder: complete your profile to get better matches',
+ editT:'Edit profile',reviewNote:'Changing your name or photos sends your profile back to review.',saved:'Saved',
+ plansT:'Subscription plans',plansD:'Choose the plan that fits your journey.',free:'Free',popular:'Most popular',likesDay:'likes per day',msgsDay:'conversation starters per day',msgDay:'conversation starter per day',basicFilters:'Basic filters',extraFilters:'Extra filters',allFilters:'All advanced filters',seeLikes:'See who liked you',boost:'Priority visibility',undo:'Undo a pass',priceStore:'Priced by your local store',subscribe:'Subscribe',current:'Current plan',restore:'Restore purchases',legal:'Subscriptions renew automatically unless cancelled at least 24 hours before the period ends. Manage it in your store settings.',subscribed:'Plan activated (demo)',month:'month',
+ payT:'Payment history',noPay:'No payments yet',noPayD:'All purchases and renewals will appear here.',manageStore:'Manage subscription in store',paid:'Paid',
+ privT:'Privacy & security',visibility:'Visibility',showCity:'Show my city on my profile',blurPhotos:'Hide my photos until we match',showOnline:'Show online status',readRec:'Read receipts',incognito:'Incognito browsing',security:'Security',blockedUsers:'Blocked users',sessions:'Signed-in devices',myData:'Download my data',
+ faqT:'Help',faqSearch:'Search for a question',contact:'Contact support',ticketT:'New support ticket',category:'Category',c_pay:'Payment',c_acc:'Account',c_ver:'Verification',c_tech:'Technical issue',message:'Message',sendT:'Send',ticketSent:"Ticket #1042 created. We'll get back to you soon.",
+ q1:'How are profiles reviewed?',a1:'Our team reviews every profile and its photos before it is shown to others, alongside automated photo checks. Reviews usually take under 24 hours.',
+ q2:'When can I start a conversation?',a2:'Only after a mutual like. Your daily message credits are used to start new conversations; continuing existing ones is free.',
+ q3:'Do daily limits reset?',a3:'Yes. Likes and message credits reset daily in your time zone. Unused credits do not roll over.',
+ q4:'How do I delete my account?',a4:'Settings → Delete account. Your account is hidden immediately and permanently deleted after 30 days unless you sign back in.',
+ setT:'Settings',general:'General',language:'Language',pushN:'Push notifications',nMatchesN:'Matches & messages',nLikesN:'New likes',about2:'About',terms:'Terms of Use',privPol:'Privacy Policy',version:'Version',logout:'Sign out',delAcc:'Delete account',
+ delT:'Delete account',delD:'Your account will be hidden immediately, and your data and photos permanently deleted after 30 days. Cancel subscriptions in your store.',delWhy:'Why are you leaving? (optional)',d1:'I found my spouse',d2:"I didn't find a good fit",d3:'Taking a break',d4:'Other reason',delConfirm:'Delete account permanently',delDone:'Account deletion scheduled',delDoneD:'Sign in within 30 days to undo.',
+ a_dash:'Dashboard',a_users:'User management',a_mod:'Profile & photo moderation',a_ver:'Verification requests',a_an:'Likes & matches analytics',a_conv:'Conversation moderation',a_sub:'Subscriptions',a_pay:'Payments & transactions',a_rep:'Reports & complaints',a_not:'Notifications',a_sup:'FAQ & support',a_set:'Settings & admin roles',
+ k1:'Total users',k2:'Active users',k3:'New users today',k4:'Pending accounts',k5:'Verification requests',k6:'Rejected accounts',k7:'Matches',k8:'Conversations',k9:'Active subscriptions',k10:'Revenue (month)',k11:'Payments',k12:'Open reports',
+ newUsers7:'New users — last 7 days',latestVer:'Latest verification requests',review:'Review',approve:'Approve',reject:'Reject',user:'User',status:'Status',plan:'Plan',joined:'Joined',actions:'Actions',suspend:'Suspend',reactivate:'Reactivate',view:'View',
+ st_active:'Active',st_pending:'Pending',st_susp:'Suspended',st_rej:'Rejected',st_restr:'Restricted',autoScan:'Automated scan',face:'Clear face',nsfw:'Inappropriate content',dup:'Duplicate photo',none:'None',approved:'Approved',rejected:'Rejected',queue:'Queue',selfie:'Selfie',rejReason:'Rejection reason',
+ likesToday:'Likes today',matchRate:'Match rate',convRate:'Matches with a chat',avgMsgs:'Avg messages / chat',flagged:'Reported messages',privNote:'Private conversations are only visible when linked to a report.',
+ planEdit:'Plans & quotas',likesD2:'Likes/day',msgsD2:'Messages/day',undos:'Undos/day',advFilters:'Advanced filters',active:'Active',saveChanges:'Save changes',syncNote:'Changes apply instantly to the Subscription Plans screen in the app — try it.',contLimit:'Daily message limit within an existing chat',
+ provider:'Provider',amount:'Amount',date:'Date',refund:'Refund',succeeded:'Succeeded',refunded:'Refunded',failed:'Failed',
+ priority:'Priority',high:'High',normal:'Normal',open:'Open',dismiss:'Dismiss',
+ compose:'Send notification',audience:'Audience',allUsers:'All users',titleAr:'Title (Arabic)',titleEn:'Title (English)',sendNow:'Send',history:'History',sent:'Sent',
+ tickets:'Support tickets',faqM:'FAQ management',subject:'Subject',assign:'Assign',
+ appSettings:'App settings',minAge:'Minimum age',minPhotos:'Minimum photos',otpLimit:'OTP requests per 10 min',oppositeOnly:'Show opposite gender only',roles:'Roles & permissions',role:'Role',
+ r_super:'Super admin',r_mod:'Content moderator',r_sup:'Support agent',r_fin:'Finance',p_users:'Users',p_mod:'Moderation',p_pay:'Payments',p_set:'Settings',audit:'Audit log',adminName:'System admin'
+}};
+const t=k=>(T[S.lang][k]??k);
+
+/* ═══════════ DEMO DATA (clearly fake) ═══════════ */
+const PEOPLE=[
+ {id:1,g:'F',ar:'سارة',en:'Sara',age:27,cAr:'دبي، الإمارات',cEn:'Dubai, UAE',jAr:'مهندسة معمارية',jEn:'Architect',edu:'e_ma',m:'m_never',tl:'t_1',v:true,live:true,ints:['read','travel','cook'],bAr:'أحب التصميم والقراءة، وأبحث عن شريك حياة يقدّر الأسرة والطموح معًا.',bEn:'I love design and reading. Looking for a partner who values both family and ambition.',likesYou:true,cmp:92},
+ {id:2,g:'F',ar:'مريم',en:'Mariam',age:29,cAr:'الرياض، السعودية',cEn:'Riyadh, KSA',jAr:'طبيبة أسنان',jEn:'Dentist',edu:'e_ba',m:'m_never',tl:'t_6',v:true,live:false,ints:['vol','fit','nature'],bAr:'هادئة ومحبة للطبيعة. أقدّر الصدق والوضوح منذ البداية.',bEn:'Calm and nature-loving. I value honesty and clarity from the start.',likesYou:false,cmp:86},
+ {id:3,g:'F',ar:'نور',en:'Nour',age:25,cAr:'القاهرة، مصر',cEn:'Cairo, Egypt',jAr:'محللة بيانات',jEn:'Data analyst',edu:'e_ba',m:'m_never',tl:'t_2',v:false,live:true,ints:['tech','lang','art'],bAr:'شغوفة بالتعلم واللغات. أبحث عن علاقة مبنية على الاحترام.',bEn:'Passionate about learning and languages. Looking for a relationship built on respect.',likesYou:true,cmp:81},
+ {id:4,g:'F',ar:'ليلى',en:'Layla',age:31,cAr:'عمّان، الأردن',cEn:'Amman, Jordan',jAr:'معلمة',jEn:'Teacher',edu:'e_ma',m:'m_div',tl:'t_1',v:true,live:true,ints:['read','cook','vol'],bAr:'أم لطفلة، أحب التعليم والطبخ، وأبحث عن شريك ناضج ومسؤول.',bEn:'Mother of one, love teaching and cooking. Looking for a mature, responsible partner.',likesYou:false,cmp:77},
+ {id:5,g:'M',ar:'أحمد',en:'Ahmed',age:32,cAr:'أبوظبي، الإمارات',cEn:'Abu Dhabi, UAE',jAr:'مهندس برمجيات',jEn:'Software engineer',edu:'e_ma',m:'m_never',tl:'t_1',v:true,live:true,ints:['tech','fit','travel'],bAr:'أحب الرياضة والسفر، وأبحث عن شريكة حياة تشاركني بناء أسرة مستقرة.',bEn:'Into sports and travel. Looking for a partner to build a stable family together.',likesYou:true,cmp:90},
+ {id:6,g:'M',ar:'يوسف',en:'Youssef',age:30,cAr:'جدة، السعودية',cEn:'Jeddah, KSA',jAr:'محاسب',jEn:'Accountant',edu:'e_ba',m:'m_never',tl:'t_6',v:true,live:false,ints:['read','nature','cook'],bAr:'هادئ ومنظم، أقدّر الحوار والتفاهم.',bEn:'Calm and organised. I value dialogue and understanding.',likesYou:false,cmp:84},
+ {id:7,g:'M',ar:'عمر',en:'Omar',age:34,cAr:'الدوحة، قطر',cEn:'Doha, Qatar',jAr:'طبيب',jEn:'Doctor',edu:'e_phd',m:'m_div',tl:'t_1',v:false,live:true,ints:['vol','lang','fit'],bAr:'طبيب يحب العمل التطوعي. أبحث عن شريكة متفهمة.',bEn:'A doctor who loves volunteering. Looking for an understanding partner.',likesYou:true,cmp:79},
+ {id:8,g:'M',ar:'خالد',en:'Khalid',age:28,cAr:'الكويت',cEn:'Kuwait City',jAr:'رائد أعمال',jEn:'Entrepreneur',edu:'e_ba',m:'m_never',tl:'t_2',v:true,live:true,ints:['tech','travel','art'],bAr:'أدير مشروعي الخاص، وأبحث عن علاقة جادة مبنية على الثقة.',bEn:'I run my own business and want a serious relationship built on trust.',likesYou:false,cmp:75}
+];
+const INTS={read:['القراءة','Reading'],travel:['السفر','Travel'],cook:['الطبخ','Cooking'],fit:['الرياضة','Fitness'],nature:['الطبيعة','Nature'],vol:['العمل التطوعي','Volunteering'],tech:['التقنية','Technology'],lang:['اللغات','Languages'],art:['الفنون','Arts'],photo:['التصوير','Photography'],family:['الأسرة','Family time'],quran:['حفظ القرآن','Quran'],hike:['المشي','Hiking'],coffee:['القهوة','Coffee']};
+const iname=k=>INTS[k][S.lang==='ar'?0:1];
+const pn=p=>S.lang==='ar'?p.ar:p.en, pc=p=>S.lang==='ar'?p.cAr:p.cEn, pj=p=>S.lang==='ar'?p.jAr:p.jEn, pb=p=>S.lang==='ar'?p.bAr:p.bEn;
+const COUNTRIES=[['🇦🇪','+971','الإمارات','UAE'],['🇸🇦','+966','السعودية','Saudi Arabia'],['🇪🇬','+20','مصر','Egypt'],['🇰🇼','+965','الكويت','Kuwait'],['🇶🇦','+974','قطر','Qatar'],['🇧🇭','+973','البحرين','Bahrain'],['🇴🇲','+968','عُمان','Oman'],['🇯🇴','+962','الأردن','Jordan'],['🇲🇦','+212','المغرب','Morocco'],['🇬🇧','+44','المملكة المتحدة','United Kingdom'],['🇺🇸','+1','الولايات المتحدة','United States']];
+
+/* ═══════════ STATE ═══════════ */
+const DEVICES={
+ se:{n:'iPhone SE · 375×667',W:375,H:667,sat:20,sab:0,rad:0,os:'ios',deco:'none'},
+ i15:{n:'iPhone 15 Pro · 393×852',W:393,H:852,sat:54,sab:34,rad:54,os:'ios',deco:'island'},
+ i15m:{n:'iPhone 15 Pro Max · 430×932',W:430,H:932,sat:54,sab:34,rad:58,os:'ios',deco:'island'},
+ px:{n:'Pixel 8 · 412×915',W:412,H:915,sat:36,sab:20,rad:36,os:'and',deco:'punch'},
+ gs:{n:'Galaxy A (small) · 360×780',W:360,H:780,sat:30,sab:16,rad:28,os:'and',deco:'punch'},
+ tab:{n:'iPad mini · 744×1133',W:744,H:1133,sat:24,sab:20,rad:28,os:'ios',deco:'none'}
+};
+const ADEV={desk:{n:'Desktop 1440',W:1440,H:900},lap:{n:'Laptop 1280',W:1280,H:800},tabl:{n:'Tablet 834',W:834,H:1112}};
+const GROUPS=[['g1',['splash','onboarding','language','phone','otp','age']],['g2',['gender','info','prefs','photos','verify']],['g3',['discover','details','search','likes','matches','me']],['g4',['convs','chat','notifs']],['g5',['edit','plans','payments','privacy','faq','settings']]];
+const ORDER=GROUPS.flatMap(g=>g[1]);
+const NAVTAB={discover:'discover',details:'discover',search:'discover',likes:'likes',matches:'matches',convs:'convs',me:'me'};
+const S={lang:'ar',mode:'app',view:'one',dev:'i15',adev:'desk',screen:'splash',hist:[],ob:0,country:0,phone:'',terms:false,otpErr:false,dob:{d:'',m:'',y:''},age1:false,age2:false,gender:'M',
+ info:{name:'',m:'m_never',edu:'e_ba',tl:'t_1',ints:['read','travel']},pref:{a1:24,a2:34,cty:'any',ms:['m_never'],kids:'yes'},
+ photos:[true,true,false,false,false,false],rights:false,policy:false,verif:'pending',deck:0,undo:[],detail:1,userPlan:'free',selPlan:'plus',
+ likesUsed:3,credits:{free:1},
+ chat:[{s:'sys'},{s:'th',x:'السلام عليكم، سعيدة بالتوافق 🌿',xe:'Hello! Glad we matched 🌿',tm:'9:12'},{s:'me',x:'وعليكم السلام، وأنا كذلك. قرأت أنكِ تحبين التصميم؟',xe:'Hi! Likewise. I read that you love design?',tm:'9:14',r:true}],
+ typing:false,faq:0,ticket:false,tcat:'c_acc',deleted:false,
+ priv:{city:true,blur:false,online:true,read:true,inc:false},nset:{m:true,l:true},
+ filters:{a1:24,a2:34,cty:'ae',ints:['read']},
+ plans:{free:{l:10,m:1,u:0,adv:false},plus:{l:100,m:5,u:3,adv:true},premium:{l:200,m:10,u:10,adv:true}},contLimit:200,
+ adm:'dash',vsel:0,vq:[1,3,7,4],modq:[2,6,8,5,1,3],users:{},reps:[{id:1,p:8,rr:'rr4',hi:true,st:'open'},{id:2,p:3,rr:'rr2',hi:false,st:'open'},{id:3,p:6,rr:'rr6',hi:false,st:'open'},{id:4,p:7,rr:'rr5',hi:true,st:'open'}],
+ sheet:null,toast:null,matchWith:null,openAcc:{}
+};
+const opp=()=>PEOPLE.filter(p=>p.g!==S.gender);
+const byId=id=>PEOPLE.find(p=>p.id===id);
+
+/* ═══════════ HELPERS ═══════════ */
+const bar=(title,{back=true,right='',line=false}={})=>`<div class="bar ${line?'line':''}"><div class="in">${back?`<button class="ib" data-act="back" aria-label="back">${Ix('back')}</button>`:'<div class="sp"></div>'}<h1>${title}</h1>${right||'<div class="sp"></div>'}</div></div>`;
+const progress=(n,tot=4)=>`<div class="pad" style="display:flex;align-items:center;gap:12px;margin:4px 0 20px"><div class="progress"><i style="width:${n/tot*100}%"></i></div><span class="cap ltr">${n}/${tot}</span></div>`;
+const chk=(on,label,act)=>`<button class="check ${on?'on':''}" data-act="${act}"><span class="bx">${on?I('check',14,3):''}</span><span>${label}</span></button>`;
+const tg=(on,act)=>`<button class="tg ${on?'on':''}" data-act="${act}" aria-pressed="${on}"></button>`;
+const row=(ic,t1,t2='',{go='',act='',right=null,danger=false,p=false}={})=>`<button class="row ${danger?'danger':''}" ${go?`data-go="${go}"`:''} ${act?`data-act="${act}"`:''}><span class="ico ${p||danger?'p':''}">${Ix(ic,20)}</span><span class="tx"><div class="t1">${t1}</div>${t2?`<div class="t2">${t2}</div>`:''}</span>${right!==null?right:`<span class="chev">${Ix('fwd',18)}</span>`}</button>`;
+const chipSel=(list,sel,act,multi)=>`<div class="chips">${list.map(([k,l])=>`<button class="chip ${(multi?sel.includes(k):sel===k)?'on':''}" data-act="${act}" data-a="${k}">${l}</button>`).join('')}</div>`;
+const vb=(s=20)=>`<span class="vbadge" style="width:${s}px;height:${s}px" title="${t('photosReviewed')}">${I('check',s*.6,3)}</span>`;
+const fmtN=n=>new Intl.NumberFormat(S.lang==='ar'?'ar-AE-u-nu-latn':'en-US').format(n);
+const quota=()=>S.plans[S.userPlan];
+
+/* ═══════════ SCREENS ═══════════ */
+const SC={};
+SC.splash=()=>`<div class="splash" data-go="onboarding"><div class="pulse-in">${LOGO(104,null,'#FFFFFF')}</div><div class="wm pulse-in" style="animation-delay:.15s"><div class="ar">أُلْفَة</div><div class="en">OLFA</div></div><div class="tl">${t('tagline')}<div style="margin-top:14px;font-size:11px;opacity:.7">${t('tapToStart')}</div></div></div>`;
+
+SC.onboarding=()=>{const i=S.ob,ill=[
+ `<svg viewBox="0 0 200 180" width="70%"><rect x="38" y="30" width="124" height="124" rx="30" fill="#8B0D2B"/><g transform="translate(58 46) scale(1.75)">${SYM()}</g></svg>`,
+ `<svg viewBox="0 0 200 180" width="78%"><circle cx="72" cy="90" r="50" fill="#FFFFFF"/><circle cx="128" cy="90" r="50" fill="none" stroke="#8B0D2B" stroke-width="6"/><path d="M100 132 84 116a11 11 0 0 1 16-15 11 11 0 0 1 16 15Z" fill="#8B0D2B"/><circle cx="72" cy="78" r="12" fill="#E9E9E9"/><circle cx="128" cy="78" r="12" fill="#8B0D2B"/></svg>`,
+ `<svg viewBox="0 0 200 180" width="70%"><path d="M100 22 46 42v38c0 34 23 60 54 70 31-10 54-36 54-70V42Z" fill="#1A1A1A"/><path d="m78 88 15 15 30-31" stroke="#FFFFFF" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="150" cy="134" r="22" fill="#8B0D2B"/><rect x="141" y="132" width="18" height="13" rx="3" fill="#FFFFFF"/><path d="M144 132v-4a6 6 0 0 1 12 0v4" stroke="#FFFFFF" stroke-width="3" fill="none"/></svg>`][i];
+ return `<div class="full"><div class="safe-top"></div><div style="display:flex;justify-content:flex-end;padding:6px 14px"><button class="btn ghost sm" data-go="language">${t('skip')}</button></div>
+ <div class="illu fade" key="${i}">${ill}</div>
+ <div class="pad fade" style="text-align:center;margin-top:30px"><div class="h1">${t('ob'+(i+1)+'t')}</div><p class="bl mut" style="margin-top:12px">${t('ob'+(i+1)+'d')}</p></div>
+ <div class="grow"></div><div class="dots">${[0,1,2].map(j=>`<i class="${j===i?'on':''}"></i>`).join('')}</div>
+ <div class="foot">${i<2?`<button class="btn" data-act="obNext">${t('next')}</button>`:`<button class="btn" data-go="language">${t('start')}</button>`}</div></div>`};
+
+SC.language=()=>`<div class="full">${bar('',{})}<div class="pad"><div style="margin-bottom:22px">${LOGO(56)}</div><div class="h1">${t('langT')}</div><p class="bm mut" style="margin:8px 0 26px">${t('langD')}</p>
+ ${[['ar','العربية','Arabic · RTL'],['en','English','الإنجليزية · LTR']].map(([k,a,b])=>`<button class="opt ${S.lang===k?'on':''}" data-act="lang" data-a="${k}"><span class="radio ${S.lang===k?'on':''}"></span><span style="flex:1"><div class="big" style="font-family:${k==='ar'?'Tajawal':'Montserrat'}">${a}</div><div class="cap">${b}</div></span><span style="font-size:22px;font-family:${k==='ar'?'Tajawal':'Montserrat'};font-weight:700;color:var(--p)">${k==='ar'?'ع':'A'}</span></button>`).join('')}</div>
+ <div class="grow"></div><div class="foot"><button class="btn" data-go="phone">${t('cont')}</button></div></div>`;
+
+SC.phone=()=>{const c=COUNTRIES[S.country];const ok=S.phone.replace(/\D/g,'').length>=8&&S.terms;
+ return `<div class="full">${bar('')}<div class="pad"><div class="h1">${t('phoneT')}</div><p class="bm mut" style="margin:8px 0 28px">${t('phoneD')}</p>
+ <label class="lbl">${t('phoneL')}</label><div style="display:flex;gap:10px;direction:ltr"><button class="inp" style="width:auto;display:flex;align-items:center;gap:6px;flex:none;font-family:Montserrat,sans-serif" data-act="sheet" data-a="country">${c[0]} ${c[1]} ${I('down',16)}</button><input class="inp ltr" id="phoneIn" inputmode="tel" placeholder="50 123 4567" value="${S.phone}" style="font-family:Montserrat,sans-serif;letter-spacing:.04em" data-in="phone"></div>
+ <div style="margin-top:22px">${chk(S.terms,t('agreeTerms'),'terms')}</div></div>
+ <div class="grow"></div><div class="foot"><button class="btn" id="phoneBtn" data-go="otp" ${ok?'':'disabled'}>${t('sendCode')}</button></div></div>`};
+
+SC.otp=()=>{const c=COUNTRIES[S.country];const num=(c[1]+' '+(S.phone||'50 123 4567')).replace(/(\d{2})\s?(\d{3})\s?(\d{2})(\d{2})$/,'$1 *** **$4');
+ return `<div class="full">${bar('')}<div class="pad"><div class="h1">${t('otpT')}</div><p class="bm mut" style="margin:8px 0 30px">${t('otpD')} <b class="ltr" style="color:var(--k);font-family:Montserrat,sans-serif">${num}</b></p>
+ <div class="otp ${S.otpErr?'err':''}" id="otp">${[0,1,2,3,4,5].map(i=>`<input inputmode="numeric" maxlength="1" data-otp="${i}" aria-label="digit ${i+1}">`).join('')}</div>
+ ${S.otpErr?`<div class="errtx" style="text-align:center;margin-top:12px">${t('otpErr')}</div>`:''}
+ <p class="bs mut" style="text-align:center;margin-top:24px">${t('resendIn')} <b class="ltr" style="font-family:Montserrat,sans-serif">00:45</b></p>
+ <div class="banner" style="margin-top:26px">${I('info',18)}<span>${t('otpHint')}</span></div></div>
+ <div class="grow"></div><div class="foot"><button class="btn" id="otpBtn" data-act="verifyOtp" disabled>${t('verify')}</button><button class="btn ghost" data-act="back">${t('changeNum')}</button></div></div>`};
+
+SC.age=()=>{const y=+S.dob.y,m=+S.dob.m||1,d=+S.dob.d||1;let age=null;if(y){const n=new Date(2026,10,14),b=new Date(y,m-1,d);age=n.getFullYear()-b.getFullYear()-((n<new Date(n.getFullYear(),m-1,d))?1:0)}
+ const under=age!==null&&age<18,ok=S.age1&&S.age2&&age!==null&&!under;
+ const sel=(k,ph,opts)=>`<select class="inp ${k==='y'&&under?'err':''}" data-in="dob.${k}" style="text-align:center"><option value="">${ph}</option>${opts.map(o=>`<option ${String(S.dob[k])===String(o)?'selected':''}>${o}</option>`).join('')}</select>`;
+ return `<div class="full">${bar('')}<div class="pad"><div class="eic" style="width:64px;height:64px;border-radius:20px;background:var(--p8);color:var(--p);display:grid;place-items:center;margin-bottom:20px">${I('shield',30)}</div><div class="h1">${t('ageT')}</div><p class="bm mut" style="margin:8px 0 26px">${t('ageD')}</p>
+ <label class="lbl">${t('dob')}</label><div style="display:grid;grid-template-columns:1fr 1.3fr 1.2fr;gap:10px;font-family:Montserrat,sans-serif">${sel('d',t('day'),Array.from({length:31},(_,i)=>i+1))}${sel('m',t('month'),Array.from({length:12},(_,i)=>i+1))}${sel('y',t('year'),Array.from({length:70},(_,i)=>2026-i))}</div>
+ ${under?`<div class="errtx">${t('under18')}</div>`:''}
+ <div style="margin-top:22px;display:grid;gap:6px">${chk(S.age1,t('ageConfirm'),'age1')}${chk(S.age2,t('ageSerious'),'age2')}</div></div>
+ <div class="grow"></div><div class="foot"><button class="btn" data-go="gender" ${ok?'':'disabled'}>${t('cont')}</button></div></div>`};
+
+SC.gender=()=>`<div class="full">${bar('')}${progress(1)}<div class="pad"><div class="h1">${t('genderT')}</div><p class="bm mut" style="margin:8px 0 26px">${t('genderD')}</p>
+ <div class="g2">${[['M','man','male'],['F','woman','female']].map(([k,l,ic])=>`<button class="opt ${S.gender===k?'on':''}" data-act="gender" data-a="${k}" style="flex-direction:column;align-items:center;padding:30px 12px;gap:14px;margin:0"><span style="width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:${S.gender===k?'var(--p)':'var(--g)'};color:${S.gender===k?'var(--w)':'var(--k)'}">${I(ic,30)}</span><span class="big">${t(l)}</span></button>`).join('')}</div>
+ <div class="banner" style="margin-top:22px">${I('info',18)}<span>${t('genderNote')}</span></div></div>
+ <div class="grow"></div><div class="foot"><button class="btn" data-go="info">${t('cont')}</button></div></div>`;
+
+SC.info=()=>{const f=S.info;return `<div class="full">${bar('')}${progress(2)}<div class="pad"><div class="h1" style="margin-bottom:24px">${t('infoT')}</div>
+ <div class="fld"><label class="lbl">${t('name')}</label><input class="inp" placeholder="${t('namePh')}" value="${f.name}" data-in="info.name"></div>
+ <div class="fld g2"><div><label class="lbl">${t('country')}</label><select class="inp">${COUNTRIES.map(c=>`<option>${c[0]} ${S.lang==='ar'?c[2]:c[3]}</option>`).join('')}</select></div><div><label class="lbl">${t('city')}</label><input class="inp" placeholder="${S.lang==='ar'?'دبي':'Dubai'}"></div></div>
+ <div class="fld"><label class="lbl">${t('marital')}</label>${chipSel([['m_never',t('m_never')],['m_div',t('m_div')],['m_wid',t('m_wid')]],f.m,'infoM')}</div>
+ <div class="fld g2"><div><label class="lbl">${t('education')}</label><select class="inp">${['e_hs','e_dip','e_ba','e_ma','e_phd'].map(e=>`<option ${f.edu===e?'selected':''}>${t(e)}</option>`).join('')}</select></div><div><label class="lbl">${t('job')}</label><input class="inp" placeholder="${t('jobPh')}"></div></div>
+ <div class="fld"><label class="lbl">${t('timeline')}</label>${chipSel([['t_6',t('t_6')],['t_1',t('t_1')],['t_2',t('t_2')],['t_ns',t('t_ns')]],f.tl,'infoT')}</div>
+ <div class="fld"><label class="lbl">${t('bio')}</label><textarea class="inp" maxlength="500" placeholder="${t('bioPh')}"></textarea><div class="cap ltr" style="text-align:end;margin-top:4px">0/500</div></div>
+ <div class="fld"><label class="lbl" style="display:flex;justify-content:space-between">${t('interests')}<span class="cap">${t('upTo8')} · <span class="ltr">${f.ints.length}/8</span></span></label>${chipSel(Object.keys(INTS).map(k=>[k,iname(k)]),f.ints,'infoI',true)}</div></div>
+ <div class="foot sticky-foot"><button class="btn" data-go="prefs">${t('cont')}</button></div></div>`};
+
+SC.prefs=()=>{const p=S.pref;const stp=(k)=>`<div class="step"><button data-act="pstep" data-a="${k}:-1">−</button><b>${p[k]}</b><button data-act="pstep" data-a="${k}:1">+</button></div>`;
+ return `<div class="full">${bar('')}${progress(3)}<div class="pad"><div class="h1">${t('prefsT')}</div><p class="bm mut" style="margin:8px 0 24px">${t('prefsD')}</p>
+ <div class="fld"><label class="lbl">${t('ageRange')}</label><div class="range2">${stp('a1')}<span class="cap">${t('to')}</span>${stp('a2')}</div></div>
+ <div class="fld"><label class="lbl">${t('prefCountry')}</label>${chipSel([['same',t('sameCountry')],['any',t('anyCountry')]],p.cty,'pcty')}</div>
+ <div class="fld"><label class="lbl">${t('acceptMarital')}</label>${chipSel([['m_never',t('m_never')],['m_div',t('m_div')],['m_wid',t('m_wid')]],p.ms,'pms',true)}</div>
+ <div class="fld"><label class="lbl">${t('children')}</label>${chipSel([['yes',t('wantKids')],['np',t('noPref')]],p.kids,'pkids')}</div>
+ <div class="banner p">${I('match',18)}<span>${t('mutualNote')}</span></div></div>
+ <div class="grow"></div><div class="foot"><button class="btn" data-go="photos">${t('cont')}</button></div></div>`};
+
+SC.photos=()=>{const n=S.photos.filter(Boolean).length,ok=n>=2&&S.rights&&S.policy;
+ return `<div class="full">${bar('')}${progress(4)}<div class="pad"><div class="h1">${t('photosT')}</div><p class="bm mut" style="margin:8px 0 22px">${t('photosD')}</p>
+ <div class="g3">${S.photos.map((f,i)=>f?`<div class="slot f">${ph()}${i===0?`<span class="tag pf tagp">${t('primary')}</span>`:''}<button class="rm" data-act="photo" data-a="${i}" aria-label="remove">${I('close',14,2.4)}</button></div>`:`<button class="slot" data-act="photo" data-a="${i}"><span style="display:grid;place-items:center;gap:4px">${I('plus',24)}<span class="cap">${t('add')}</span></span></button>`).join('')}</div>
+ <div style="margin:18px 0;display:grid;gap:8px">${['ph1','ph2','ph3'].map(k=>`<div style="display:flex;gap:10px;align-items:center;font-size:14px"><span style="color:var(--p)">${I('check',18,2.4)}</span>${t(k)}</div>`).join('')}</div>
+ <div class="list" style="margin-bottom:18px">${row('camera',t('selfieT'),t('selfieD'),{p:true,right:`<span class="tag">${t('optional')}</span>`})}</div>
+ <div style="display:grid;gap:4px">${chk(S.rights,t('rights'),'rights')}${chk(S.policy,t('policy'),'policy')}</div></div>
+ <div class="foot sticky-foot"><button class="btn" data-act="submitReview" ${ok?'':'disabled'}>${t('submitReview')}</button></div></div>`};
+
+SC.verify=()=>{const v=S.verif;const steps=[['tSub',1],['tAuto',1],['tHuman',v==='approved'?1:v==='rejected'?-1:0],['tLive',v==='approved'?1:0]];
+ const head={pending:['hour',t('vPending'),t('vPendingD')],rejected:['info',t('vRejected'),t('vRejectedD')],approved:['check',t('vApproved'),t('vApprovedD')]}[v];
+ return `<div class="full"><div class="safe-top"></div><div class="pad" style="padding-top:14px"><div class="cap" style="margin-bottom:8px">${t('previewStates')}</div><div class="seg" style="width:100%">${['pending','rejected','approved'].map(k=>`<button style="flex:1" class="${v===k?'on':''}" data-act="verif" data-a="${k}">${t(k==='pending'?'st_pending':k==='rejected'?'st_rej':'approved')}</button>`).join('')}</div></div>
+ <div class="pad fade" style="text-align:center;margin-top:34px"><div style="width:88px;height:88px;border-radius:30px;margin:0 auto 20px;display:grid;place-items:center;background:${v==='approved'?'var(--p)':v==='rejected'?'var(--p8)':'var(--g)'};color:${v==='approved'?'var(--w)':'var(--p)'}">${I(head[0],40,2)}</div><div class="h2">${head[1]}</div><p class="bm mut" style="margin-top:10px">${head[2]}</p></div>
+ <div class="pad" style="margin-top:28px">${v==='rejected'?`<div class="list" style="padding:16px"><div class="cap">${t('reason')}</div><div class="bm" style="font-weight:600;margin:4px 0 14px">${t('r1')}</div><div class="cap" style="margin-bottom:8px">${t('fix')}</div>${['fix1','fix2'].map((k,i)=>`<div style="display:flex;gap:10px;font-size:14px;margin-bottom:8px"><span class="tag p ltr">${i+1}</span>${t(k)}</div>`).join('')}</div>`:
+ `<div class="tl2">${steps.map(([k,s],i)=>`<div class="ti ${s===1?'done':s===0&&(i===0||steps[i-1][1]===1)?'cur':''}"><span class="c">${s===1?I('check',14,3):i+1}</span><div style="padding-top:3px"><div class="bm" style="font-weight:600">${t(k)}</div></div></div>`).join('')}</div>`}
+ ${v==='approved'?`<div class="banner" style="margin-top:4px">${vb()}<span><b>${t('photosReviewed')}</b><br>${t('notIdentity')}</span></div>`:''}</div>
+ <div class="grow"></div><div class="foot">${v==='approved'?`<button class="btn" data-go="discover">${t('startDiscover')}</button>`:v==='rejected'?`<button class="btn" data-go="photos">${t('fixResubmit')}</button>`:`<button class="btn out" data-go="edit">${t('editWhileWait')}</button>`}</div></div>`};
+
+SC.discover=()=>{const list=opp();const left=Math.max(0,quota().l-S.likesUsed);const cur=list[S.deck],nx=list[S.deck+1];
+ const card=(p,back)=>`<div class="card ${back?'back':''}" ${back?'':'id="topcard"'} data-pid="${p.id}"><div class="ph">${SIL}<div class="bars">${[0,1,2].map(i=>`<i class="${i===0?'on':''}"></i>`).join('')}</div>${back?'':`<span class="stamp like">${t('like')}</span><span class="stamp pass">${t('pass')}</span>`}<span class="tag pnum" style="background:var(--w)">${I('match',13,2)} <span class="ltr">${p.cmp}%</span> ${t('compatP')}</span></div>
+ <div class="info"><div class="nm">${pn(p)}<span class="age">${p.age}</span>${p.v?vb(22):''}</div><div class="cap" style="display:flex;gap:4px;align-items:center;margin:3px 0 8px">${I('pin',14)}${pc(p)} · ${pj(p)}</div><p class="bs" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${pb(p)}</p><div class="chips" style="margin-top:10px">${p.ints.map(k=>`<span class="chip sm">${iname(k)}</span>`).join('')}</div></div></div>`;
+ return `<div class="full" style="height:100%;min-height:0"><div class="safe-top"></div>
+ <div class="dhead">${LOGO(34)}<div style="flex:1"><div class="h3" style="font-size:18px;font-weight:700">${t('discoverT')}</div><div class="cap"><span class="ltr">${left}</span> ${t('likesLeft')}</div></div><button class="ib soft" data-go="notifs" aria-label="notifications">${I('bell',20)}</button><button class="ib soft" data-go="search" aria-label="filters">${I('filter',20)}</button></div>
+ ${cur?`<div class="deck">${nx?card(nx,true):''}${card(cur,false)}</div>
+ <div class="acts"><button class="s" data-act="undo" ${S.undo.length?'':'disabled'} aria-label="undo">${Ix('undo',22)}</button><button class="l" data-act="swipe" data-a="pass" aria-label="pass">${I('close',28,2.2)}</button><button class="l lk" data-act="swipe" data-a="like" aria-label="like">${I('heartf',28)}</button><button class="s" data-act="openDetail" data-a="${cur.id}" aria-label="view profile">${I('info',22)}</button></div>`
+ :`<div class="empty grow" style="justify-content:center"><div class="eic">${I('discover',38)}</div><div class="h2">${t('noMore')}</div><p class="bm mut">${t('noMoreD')}</p><div style="display:flex;gap:10px;margin-top:10px"><button class="btn sm" data-go="search">${t('adjust')}</button><button class="btn sm out" data-act="resetDeck">${t('reset')}</button></div></div>`}</div>`};
+
+SC.details=()=>{const p=byId(S.detail)||opp()[0];
+ return `<div><div class="pd-photo">${ph()}<div class="pd-top"><button class="ib wh" data-act="back">${Ix('back')}</button><button class="ib wh" data-act="sheet" data-a="report">${I('more')}</button></div><div class="bars" style="position:absolute;bottom:14px;inset-inline:16px;display:flex;gap:4px">${[0,1,2].map(i=>`<i style="flex:1;height:3px;border-radius:2px;background:${i?'var(--w60)':'var(--w)'}"></i>`).join('')}</div></div>
+ <div class="pad" style="padding-top:18px"><div style="display:flex;align-items:center;gap:8px"><span class="h1">${pn(p)}, <span style="font-weight:500">${p.age}</span></span>${p.v?vb(24):''}</div>
+ <div class="cap" style="display:flex;gap:4px;align-items:center;margin-top:4px">${I('pin',15)}${pc(p)}</div>
+ <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap"><span class="tag p">${I('match',13,2)} <span class="ltr">${p.cmp}%</span> ${t('compatP')}</span><span class="tag">${t(p.tl)}</span></div>
+ <div class="sec">${t('about')}</div><p class="bm">${pb(p)}</p>
+ <div class="sec">${t('basics')}</div><div class="kv"><div><small>${t('marital')}</small><b>${t(p.m)}</b></div><div><small>${t('education')}</small><b>${t(p.edu)}</b></div><div><small>${t('job')}</small><b>${pj(p)}</b></div><div><small>${t('timeline')}</small><b>${t(p.tl)}</b></div></div>
+ <div class="sec">${t('interests')}</div><div class="chips">${p.ints.map(k=>`<span class="chip">${iname(k)}</span>`).join('')}</div>
+ <div class="sec">${t('lifestyle')}</div><div class="kv"><div><small>${t('smoking')}</small><b>${t('no')}</b></div><div><small>${t('relocate')}</small><b>${t('maybe')}</b></div></div>
+ <div class="sec">${t('verifs')}</div><div class="list">${row('image',t('photosReviewed'),'',{p:p.v,right:p.v?`<span style="color:var(--p)">${I('check',20,2.4)}</span>`:`<span class="tag">${t('st_pending')}</span>`})}${row('camera',t('live'),'',{p:p.live,right:p.live?`<span style="color:var(--p)">${I('check',20,2.4)}</span>`:'<span class="cap">—</span>'})}${row('shield',t('idNot'),'',{right:'<span class="cap">—</span>'})}</div>
+ <button class="btn ghost" style="margin:16px 0 8px" data-act="sheet" data-a="report">${I('flag',18)} ${t('reportBlock')}</button></div>
+ <div class="sticky-foot" style="display:flex;gap:12px;padding:12px 20px calc(var(--sab) + 12px)"><button class="btn out" data-act="detailAct" data-a="pass">${I('close',20,2.2)} ${t('pass')}</button><button class="btn" data-act="detailAct" data-a="like">${I('heartf',20)} ${t('like')}</button></div></div>`};
+
+SC.search=()=>{const f=S.filters,paid=S.userPlan!=='free';const stp=k=>`<div class="step"><button data-act="fstep" data-a="${k}:-1">−</button><b>${f[k]}</b><button data-act="fstep" data-a="${k}:1">+</button></div>`;
+ const lockRow=(l,opts)=>`<div class="fld"><label class="lbl" style="display:flex;align-items:center;gap:6px">${l} ${paid?'':`<span style="color:var(--k40)">${I('lock',14)}</span>`}</label><div class="chips">${opts.map((o,i)=>`<button class="chip ${paid?'':'lock'} ${paid&&i===0?'on':''}" ${paid?'':'data-go="plans"'}>${o}</button>`).join('')}</div></div>`;
+ return `<div class="full">${bar(t('searchT'),{right:`<button class="btn ghost sm" data-act="resetF" style="width:auto">${t('resetF')}</button>`})}<div class="pad">
+ <div class="sec" style="margin-top:8px">${t('basicF')}</div>
+ <div class="fld"><label class="lbl">${t('ageRange')}</label><div class="range2">${stp('a1')}<span class="cap">${t('to')}</span>${stp('a2')}</div></div>
+ <div class="fld"><label class="lbl">${t('country')}</label>${chipSel([['ae',S.lang==='ar'?'الإمارات':'UAE'],['sa',S.lang==='ar'?'السعودية':'Saudi Arabia'],['eg',S.lang==='ar'?'مصر':'Egypt'],['any',t('anyCountry')]],f.cty,'fcty')}</div>
+ <div class="fld"><label class="lbl">${t('city')}</label><input class="inp" placeholder="${S.lang==='ar'?'كل المدن':'All cities'}"></div>
+ <div class="fld"><label class="lbl">${t('interests')}</label>${chipSel(['read','travel','cook','fit','nature'].map(k=>[k,iname(k)]),f.ints,'fint',true)}</div>
+ <div class="sec" style="display:flex;justify-content:space-between;align-items:center">${t('advF')}${paid?`<span class="tag p">${S.userPlan.toUpperCase()}</span>`:`<span class="tag k">${I('lock',12,2)} Plus</span>`}</div>
+ ${paid?'':`<div class="banner p" style="margin-bottom:18px;align-items:center">${I('crown',20)}<span style="flex:1">${t('upgradeF')}</span><button class="btn sm" data-go="plans">${t('upgrade')}</button></div>`}
+ ${lockRow(t('education'),[t('e_ba'),t('e_ma'),t('e_phd')])}${lockRow(t('marital'),[t('m_never'),t('m_div'),t('m_wid')])}${lockRow(t('occupation'),[S.lang==='ar'?'طب':'Medicine',S.lang==='ar'?'هندسة':'Engineering',S.lang==='ar'?'تعليم':'Education'])}${lockRow(t('compat'),['70%','80%','90%'])}
+ </div><div class="foot sticky-foot"><button class="btn" data-go="discover">${t('applyF')}</button></div></div>`};
+
+SC.likes=()=>{const paid=S.userPlan!=='free';const L=opp().filter(p=>p.likesYou).concat(opp().filter(p=>!p.likesYou));
+ return `<div>${bar(t('likesT'),{back:false})}<div class="pad"><p class="bm mut" style="margin:-4px 0 16px"><b class="ltr" style="color:var(--k)">12</b> ${t('likesD')}</p>
+ ${paid?'':`<div class="list" style="padding:18px;margin-bottom:16px;display:flex;gap:14px;align-items:center"><span style="width:48px;height:48px;border-radius:16px;background:var(--p);color:var(--w);display:grid;place-items:center;flex:none">${I('eye',24)}</span><div style="flex:1"><div class="h3">${t('seeWho')}</div><div class="cap">${t('seeWhoD')}</div></div></div><button class="btn" data-go="plans" style="margin-bottom:18px">${t('upgrade')}</button>`}
+ <div class="g2">${L.map(p=>`<button class="lcard ${paid?'':'blur'}" style="border:0;padding:0" ${paid?`data-act="openDetail" data-a="${p.id}"`:'data-go="plans"'}>${ph()}${paid?'':`<span class="lock"><span>${I('lock',22)}</span></span>`}<span class="lb">${paid?`${pn(p)}, ${p.age} ${p.v?vb(18):''}`:`<span class="sk" style="height:12px;width:70%"></span>`}</span></button>`).join('')}</div></div></div>`};
+
+SC.matches=()=>{const M=opp().slice(0,4);const cl=Math.max(0,quota().m-(S.credits.used||0));
+ return `<div>${bar(t('matchesT'),{back:false})}<div class="pad">
+ <div class="list" style="padding:14px 16px;display:flex;align-items:center;gap:12px;margin-bottom:6px"><span style="color:var(--p)">${I('chat',22)}</span><span class="bs" style="flex:1">${t('creditsLeft')}</span><b class="ltr" style="font-size:18px;font-family:Montserrat,sans-serif">${cl}/${quota().m}</b></div>
+ <div class="sec">${t('newM')}</div><div style="display:flex;gap:14px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none">${M.map(p=>`<button style="border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:6px;flex:none" data-act="openDetail" data-a="${p.id}"><span style="padding:3px;border-radius:50%;box-shadow:0 0 0 2px var(--p)">${av(p,64)}</span><span class="bs" style="font-weight:600">${pn(p)}</span></button>`).join('')}</div>
+ <div class="sec">${t('matchesT')}</div><div class="list">${M.map((p,i)=>`<div class="row">${av(p,52)}<span class="tx"><div class="t1" style="display:flex;gap:6px;align-items:center">${pn(p)}, ${p.age} ${p.v?vb(16):''}</div><div class="t2">${pc(p)} · <span class="ltr">${p.cmp}%</span> ${t('compatP')}</div></span>${i===0?`<button class="btn sm out" data-go="chat">${t('openChat')}</button>`:`<button class="btn sm" data-act="startConv" ${cl?'':'disabled'}>${t('startConv')}</button>`}</div>`).join('')}</div></div></div>`};
+
+SC.me=()=>`<div>${bar(t('meT'),{back:false,right:`<button class="ib" data-go="settings" aria-label="settings">${I('settings')}</button>`})}<div class="pad">
+ <div style="display:flex;flex-direction:column;align-items:center;text-align:center;margin:6px 0 18px"><div style="position:relative">${av(null,104)}<button class="ib" data-go="edit" style="position:absolute;bottom:0;inset-inline-end:-4px;width:36px;height:36px;border-radius:50%;background:var(--p);color:var(--w)">${I('edit',16)}</button></div>
+ <div class="h2" style="margin-top:12px;display:flex;gap:8px;align-items:center">${S.gender==='M'?(S.lang==='ar'?'أحمد':'Ahmed'):(S.lang==='ar'?'سارة':'Sara')}, 32 ${vb(22)}</div><div class="cap">${S.lang==='ar'?'دبي، الإمارات':'Dubai, UAE'}</div></div>
+ <div class="list" style="padding:16px"><div style="display:flex;justify-content:space-between;margin-bottom:10px"><span class="bs" style="font-weight:600">${t('complete')}</span><b class="ltr" style="color:var(--p);font-family:Montserrat,sans-serif">80%</b></div><div class="meter"><i style="width:80%"></i></div></div>
+ <div class="list" style="padding:16px;margin-top:12px;display:flex;align-items:center;gap:12px;${S.userPlan!=='free'?'background:var(--k);color:var(--w)':''}"><span style="color:${S.userPlan!=='free'?'var(--w)':'var(--p)'}">${I('crown',24)}</span><div style="flex:1"><div class="cap" style="${S.userPlan!=='free'?'color:var(--w60)':''}">${t('currentPlan')}</div><div class="h3">${S.userPlan==='free'?t('free'):S.userPlan==='plus'?'Plus':'Premium'}</div></div><button class="btn sm ${S.userPlan!=='free'?'wh':''}" data-go="plans">${S.userPlan==='free'?t('upgrade'):t('view')}</button></div>
+ <div class="list" style="margin-top:16px">${row('edit',t('editP'),'',{go:'edit'})}${row('match',t('myPrefs'),'',{go:'prefs'})}${row('crown',t('subs'),'',{go:'plans'})}${row('card',t('payHist'),'',{go:'payments'})}</div>
+ <div class="list" style="margin-top:12px">${row('shield',t('privacy'),'',{go:'privacy'})}${row('bell',t('notifs'),'',{go:'notifs'})}${row('help',t('help'),'',{go:'faq'})}${row('settings',t('settings'),'',{go:'settings'})}</div></div></div>`;
+
+SC.convs=()=>{const C=opp().slice(0,4);const last=[['السلام عليكم، سعيدة بالتوافق 🌿','Hello! Glad we matched 🌿'],['هل تفضل السفر أم الاستقرار؟','Do you prefer travel or settling?'],['شكرًا على الحديث اللطيف','Thanks for the lovely chat'],null];
+ return `<div>${bar(t('convsT'),{back:false})}<div class="pad"><div style="position:relative;margin-bottom:14px"><span style="position:absolute;top:15px;inset-inline-start:14px;color:var(--k40)">${I('search',20)}</span><input class="inp" style="padding-inline-start:44px" placeholder="${t('searchConv')}"></div></div>
+ <div>${C.map((p,i)=>`<button class="row" style="padding-inline:20px;border-bottom:0" data-go="chat"><div style="position:relative">${av(p,56)}${i<2?'<span class="online"></span>':''}</div><span class="tx"><div class="t1" style="display:flex;justify-content:space-between;gap:8px"><span style="display:flex;gap:6px;align-items:center;font-weight:${i===0?700:500}">${pn(p)} ${p.v?vb(16):''}</span><span class="cap ltr" style="font-family:Montserrat,sans-serif">${['9:14','8:02',S.lang==='ar'?'أمس':'Yesterday','—'][i]}</span></div><div class="t2" style="display:flex;justify-content:space-between;gap:8px;${i===0?'color:var(--k);font-weight:500':''}"><span style="overflow:hidden;text-overflow:ellipsis">${last[i]?last[i][S.lang==='ar'?0:1]:t('matchedOn')}</span>${i===0?'<span class="unread">2</span>':''}</div></span></button>`).join('')}</div></div>`};
+
+SC.chat=()=>{const p=opp()[0];
+ return `<div class="chat">${bar('',{line:true,right:`<button class="ib" data-act="sheet" data-a="report">${I('more')}</button>`}).replace('<h1></h1>',`<button style="flex:1;display:flex;align-items:center;gap:10px;border:0;background:none;text-align:start" data-act="openDetail" data-a="${p.id}">${av(p,40)}<span><div style="font-weight:700;display:flex;gap:6px;align-items:center">${pn(p)} ${vb(16)}</div><div class="cap" style="color:${S.typing?'var(--p)':''}">${S.typing?t('typing'):t('online')}</div></span></button>`)}
+ <div class="msgs" id="msgs"><div class="sysm">${t('today')}</div>${S.chat.map(m=>m.s==='sys'?`<div class="sysm">${t('matchedOn')}</div>`:`<div class="bub ${m.s}">${S.lang==='ar'?m.x:(m.xe||m.x)}<div class="mt ltr">${m.tm}${m.s==='me'?(m.r?I('check',13,2.4)+'<span style="margin-inline-start:-9px">'+I('check',13,2.4)+'</span>':I('check',13,2.4)):''}</div></div>`).join('')}${S.typing?'<div class="typing"><i></i><i></i><i></i></div>':''}</div>
+ <form class="composer" data-act="sendMsg"><input id="msgIn" placeholder="${t('msgPh')}" autocomplete="off"><button class="send" type="submit" aria-label="send">${Ix('send',20,2.2)}</button></form></div>`};
+
+SC.notifs=()=>{const N=[['match','n1','2m',1],['heart','n2','1h',1],['shield','n3','3h',0],['chat','n4',S.lang==='ar'?'أمس':'1d',0],['user','n5',S.lang==='ar'?'أمس':'1d',0]];
+ const r=([ic,k,tm,u])=>`<div class="row" style="padding-inline:20px;border-bottom:0;${u?'background:var(--p8)':''}"><span class="ico ${u?'p':''}" style="border-radius:50%;width:44px;height:44px">${I(ic,20)}</span><span class="tx"><div class="t1" style="white-space:normal;font-weight:${u?600:500}">${t(k)}</div><div class="t2 ltr" style="text-align:start">${tm}</div></span>${u?'<span style="width:9px;height:9px;border-radius:50%;background:var(--p)"></span>':''}</div>`;
+ return `<div>${bar(t('notifsT'),{right:`<button class="ib" aria-label="${t('markAll')}" data-act="toast" data-a="markAll">${I('check',20)}</button>`})}<div class="sec pad" style="margin-top:4px">${t('today')}</div>${N.slice(0,3).map(r).join('')}<div class="sec pad">${t('earlier')}</div>${N.slice(3).map(r).join('')}</div>`};
+
+SC.edit=()=>`<div class="full">${bar(t('editT'))}<div class="pad"><div class="banner p" style="margin-bottom:18px">${I('info',18)}<span>${t('reviewNote')}</span></div>
+ <div class="g3" style="margin-bottom:22px">${S.photos.map((f,i)=>f?`<div class="slot f">${ph()}${i===0?`<span class="tag pf tagp">${t('primary')}</span>`:''}</div>`:`<button class="slot" data-act="photo" data-a="${i}">${I('plus',22)}</button>`).join('')}</div>
+ <div class="fld"><label class="lbl">${t('name')}</label><input class="inp" value="${S.gender==='M'?(S.lang==='ar'?'أحمد':'Ahmed'):(S.lang==='ar'?'سارة':'Sara')}"></div>
+ <div class="fld"><label class="lbl">${t('job')}</label><input class="inp" value="${S.lang==='ar'?'مهندس برمجيات':'Software engineer'}"></div>
+ <div class="fld"><label class="lbl">${t('bio')}</label><textarea class="inp">${S.lang==='ar'?'أحب الرياضة والسفر، وأبحث عن شريكة حياة تشاركني بناء أسرة مستقرة.':'Into sports and travel. Looking for a partner to build a stable family together.'}</textarea></div>
+ <div class="fld"><label class="lbl">${t('timeline')}</label>${chipSel([['t_6',t('t_6')],['t_1',t('t_1')],['t_2',t('t_2')]],S.info.tl,'infoT')}</div>
+ <div class="fld"><label class="lbl">${t('interests')}</label>${chipSel(Object.keys(INTS).slice(0,9).map(k=>[k,iname(k)]),S.info.ints,'infoI',true)}</div></div>
+ <div class="foot sticky-foot"><button class="btn" data-act="toast" data-a="saved">${t('save')}</button></div></div>`;
+
+SC.plans=()=>{const pl=S.plans,cur=S.userPlan,sel=S.selPlan;
+ const card=(k,name,hl)=>{const q=pl[k];const feats=[[`<b class="ltr">${q.l}</b> ${t('likesDay')}`],[`<b class="ltr">${q.m}</b> ${q.m===1?t('msgDay'):t('msgsDay')}`],[k==='free'?t('basicFilters'):k==='plus'?t('extraFilters'):t('allFilters')]];if(k!=='free')feats.push([t('seeLikes')]),feats.push([`${t('undo')} (<span class="ltr">${q.u}</span>)`]);if(k==='premium')feats.push([t('boost')]);
+  return `<button class="plan ${hl?'hl':''} ${sel===k?'on':''}" data-act="selPlan" data-a="${k}"><div class="pt"><div style="display:flex;align-items:center;gap:8px"><span class="h3" style="font-size:19px">${name}</span>${hl?`<span class="tag pf">${t('popular')}</span>`:''}${cur===k?`<span class="tag ${hl?'':'p'}">${t('current')}</span>`:''}</div><span class="radio ${sel===k?'on':''}" style="${hl?'border-color:var(--w)':''}"></span></div><div class="cap" style="${hl?'color:var(--w60)':''};margin-top:4px">${k==='free'?t('free'):t('priceStore')+' / '+t('month')}</div><ul>${feats.map(f=>`<li>${I('check',17,2.4)}<span>${f[0]}</span></li>`).join('')}</ul></button>`};
+ return `<div class="full">${bar(t('plansT'))}<div class="pad"><p class="bm mut" style="margin:-4px 0 18px">${t('plansD')}</p>${card('free',t('free'))}${card('plus','Plus',true)}${card('premium','Premium')}
+ <p class="cap" style="margin:6px 0 4px">${t('legal')}</p><div style="display:flex;gap:16px;margin:8px 0 6px" class="bs"><button class="link">${t('restore')}</button><button class="link">${t('terms')}</button><button class="link">${t('privPol')}</button></div></div>
+ <div class="foot sticky-foot"><button class="btn" data-act="subscribe" ${sel===cur?'disabled':''}>${sel===cur?t('current'):t('subscribe')}</button></div></div>`};
+
+SC.payments=()=>{const has=S.userPlan!=='free';
+ return `<div class="full">${bar(t('payT'))}${has?`<div class="pad"><div class="list">${row('card',(S.userPlan==='plus'?'Plus':'Premium')+' · '+t('month'),'App Store · 14/11/2026',{right:`<span class="tag p">${t('paid')}</span>`})}</div><div class="list" style="margin-top:14px">${row('doc',t('manageStore'))}${row('download',t('restore'))}</div></div>`
+ :`<div class="empty grow" style="justify-content:center"><div class="eic">${I('card',36)}</div><div class="h2">${t('noPay')}</div><p class="bm mut">${t('noPayD')}</p><button class="btn sm" style="margin-top:12px" data-go="plans">${t('plansT')}</button><div style="width:100%;margin-top:34px;display:grid;gap:10px">${[1,2,3].map(()=>`<div style="display:flex;gap:12px;align-items:center;opacity:.6"><span class="sk" style="width:40px;height:40px;border-radius:12px"></span><span style="flex:1;display:grid;gap:6px"><span class="sk" style="height:10px;width:60%"></span><span class="sk" style="height:8px;width:35%"></span></span></div>`).join('')}</div></div>`}</div>`};
+
+SC.privacy=()=>{const v=S.priv;return `<div>${bar(t('privT'))}<div class="pad"><div class="sec" style="margin-top:6px">${t('visibility')}</div><div class="list">
+ ${row('pin',t('showCity'),'',{right:tg(v.city,'priv:city')})}${row('eye',t('blurPhotos'),'',{right:tg(v.blur,'priv:blur')})}${row('user',t('showOnline'),'',{right:tg(v.online,'priv:online')})}${row('check',t('readRec'),'',{right:tg(v.read,'priv:read')})}${row('moon',t('incognito'),'Premium',{right:S.userPlan==='premium'?tg(v.inc,'priv:inc'):`<span class="tag k">${I('lock',12,2)} Premium</span>`})}</div>
+ <div class="sec">${t('security')}</div><div class="list">${row('block',t('blockedUsers'),S.lang==='ar'?'مستخدم واحد':'1 user')}${row('phone',t('sessions'),'iPhone 15 Pro')}${row('download',t('myData'))}</div></div></div>`};
+
+SC.faq=()=>{const Q=[1,2,3,4];
+ return `<div>${bar(t('faqT'))}<div class="pad"><div style="position:relative;margin-bottom:14px"><span style="position:absolute;top:15px;inset-inline-start:14px;color:var(--k40)">${I('search',20)}</span><input class="inp" style="padding-inline-start:44px" placeholder="${t('faqSearch')}"></div>
+ <div class="chips" style="margin-bottom:8px">${['c_acc','c_ver','c_pay','c_tech'].map((k,i)=>`<span class="chip sm ${i===0?'on':''}">${t(k)}</span>`).join('')}</div>
+ ${Q.map(i=>`<div class="acc ${S.faq===i?'open':''}"><button data-act="faq" data-a="${i}">${t('q'+i)}${I('down',20)}</button>${S.faq===i?`<p class="fade">${t('a'+i)}</p>`:''}</div>`).join('')}
+ <div class="list" style="padding:18px;margin-top:22px">${S.ticket?`<div style="display:flex;gap:12px;align-items:center"><span style="color:var(--p)">${I('check',24,2.4)}</span><span class="bm">${t('ticketSent')}</span></div>`:`<div class="h3" style="margin-bottom:14px">${t('ticketT')}</div><div class="fld"><label class="lbl">${t('category')}</label>${chipSel(['c_acc','c_ver','c_pay','c_tech'].map(k=>[k,t(k)]),S.tcat,'tcat')}</div><div class="fld"><label class="lbl">${t('message')}</label><textarea class="inp"></textarea></div><button class="btn" data-act="ticket">${t('sendT')}</button>`}</div><div style="height:24px"></div></div></div>`};
+
+SC.settings=()=>S.deleted?`<div class="full"><div class="safe-top"></div><div class="empty grow" style="justify-content:center"><div class="eic">${I('check',38)}</div><div class="h2">${t('delDone')}</div><p class="bm mut">${t('delDoneD')}</p><button class="btn sm out" style="margin-top:14px" data-act="undoDelete">${t('cancel')}</button></div></div>`:
+ `<div>${bar(t('setT'))}<div class="pad"><div class="sec" style="margin-top:6px">${t('general')}</div><div class="list">${row('globe',t('language'),S.lang==='ar'?'العربية':'English',{act:'toggleLang'})}</div>
+ <div class="sec">${t('pushN')}</div><div class="list">${row('chat',t('nMatchesN'),'',{right:tg(S.nset.m,'nset:m')})}${row('heart',t('nLikesN'),'',{right:tg(S.nset.l,'nset:l')})}</div>
+ <div class="sec">${t('about2')}</div><div class="list">${row('doc',t('terms'))}${row('shield',t('privPol'))}${row('info',t('version'),'',{right:'<span class="cap ltr">1.0.0 (1)</span>'})}</div>
+ <div class="list" style="margin-top:16px">${row('logout',t('logout'),'',{go:'splash',right:''})}${row('trash',t('delAcc'),'',{act:'sheet',danger:true})}</div><div style="height:30px"></div></div></div>`.replace('data-act="sheet"','data-act="sheet" data-a="delete"');
+
+/* sheets */
+const SHEETS={
+ country:()=>`<div class="h3" style="margin-bottom:12px">${t('chooseCountry')}</div><div class="list">${COUNTRIES.map((c,i)=>`<button class="row" data-act="pickCountry" data-a="${i}"><span style="font-size:22px">${c[0]}</span><span class="tx"><div class="t1">${S.lang==='ar'?c[2]:c[3]}</div></span><span class="cap ltr" style="font-family:Montserrat,sans-serif">${c[1]}</span>${S.country===i?`<span style="color:var(--p)">${I('check',18,2.4)}</span>`:''}</button>`).join('')}</div>`,
+ report:()=>`<div class="h3" style="margin-bottom:14px">${t('reportT')}</div><div class="list">${['rr1','rr2','rr3','rr4','rr5','rr6'].map((k,i)=>`<button class="row" data-act="rsel" data-a="${k}" style="min-height:52px"><span class="radio ${S.rsel===k?'on':''}"></span><span class="tx"><div class="t1">${t(k)}</div></span></button>`).join('')}</div><div style="margin:14px 0">${chk(S.rblock,t('blockAlso'),'rblock')}</div><button class="btn" data-act="submitReport" ${S.rsel?'':'disabled'}>${t('submitReport')}</button><button class="btn ghost" style="margin-top:6px" data-act="closeSheet">${t('cancel')}</button>`,
+ delete:()=>`<div style="width:56px;height:56px;border-radius:18px;background:var(--p8);color:var(--p);display:grid;place-items:center;margin-bottom:14px">${I('trash',26)}</div><div class="h2">${t('delT')}</div><p class="bs mut" style="margin:8px 0 16px">${t('delD')}</p><div class="lbl">${t('delWhy')}</div><div class="chips" style="margin-bottom:20px">${['d1','d2','d3','d4'].map(k=>`<button class="chip sm ${S.dwhy===k?'on':''}" data-act="dwhy" data-a="${k}">${t(k)}</button>`).join('')}</div><button class="btn" data-act="doDelete">${t('delConfirm')}</button><button class="btn ghost" style="margin-top:6px" data-act="closeSheet">${t('cancel')}</button>`
+};
+
+/* ═══════════ DEVICE RENDER ═══════════ */
+function device(id,live){const d=DEVICES[S.dev];const nav=NAVTAB[id]&&id!=='details'&&id!=='search';
+ const dark=id==='splash';const ios=d.os==='ios';
+ return `<div class="device" style="--W:${d.W}px;--H:${d.H}px;--sat:${d.sat}px;--sab:${d.sab}px;--rad:${d.rad}px" ${live?'id="dev"':''}>
+ <div class="sbar ${dark?'light':''} ${d.deco==='none'?'sm':''}"><span>9:41</span><span style="display:flex;gap:5px;align-items:center"><svg width="18" height="11" viewBox="0 0 18 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="5" y="5" width="3" height="6" rx="1"/><rect x="10" y="2.5" width="3" height="8.5" rx="1"/><rect x="15" y="0" width="3" height="11" rx="1"/></svg><svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x=".5" y=".5" width="21" height="11" rx="3.5" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="2" fill="currentColor"/><rect x="23" y="4" width="1.5" height="4" rx=".75" fill="currentColor" opacity=".4"/></svg></span></div>
+ ${d.deco==='island'?'<div class="island"></div>':d.deco==='punch'?'<div class="punch"></div>':''}
+ <div class="scr ${nav?'navd':''}" ${live?'id="scr"':''}>${SC[id]()}</div>
+ ${nav?navbar(NAVTAB[id]):''}
+ ${live&&S.matchWith?matchOverlay():''}
+ ${live&&S.sheet?`<div class="scrim" data-act="closeSheet"></div><div class="sheet"><div class="grab"></div>${SHEETS[S.sheet]()}</div>`:''}
+ ${live&&S.toast?`<div class="toast">${S.toast}</div>`:''}
+ ${d.sab?`<div class="homebar ${ios?'':'and'} ${dark?'light':''}"></div>`:''}</div>`}
+function navbar(on){const items=[['discover','discover','nDiscover'],['likes','heart','nLikes'],['matches','match','nMatches'],['convs','chat','nMessages'],['me','user','nProfile']];
+ return `<nav class="nav" aria-label="main">${items.map(([k,ic,l])=>`<button class="${on===k?'on':''}" data-tab="${k}" aria-current="${on===k}">${I(k===on&&ic==='heart'?'heartf':ic,23,on===k?2.1:1.8)}${k==='convs'||k==='likes'?'<i class="dot"></i>':''}<span>${t(l)}</span></button>`).join('')}</nav>`}
+function matchOverlay(){const p=byId(S.matchWith);return `<div class="match"><div style="opacity:.9">${LOGO(56,null,'#FFFFFF')}</div><div class="display">${t('matchT')}</div><p class="bm" style="opacity:.85;max-width:290px">${t('matchD')}</p><div class="avs">${av(null,96)}${av(p,96)}</div><div style="width:100%;display:grid;gap:10px;max-width:320px"><button class="btn wh" data-act="matchChat">${t('startChat')}</button><button class="btn ghost" style="color:var(--w)" data-act="closeMatch">${t('keep')}</button></div></div>`}
+
+/* ═══════════ ADMIN ═══════════ */
+const ASEC=[['dash','grid'],['users','users'],['mod','image'],['ver','shield'],['an','chart'],['conv','chat'],['sub','crown'],['pay','card'],['rep','flag'],['not','bell'],['sup','ticket'],['set','settings']];
+const stTag=s=>({active:`<span class="tag p">${t('st_active')}</span>`,pending:`<span class="tag">${t('st_pending')}</span>`,susp:`<span class="tag k">${t('st_susp')}</span>`,rej:`<span class="tag">${t('st_rej')}</span>`,restr:`<span class="tag">${t('st_restr')}</span>`})[s];
+const tbl=(cols,rows)=>`<div class="tw"><table class="t"><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+const ucell=p=>`<div class="uc">${av(p,34)}<div><div style="font-weight:600;display:flex;gap:6px;align-items:center">${pn(p)} ${p.v?vb(15):''}</div><div class="cap ltr" style="text-align:start">#${1000+p.id}</div></div></div>`;
+const AS={};
+AS.dash=()=>{const k=[['k1','users',48210,'+3.2%'],['k2','user',12904,'+1.1%'],['k3','plus',386,''],['k4','hour',214,''],['k5','shield',S.vq.length+87,''],['k6','close',31,''],['k7','match',9875,'+6%'],['k8','chat',6420,''],['k9','crown',3190,'+2.4%'],['k10','card','—',''],['k11','doc',1286,''],['k12','flag',S.reps.filter(r=>r.st==='open').length+15,'']];
+ const days=[220,260,240,310,295,350,386];const mx=Math.max(...days);
+ return `<div class="kpis">${k.map(([l,ic,v,d])=>`<div class="kpi"><small>${I(ic,15)}${t(l)}</small><b>${typeof v==='number'?fmtN(v):v}</b>${d?`<span class="d ltr">${d}</span>`:''}</div>`).join('')}</div>
+ <div class="cols"><div class="pnl"><h3>${t('newUsers7')}</h3><div class="bars2">${days.map((v,i)=>`<div><i style="height:${v/mx*100}%" class="${i<6?'':''}"></i><small class="ltr">${fmtN(v)}</small></div>`).join('')}</div></div>
+ <div class="pnl"><h3>${t('latestVer')}<button class="btn sm out" data-adm="ver">${t('view')}</button></h3>${S.vq.slice(0,4).map(id=>{const p=byId(id);return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--g)">${av(p,36)}<div style="flex:1"><div style="font-weight:600;font-size:13.5px">${pn(p)}</div><div class="cap">${pc(p)}</div></div>${stTag('pending')}</div>`}).join('')||`<p class="cap">${t('none')}</p>`}</div></div>`};
+AS.users=()=>{const st=p=>S.users[p.id]||(p.id===3?'pending':p.id===7?'restr':'active');
+ return `<div class="pnl"><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${['st_active','st_pending','st_susp','st_rej','st_restr'].map((k,i)=>`<span class="chip sm ${i===0?'on':''}">${t(k)}</span>`).join('')}</div>
+ ${tbl([t('user'),t('phoneL'),t('country'),t('status'),t('plan'),t('joined'),t('actions')],PEOPLE.map(p=>`<tr><td>${ucell(p)}</td><td class="ltr" style="font-family:Montserrat,sans-serif;text-align:start">+971 5• ••• ••${p.id}${p.id}</td><td>${pc(p)}</td><td>${stTag(st(p))}</td><td>${['Free','Plus','Premium'][p.id%3]}</td><td class="ltr" style="text-align:start">${p.id+2}/11/2026</td><td><div style="display:flex;gap:6px"><button class="btn sm out">${t('view')}</button>${st(p)==='susp'?`<button class="btn sm dark" data-adm-act="ustatus" data-a="${p.id}:active">${t('reactivate')}</button>`:`<button class="btn sm" data-adm-act="ustatus" data-a="${p.id}:susp">${t('suspend')}</button>`}</div></td></tr>`))}</div>`};
+AS.mod=()=>`<div class="mod">${S.modq.map(id=>{const p=byId(id);return `<div class="mcard fade">${ph()}<div class="mb"><div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:14px">${pn(p)}, ${p.age}</b>${stTag('pending')}</div><div style="display:flex;justify-content:space-between"><span class="mut">${t('face')}</span><span style="color:var(--p)">${I('check',16,2.4)}</span></div><div style="display:flex;justify-content:space-between"><span class="mut">${t('nsfw')}</span><span class="ltr" style="font-family:Montserrat,sans-serif">0.01</span></div><div style="display:flex;justify-content:space-between"><span class="mut">${t('dup')}</span><span>${t('none')}</span></div><div style="display:flex;gap:8px;margin-top:4px"><button class="btn sm" style="flex:1" data-adm-act="modq" data-a="${id}:ok">${t('approve')}</button><button class="btn sm out" style="flex:1" data-adm-act="modq" data-a="${id}:no">${t('reject')}</button></div></div></div>`}).join('')||`<div class="empty"><div class="eic">${I('check',36)}</div><div class="h3">${t('none')}</div></div>`}</div>`;
+AS.ver=()=>{const id=S.vq[S.vsel]??S.vq[0];const p=byId(id);
+ return `<div class="vq"><div class="pnl" style="padding:10px"><div class="cap" style="padding:6px 8px">${t('queue')} · <span class="ltr">${S.vq.length}</span></div>${S.vq.map((q,i)=>{const x=byId(q);return `<button class="qi ${q===id?'on':''}" data-adm-act="vsel" data-a="${i}">${av(x,38)}<div style="flex:1"><div style="font-weight:600;font-size:13.5px">${pn(x)}, ${x.age}</div><div class="cap">${pc(x)}</div></div><span class="cap ltr">${i*7+3}m</span></button>`}).join('')||`<p class="cap" style="padding:10px">${t('none')}</p>`}</div>
+ ${p?`<div class="pnl fade"><h3><span style="display:flex;gap:10px;align-items:center">${av(p,44)}<span>${pn(p)}, ${p.age}<div class="cap" style="font-weight:400">${pc(p)} · ${pj(p)}</div></span></span>${stTag('pending')}</h3>
+ <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">${[0,1,2].map(()=>`<div style="aspect-ratio:3/4;border-radius:12px;overflow:hidden">${ph('','height:100%')}</div>`).join('')}<div style="aspect-ratio:3/4;border-radius:12px;overflow:hidden;position:relative">${ph('','height:100%')}<span class="tag k" style="position:absolute;top:8px;inset-inline-start:8px">${t('selfie')}</span></div></div>
+ <div class="kv" style="margin-bottom:14px"><div><small>${t('autoScan')} · ${t('face')}</small><b style="color:var(--p)">✓</b></div><div><small>${t('nsfw')}</small><b class="ltr">0.01</b></div><div><small>${t('dup')}</small><b>${t('none')}</b></div><div><small>${t('marital')}</small><b>${t(p.m)}</b></div></div>
+ <p class="bs" style="margin-bottom:14px">${pb(p)}</p>
+ <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn sm" data-adm-act="vdec" data-a="ok">${I('check',16,2.4)} ${t('approve')}</button><select class="ainp" style="width:auto;flex:1;min-width:180px"><option>${t('rejReason')}: ${t('r1')}</option></select><button class="btn sm out" data-adm-act="vdec" data-a="no">${t('reject')}</button></div></div>`:`<div class="pnl"><div class="empty"><div class="eic">${I('check',36)}</div><div class="h3">${t('none')}</div></div></div>`}</div>`};
+AS.an=()=>`<div class="kpis">${[['likesToday','heart',41203],['matchRate','match','7.8%'],['convRate','chat','64%'],['avgMsgs','doc',23]].map(([l,ic,v])=>`<div class="kpi"><small>${I(ic,15)}${t(l)}</small><b>${typeof v==='number'?fmtN(v):v}</b></div>`).join('')}</div><div class="pnl"><h3>${t('likesToday')} / ${t('k7')}</h3><div class="bars2">${[[60,8],[72,9],[66,7],[80,10],[90,12],[85,11],[96,13]].map(([a,b])=>`<div><span style="display:flex;gap:4px;align-items:flex-end;height:100%;width:100%;justify-content:center"><i class="k" style="height:${a}%;max-width:18px"></i><i style="height:${b*4}%;max-width:18px"></i></span></div>`).join('')}</div></div>`;
+AS.conv=()=>`<div class="banner p" style="margin-bottom:16px">${I('lock',18)}<span>${t('privNote')}</span></div><div class="pnl"><h3>${t('flagged')}</h3>${tbl([t('user'),t('message'),t('reason'),t('date'),t('actions')],[[8,'رقم حسابي البنكي للتحويل…','Send me money to my account…','rr4'],[6,'لماذا لا تردين؟؟؟','Why aren’t you replying???','rr3']].map(([id,a,b,r])=>`<tr><td>${ucell(byId(id))}</td><td style="max-width:260px;overflow:hidden;text-overflow:ellipsis">${S.lang==='ar'?a:b}</td><td><span class="tag p">${t(r)}</span></td><td class="ltr" style="text-align:start">13/11/2026</td><td><div style="display:flex;gap:6px"><button class="btn sm">${t('suspend')}</button><button class="btn sm out">${t('dismiss')}</button></div></td></tr>`))}</div>`;
+AS.sub=()=>`<div class="banner p" style="margin-bottom:16px">${I('info',18)}<span>${t('syncNote')}</span></div><div class="pnl"><h3>${t('planEdit')}<button class="btn sm" data-adm-act="saveP">${t('saveChanges')}</button></h3>
+ ${tbl([t('plan'),t('likesD2'),t('msgsD2'),t('undos'),t('advFilters'),t('active')],['free','plus','premium'].map(k=>`<tr><td style="font-weight:700">${k==='free'?t('free'):k[0].toUpperCase()+k.slice(1)}</td>${['l','m','u'].map(f=>`<td><input class="ainp" type="number" min="0" value="${S.plans[k][f]}" data-pq="${k}.${f}"></td>`).join('')}<td>${tg(S.plans[k].adv,'padv:'+k)}</td><td>${tg(true,'noop')}</td></tr>`))}
+ <div style="display:flex;align-items:center;gap:12px;margin-top:16px;padding-top:16px;border-top:1px solid var(--g)"><span class="bs" style="flex:1">${t('contLimit')}</span><input class="ainp" type="number" value="${S.contLimit}"></div></div>`;
+AS.pay=()=>`<div class="pnl">${tbl(['ID',t('user'),t('provider'),t('plan'),t('amount'),t('status'),t('date'),t('actions')],[[5,'Apple','Plus','—','succeeded'],[1,'Google','Premium','—','succeeded'],[6,'Web','Plus','—','refunded'],[2,'Apple','Premium','—','failed'],[8,'Google','Plus','—','succeeded']].map(([id,pr,pl,am,st],i)=>`<tr><td class="ltr" style="font-family:Montserrat,sans-serif;text-align:start">TX-${8812+i}</td><td>${ucell(byId(id))}</td><td>${pr}</td><td>${pl}</td><td class="ltr" style="text-align:start">${am}</td><td><span class="tag ${st==='succeeded'?'p':st==='failed'?'k':''}">${t(st)}</span></td><td class="ltr" style="text-align:start">${12-i}/11/2026</td><td>${st==='succeeded'&&pr==='Web'?`<button class="btn sm out">${t('refund')}</button>`:'<span class="cap">—</span>'}</td></tr>`))}</div>`;
+AS.rep=()=>`<div class="pnl">${tbl(['#',t('user'),t('reason'),t('priority'),t('status'),t('actions')],S.reps.map(r=>`<tr><td class="ltr">${r.id}</td><td>${ucell(byId(r.p))}</td><td>${t(r.rr)}</td><td>${r.hi?`<span class="tag pf">${t('high')}</span>`:`<span class="tag">${t('normal')}</span>`}</td><td>${r.st==='open'?`<span class="tag p">${t('open')}</span>`:`<span class="tag">${t(r.st==='done'?'approved':'dismiss')}</span>`}</td><td>${r.st==='open'?`<div style="display:flex;gap:6px"><button class="btn sm" data-adm-act="rep" data-a="${r.id}:done">${t('suspend')}</button><button class="btn sm out" data-adm-act="rep" data-a="${r.id}:dis">${t('dismiss')}</button></div>`:'<span class="cap">—</span>'}</td></tr>`))}</div>`;
+AS.not=()=>`<div class="cols"><div class="pnl"><h3>${t('compose')}</h3><div class="fld"><label class="lbl">${t('audience')}</label><div class="chips"><span class="chip sm on">${t('allUsers')}</span><span class="chip sm">Free</span><span class="chip sm">Plus</span><span class="chip sm">Premium</span></div></div><div class="fld g2"><div><label class="lbl">${t('titleAr')}</label><input class="inp" dir="rtl"></div><div><label class="lbl">${t('titleEn')}</label><input class="inp" dir="ltr"></div></div><div class="fld"><label class="lbl">${t('message')}</label><textarea class="inp"></textarea></div><button class="btn" style="width:auto" data-adm-act="toastA" data-a="sent">${t('sendNow')}</button></div><div class="pnl"><h3>${t('history')}</h3>${[t('n5'),t('n3')].map(x=>`<div style="padding:10px 0;border-bottom:1px solid var(--g)"><div class="bs" style="font-weight:600">${x}</div><div class="cap">${t('sent')} · <span class="ltr">10/11/2026</span></div></div>`).join('')}</div></div>`;
+AS.sup=()=>`<div class="cols"><div class="pnl"><h3>${t('tickets')}</h3>${tbl(['#',t('user'),t('subject'),t('category'),t('status'),''],[[1042,5,'c_acc'],[1041,2,'c_pay'],[1039,3,'c_ver']].map(([n,id,c],i)=>`<tr><td class="ltr">${n}</td><td>${ucell(byId(id))}</td><td>${t(c==='c_pay'?'restore':c==='c_ver'?'vRejected':'changeNum')}</td><td><span class="tag">${t(c)}</span></td><td>${i?stTag('pending'):`<span class="tag p">${t('open')}</span>`}</td><td><button class="btn sm out">${t('assign')}</button></td></tr>`))}</div><div class="pnl"><h3>${t('faqM')}<button class="btn sm">${I('plus',16)}</button></h3>${[1,2,3,4].map(i=>`<div style="display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--g)"><span class="bs" style="flex:1">${t('q'+i)}</span>${tg(true,'noop')}</div>`).join('')}</div></div>`;
+AS.set=()=>`<div class="cols"><div class="pnl"><h3>${t('roles')}</h3>${tbl([t('role'),t('p_users'),t('p_mod'),t('p_pay'),t('p_set')],[['r_super',1,1,1,1],['r_mod',0,1,0,0],['r_sup',1,0,0,0],['r_fin',0,0,1,0]].map(([r,...ps])=>`<tr><td style="font-weight:600">${t(r)}</td>${ps.map(x=>`<td><span class="perm ${x?'':'no'}">${x?I('check',13,3):I('close',12,2.6)}</span></td>`).join('')}</tr>`))}<div class="cap" style="margin-top:12px;display:flex;gap:6px;align-items:center">${I('doc',14)} ${t('audit')}: 2FA · RBAC</div></div>
+ <div class="pnl"><h3>${t('appSettings')}</h3>${[['minAge',18],['minPhotos',2],['otpLimit',3]].map(([k,v])=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--g)"><span class="bs" style="flex:1">${t(k)}</span><input class="ainp" type="number" value="${v}"></div>`).join('')}<div style="display:flex;align-items:center;gap:10px;padding:10px 0"><span class="bs" style="flex:1">${t('oppositeOnly')}</span>${tg(true,'noop')}</div></div></div>`;
+function admin(live){const d=ADEV[S.adev];const narrow=d.W<1000;
+ return `<div class="adm ${narrow?'narrow':''}" style="--W:${d.W}px;--H:${d.H}px"><aside><div class="lg">${LOGO(34)}<span>${S.lang==='ar'?'أُلْفَة · الإدارة':'OLFA Admin'}</span></div>${ASEC.map(([k,ic])=>`<button class="${S.adm===k?'on':''}" data-adm="${k}" title="${t('a_'+k)}">${I(ic,19)}<span>${t('a_'+k)}</span>${k==='ver'&&S.vq.length?`<span class="cnt">${S.vq.length}</span>`:k==='rep'?`<span class="cnt">${S.reps.filter(r=>r.st==='open').length}</span>`:''}</button>`).join('')}</aside>
+ <main><div class="top"><input class="srch" placeholder="${t('search')==='search'?'':''}${S.lang==='ar'?'ابحث بالاسم أو الهاتف أو المعرّف…':'Search by name, phone or ID…'}"><span class="demo">${t('demo')}</span><span style="margin-inline-start:auto;display:flex;align-items:center;gap:10px">${I('bell',20)}${av(null,34)}<span class="bs" style="font-weight:600">${t('adminName')}</span></span></div>
+ <div class="body"><div class="ph1"><h2>${t('a_'+S.adm)}</h2></div>${AS[S.adm]()}</div></main></div>`}
+
+/* ═══════════ CHROME + RENDER ═══════════ */
+const $=s=>document.querySelector(s);
+function chrome(){
+ $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.1</small></span></div>
+ <div class="seg"><button class="${S.mode==='app'?'on':''}" data-ui="mode" data-a="app">${t('vApp')}</button><button class="${S.mode==='admin'?'on':''}" data-ui="mode" data-a="admin">${t('vAdmin')}</button></div>
+ ${S.mode==='app'?`<div class="seg"><button class="${S.view==='one'?'on':''}" data-ui="view" data-a="one">${t('vOne')}</button><button class="${S.view==='all'?'on':''}" data-ui="view" data-a="all">${t('vAll')}</button></div>`:''}
+ <div class="seg"><button class="${S.lang==='ar'?'on':''}" data-ui="lang" data-a="ar">ع RTL</button><button class="${S.lang==='en'?'on':''}" data-ui="lang" data-a="en">EN LTR</button></div>
+ <select class="tsel" data-ui="dev">${S.mode==='app'?Object.entries(DEVICES).map(([k,d])=>`<option value="${k}" ${S.dev===k?'selected':''}>${d.n}</option>`).join(''):Object.entries(ADEV).map(([k,d])=>`<option value="${k}" ${S.adev===k?'selected':''}>${d.n}</option>`).join('')}</select>
+ ${S.mode==='app'?`<select class="tsel" data-ui="screen">${GROUPS.map(([g,l])=>`<optgroup label="${t(g)}">${l.map(id=>`<option value="${id}" ${S.screen===id?'selected':''}>${ORDER.indexOf(id)+1}. ${t('s_'+id)}</option>`).join('')}</optgroup>`).join('')}</select>`:''}`;
+ $('#side').innerHTML=S.mode==='app'?GROUPS.map(([g,l])=>`<h4>${t(g)} · <span class="ltr">${l.length}</span></h4>${l.map(id=>`<button class="${S.screen===id&&S.view==='one'?'on':''}" data-ui="screen" data-a="${id}"><span class="n ltr">${ORDER.indexOf(id)+1}</span>${t('s_'+id)}</button>`).join('')}`).join('')+`<p class="cap" style="padding:18px 10px">${t('demo')}</p>`
+  :`<h4>${t('vAdmin')} · 12</h4>`+ASEC.map(([k,ic],i)=>`<button class="${S.adm===k?'on':''}" data-adm="${k}"><span class="n ltr">${i+1}</span>${t('a_'+k)}</button>`).join('');
+}
+function fit(el,W,H){const st=$('#stage');const aw=st.clientWidth-56,ah=st.clientHeight-56;const s=Math.min(1,aw/(W+20),ah/(H+20));return s}
+function render(){document.body.classList.toggle('adm-mode',S.mode==='admin');document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';chrome();const st=$('#stage');
+ const keepScroll=$('#scr')?$('#scr').scrollTop:0,sameScreen=render._last===S.screen;render._last=S.screen;
+ if(S.mode==='admin'){st.className='stage';const d=ADEV[S.adev];const s=fit(null,d.W,d.H);st.innerHTML=`<div class="scaler" style="width:${d.W*s}px;height:${d.H*s}px">${admin(true).replace('class="adm','style="transform:scale('+s+')" class="adm')}</div>`;return}
+ const d=DEVICES[S.dev];
+ if(S.view==='all'){st.className='stage grid';const s=.42;st.innerHTML=`<div class="gridwrap">${GROUPS.map(([g,l])=>`<div class="gtitle">${t(g)}</div>`+l.map(id=>`<div class="gcell"><div class="scaler" data-ui="screen" data-a="${id}" style="width:${(d.W+20)*s}px;height:${(d.H+20)*s}px"><div style="position:absolute;top:${10*s}px;left:${10*s}px;transform:scale(${s});transform-origin:0 0;pointer-events:none">${device(id,false)}</div></div><div class="cap2"><span class="ltr">${ORDER.indexOf(id)+1}</span>. ${t('s_'+id)}</div></div>`).join('')).join('')}</div>`;return}
+ st.className='stage';const s=fit(null,d.W,d.H);
+ st.innerHTML=`<div class="scaler" style="width:${(d.W+20)*s}px;height:${(d.H+20)*s}px"><div style="position:absolute;top:${10*s}px;left:${10*s}px;transform:scale(${s});transform-origin:0 0">${device(S.screen,true)}</div></div>`;
+ if(sameScreen&&$('#scr'))$('#scr').scrollTop=keepScroll;
+ after();}
+function after(){const id=S.screen;
+ if(id==='otp'){const ins=[...document.querySelectorAll('[data-otp]')];ins[0]&&ins[0].focus({preventScroll:true});}
+ if(id==='chat'){const m=$('#msgs');if(m)m.scrollTop=m.scrollHeight}
+ if(id==='discover')swipe();}
+function go(id,push=true){if(!SC[id])return;if(push&&S.screen!==id)S.hist.push(S.screen);S.screen=id;S.sheet=null;S.view='one';render();const sc=$('#scr');if(sc)sc.scrollTop=0}
+function toast(m){S.toast=m;render();clearTimeout(toast._t);toast._t=setTimeout(()=>{S.toast=null;render()},1900)}
+
+/* swipe gesture */
+function swipe(){const c=$('#topcard');if(!c)return;let x0=null,dx=0,dy=0,y0;const L=c.querySelector('.stamp.like'),Pz=c.querySelector('.stamp.pass');const rtl=S.lang==='ar';
+ c.onpointerdown=e=>{x0=e.clientX;y0=e.clientY;c.setPointerCapture(e.pointerId);c.classList.add('drag')};
+ c.onpointermove=e=>{if(x0===null)return;dx=e.clientX-x0;dy=e.clientY-y0;c.style.transform=`translate(${dx}px,${dy*.2}px) rotate(${dx/18}deg)`;const lk=dx>0;L.style.opacity=lk?Math.min(1,dx/90):0;Pz.style.opacity=!lk?Math.min(1,-dx/90):0};
+ c.onpointerup=()=>{if(x0===null)return;c.classList.remove('drag');x0=null;if(Math.abs(dx)>100){doSwipe(dx>0?'like':'pass')}else{c.style.transform='';L.style.opacity=0;Pz.style.opacity=0}dx=0};}
+function doSwipe(kind){const list=opp(),p=list[S.deck];if(!p)return;if(kind==='like'&&S.likesUsed>=quota().l){toast(S.lang==='ar'?'انتهت إعجابات اليوم — ترقَّ لمزيد':'Daily likes used up — upgrade for more');return}
+ const c=$('#topcard');if(c){c.style.transition='transform .32s ease-in';c.style.transform=`translate(${kind==='like'?560:-560}px,40px) rotate(${kind==='like'?24:-24}deg)`;const st=c.querySelector('.stamp.'+kind);if(st)st.style.opacity=1}
+ setTimeout(()=>{S.undo.push(S.deck);S.deck++;if(kind==='like'){S.likesUsed++;if(p.likesYou)S.matchWith=p.id}render()},300)}
+
+/* ═══════════ EVENTS ═══════════ */
+const ACT={
+ back:()=>{const p=S.hist.pop();if(p)go(p,false)},
+ obNext:()=>{S.ob=Math.min(2,S.ob+1);render()},
+ lang:a=>{S.lang=a;render()},toggleLang:()=>{S.lang=S.lang==='ar'?'en':'ar';render()},
+ terms:()=>{S.terms=!S.terms;render()},sheet:a=>{S.sheet=a;S.rsel=null;S.rblock=false;render()},closeSheet:()=>{S.sheet=null;render()},
+ pickCountry:a=>{S.country=+a;S.sheet=null;render()},
+ verifyOtp:()=>{const v=[...document.querySelectorAll('[data-otp]')].map(i=>i.value).join('');if(v==='000000'){S.otpErr=true;render()}else{S.otpErr=false;go('age')}},
+ age1:()=>{S.age1=!S.age1;render()},age2:()=>{S.age2=!S.age2;render()},
+ gender:a=>{S.gender=a;S.deck=0;S.undo=[];render()},
+ infoM:a=>{S.info.m=a;render()},infoT:a=>{S.info.tl=a;render()},infoI:a=>{const l=S.info.ints;l.includes(a)?l.splice(l.indexOf(a),1):l.length<8&&l.push(a);render()},
+ pstep:a=>{const[k,d]=a.split(':');S.pref[k]=Math.max(18,Math.min(80,S.pref[k]+ +d));if(S.pref.a1>S.pref.a2)S.pref[k==='a1'?'a2':'a1']=S.pref[k];render()},
+ pcty:a=>{S.pref.cty=a;render()},pms:a=>{const l=S.pref.ms;l.includes(a)?l.length>1&&l.splice(l.indexOf(a),1):l.push(a);render()},pkids:a=>{S.pref.kids=a;render()},
+ photo:a=>{S.photos[+a]=!S.photos[+a];render()},rights:()=>{S.rights=!S.rights;render()},policy:()=>{S.policy=!S.policy;render()},
+ submitReview:()=>{S.verif='pending';go('verify')},verif:a=>{S.verif=a;render()},
+ swipe:a=>doSwipe(a),undo:()=>{if(!S.undo.length)return;S.deck=S.undo.pop();render()},resetDeck:()=>{S.deck=0;S.undo=[];render()},
+ openDetail:a=>{S.detail=+a;go('details')},detailAct:a=>{const list=opp();const i=list.findIndex(p=>p.id===S.detail);if(i>=S.deck)S.deck=i;S.hist.pop();S.screen='discover';render();setTimeout(()=>doSwipe(a),60)},
+ closeMatch:()=>{S.matchWith=null;render()},matchChat:()=>{S.matchWith=null;go('chat')},
+ fstep:a=>{const[k,d]=a.split(':');S.filters[k]=Math.max(18,Math.min(80,S.filters[k]+ +d));render()},fcty:a=>{S.filters.cty=a;render()},fint:a=>{const l=S.filters.ints;l.includes(a)?l.splice(l.indexOf(a),1):l.push(a);render()},resetF:()=>{S.filters={a1:24,a2:34,cty:'any',ints:[]};render()},
+ startConv:()=>{S.credits.used=(S.credits.used||0)+1;go('chat')},
+ selPlan:a=>{S.selPlan=a;render()},subscribe:()=>{S.userPlan=S.selPlan;S.likesUsed=Math.min(S.likesUsed,quota().l);toast(t('subscribed'))},
+ 'priv':a=>{S.priv[a]=!S.priv[a];render()},'nset':a=>{S.nset[a]=!S.nset[a];render()},
+ faq:a=>{S.faq=S.faq===+a?0:+a;render()},tcat:a=>{S.tcat=a;render()},ticket:()=>{S.ticket=true;render()},
+ rsel:a=>{S.rsel=a;render()},rblock:()=>{S.rblock=!S.rblock;render()},submitReport:()=>{const b=S.rblock;S.sheet=null;toast(b?t('blocked'):t('reported'))},
+ dwhy:a=>{S.dwhy=a;render()},doDelete:()=>{S.sheet=null;S.deleted=true;render()},undoDelete:()=>{S.deleted=false;render()},
+ toast:a=>toast(a==='saved'?t('saved'):a==='markAll'?'✓':a),noop:()=>{},
+ sendMsg:()=>{const i=$('#msgIn');const v=i&&i.value.trim();if(!v)return;const now=new Date();const tm=now.getHours()+':'+String(now.getMinutes()).padStart(2,'0');S.chat.push({s:'me',x:v,xe:v,tm});S.typing=true;render();
+  setTimeout(()=>{S.chat[S.chat.length-1].r=true;S.typing=false;S.chat.push({s:'th',x:'جميل، يسعدني التعرف عليك أكثر 😊',xe:'Lovely, happy to get to know you more 😊',tm});if(S.screen==='chat')render()},1600)},
+ padv:a=>{S.plans[a].adv=!S.plans[a].adv;render()}
+};
+const AACT={
+ ustatus:a=>{const[id,s]=a.split(':');S.users[id]=s;render()},
+ modq:a=>{const[id,d]=a.split(':');S.modq=S.modq.filter(x=>x!==+id);render()},
+ vsel:a=>{S.vsel=+a;render()},vdec:a=>{S.vq.splice(S.vsel,1);S.vsel=0;render()},
+ rep:a=>{const[id,s]=a.split(':');S.reps.find(r=>r.id===+id).st=s==='done'?'done':'dis';render()},
+ saveP:()=>{document.querySelectorAll('[data-pq]').forEach(i=>{const[k,f]=i.dataset.pq.split('.');S.plans[k][f]=Math.max(0,+i.value||0)});render();flash(t('saved'))},
+ toastA:a=>flash(t(a))
+};
+function flash(m){const el=document.createElement('div');el.className='toast';el.style.cssText='position:fixed;bottom:30px;z-index:99';el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),1800)}
+
+document.addEventListener('click',e=>{
+ const ui=e.target.closest('[data-ui]');if(ui&&ui.tagName!=='SELECT'){const k=ui.dataset.ui,a=ui.dataset.a;if(k==='mode')S.mode=a;if(k==='view')S.view=a;if(k==='lang')S.lang=a;if(k==='screen'){S.view='one';S.hist=[];S.sheet=null;S.matchWith=null;S.screen=a}render();if(k==='screen'&&$('#scr'))$('#scr').scrollTop=0;return}
+ const ad=e.target.closest('[data-adm]');if(ad){S.adm=ad.dataset.adm;render();return}
+ const aa=e.target.closest('[data-adm-act]');if(aa){AACT[aa.dataset.admAct](aa.dataset.a);return}
+ const tab=e.target.closest('[data-tab]');if(tab){S.hist=[];go(tab.dataset.tab,false);return}
+ const ac=e.target.closest('[data-act]');if(ac&&ac.tagName!=='FORM'){if(ac.disabled)return;const[n,arg]=ac.dataset.act.split(':');const fn=ACT[n];if(fn){e.preventDefault();fn(arg!==undefined?arg:ac.dataset.a)}return}
+ const g=e.target.closest('[data-go]');if(g&&!g.disabled){go(g.dataset.go)}
+});
+document.addEventListener('submit',e=>{e.preventDefault();ACT.sendMsg()});
+document.addEventListener('change',e=>{const el=e.target;
+ if(el.dataset.ui==='dev'){S.mode==='app'?S.dev=el.value:S.adev=el.value;render()}
+ if(el.dataset.ui==='screen'){S.view='one';S.hist=[];S.screen=el.value;render()}
+ if(el.dataset.in&&el.dataset.in.startsWith('dob.')){S.dob[el.dataset.in.slice(4)]=el.value;render()}});
+document.addEventListener('input',e=>{const el=e.target;
+ if(el.dataset.in==='phone'){S.phone=el.value;const b=$('#phoneBtn');if(b)b.disabled=!(S.phone.replace(/\D/g,'').length>=8&&S.terms)}
+ if(el.dataset.in==='info.name')S.info.name=el.value;
+ if(el.dataset.otp!==undefined){el.value=el.value.replace(/\D/g,'').slice(-1);const ins=[...document.querySelectorAll('[data-otp]')];const i=+el.dataset.otp;if(el.value&&i<5)ins[i+1].focus();$('#otpBtn').disabled=ins.some(x=>!x.value)}});
+document.addEventListener('keydown',e=>{const el=e.target;if(el.dataset&&el.dataset.otp!==undefined&&e.key==='Backspace'&&!el.value){const ins=[...document.querySelectorAll('[data-otp]')];const i=+el.dataset.otp;if(i>0)ins[i-1].focus()}});
+document.addEventListener('paste',e=>{const el=e.target;if(el.dataset&&el.dataset.otp!==undefined){const v=(e.clipboardData.getData('text')||'').replace(/\D/g,'').slice(0,6);if(v.length){e.preventDefault();const ins=[...document.querySelectorAll('[data-otp]')];v.split('').forEach((c,i)=>ins[i]&&(ins[i].value=c));$('#otpBtn').disabled=v.length<6}}});
+window.addEventListener('resize',()=>{clearTimeout(render._r);render._r=setTimeout(render,120)});
+try{const q=new URLSearchParams(location.hash.slice(1));if(q.get('lang'))S.lang=q.get('lang');if(SC[q.get('s')])S.screen=q.get('s');if(q.get('mode'))S.mode=q.get('mode');if(q.get('dev')&&DEVICES[q.get('dev')])S.dev=q.get('dev');if(q.get('view'))S.view=q.get('view');if(q.get('adm'))S.adm=q.get('adm');if(q.get('adev'))S.adev=q.get('adev')}catch(e){}
+render();
+</script>
+</body>
+</html>
