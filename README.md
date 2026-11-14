@@ -14,10 +14,10 @@
 
 ## الحالة الحالية
 
-**المرحلة 1 — التأسيس والهوية والمعاينة الحية** (بانتظار الاعتماد)
+**المرحلة 2 — تنفيذ واجهات Flutter** (بانتظار المراجعة) · المرحلة 1 مكتملة
 
 - **معاينة حية تفاعلية** لجميع الصفحات الـ26 ولوحة التحكم بأقسامها الـ12 (عربي RTL / إنجليزي LTR، 6 مقاسات أجهزة): [`preview/index.html`](preview/).
-- **أساس Flutter** في [`mobile/`](mobile/): Design Tokens، Typography، Material 3 theme، المكونات المشتركة، الشريط السفلي العائم، الترجمة ARB، GoRouter لـ26 مسارًا، 8 شاشات منفذة، اختبارات Widgets.
+- **تطبيق Flutter** في [`mobile/`](mobile/): الصفحات الـ26 كاملة بطبقات Domain/Data/Presentation وRiverpod وGoRouter، مكتبة مكونات موحدة، ترجمة عربية/إنجليزية، واختبارات تفتح كل الصفحات على 3 مقاسات وبلغتين.
 - **أصول الهوية** في [`mobile/assets/brand/`](mobile/assets/brand/).
 - **مخطط قاعدة البيانات** (Prisma) في [`backend/prisma/schema.prisma`](backend/prisma/schema.prisma).
 - **الوثائق**: PRD وSystem Architecture.

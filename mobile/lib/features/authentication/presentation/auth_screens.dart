@@ -1,76 +1,30 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/errors/failure.dart';
 import '../../../core/localization/generated/app_localizations.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theme/olfa_colors.dart';
 import '../../../core/theme/olfa_spacing.dart';
 import '../../../core/theme/olfa_typography.dart';
 import '../../../core/widgets/olfa_widgets.dart';
-
-/// Shared layout: scrollable form with a pinned bottom action.
-class FormPage extends StatelessWidget {
-  const FormPage({super.key, required this.children, required this.action, this.header});
-  final List<Widget> children;
-  final Widget action;
-  final Widget? header;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(),
-      body: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            if (header != null) header!,
-            Expanded(
-              child: SingleChildScrollView(
-                padding: OlfaSpace.page,
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
-              ),
-            ),
-            Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 16), child: action),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Title extends StatelessWidget {
-  const _Title(this.title, this.body);
-  final String title;
-  final String body;
-  @override
-  Widget build(BuildContext context) {
-    final t = context.type;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 26),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: t.h1),
-          const SizedBox(height: 8),
-          Text(body, style: t.bodyMedium.copyWith(color: OlfaColors.textMuted)),
-        ],
-      ),
-    );
-  }
-}
+import '../../profile/application/profile_controllers.dart';
+import '../application/auth_controller.dart';
 
 /// 4 — Phone registration
-class PhoneScreen extends StatefulWidget {
+class PhoneScreen extends ConsumerStatefulWidget {
   const PhoneScreen({super.key});
   @override
-  State<PhoneScreen> createState() => _PhoneScreenState();
+  ConsumerState<PhoneScreen> createState() => _PhoneScreenState();
 }
 
-class _PhoneScreenState extends State<PhoneScreen> {
-  final _phone = TextEditingController();
+class _PhoneScreenState extends ConsumerState<PhoneScreen> {
+  late final _phone = TextEditingController(text: ref.read(authControllerProvider).nationalNumber);
   bool _terms = false;
-  String _dial = '+971';
+  bool _touched = false;
 
   @override
   void dispose() {
@@ -78,153 +32,153 @@ class _PhoneScreenState extends State<PhoneScreen> {
     super.dispose();
   }
 
-  bool get _valid => _phone.text.replaceAll(RegExp(r'\D'), '').length >= 8 && _terms;
+  Future<void> _submit() async {
+    setState(() => _touched = true);
+    final ctrl = ref.read(authControllerProvider.notifier);
+    if (!ctrl.phoneValid || !_terms) return;
+    final ok = await ctrl.requestOtp();
+    if (ok && mounted) context.push(Routes.otp);
+  }
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final s = ref.watch(authControllerProvider);
+    final ctrl = ref.read(authControllerProvider.notifier);
+    final phoneError = _touched && !ctrl.phoneValid ? l.errorPhone : (s.failure == null ? null : failureMessage(context, s.failure!));
     return FormPage(
-      action: OlfaButton(
+      action: PrimaryButton(
         label: l.sendCode,
-        // Phase 2: POST /v1/auth/otp/request
-        onPressed: _valid ? () => context.push(Routes.otp, extra: '$_dial ${_phone.text}') : null,
+        loading: s.busy,
+        onPressed: ctrl.phoneValid && _terms ? _submit : null,
       ),
       children: [
-        _Title(l.phoneTitle, l.phoneBody),
-        Text(l.phoneLabel, style: context.type.inputLabel),
-        const SizedBox(height: 8),
-        // Phone numbers are always entered left-to-right, even in Arabic.
-        Directionality(
-          textDirection: TextDirection.ltr,
-          child: Row(
-            children: [
-              DropdownButtonHideUnderline(
-                child: Container(
-                  height: OlfaSize.inputHeight,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(color: OlfaColors.gray, borderRadius: OlfaRadius.all(OlfaRadius.input)),
-                  child: DropdownButton<String>(
-                    value: _dial,
-                    items: const ['+971', '+966', '+20', '+965', '+974', '+973', '+968', '+962', '+212', '+44', '+1']
-                        .map((d) => DropdownMenuItem(value: d, child: Text(d)))
-                        .toList(),
-                    onChanged: (v) => setState(() => _dial = v!),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  key: const Key('phoneField'),
-                  controller: _phone,
-                  keyboardType: TextInputType.phone,
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9 ]')), LengthLimitingTextInputFormatter(15)],
-                  decoration: const InputDecoration(hintText: '50 123 4567'),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-            ],
-          ),
+        PageHeading(l.phoneTitle, body: l.phoneBody),
+        PhoneInput(
+          label: l.phoneLabel,
+          pickerTitle: l.chooseCountry,
+          country: s.country,
+          onCountry: ctrl.setCountry,
+          controller: _phone,
+          onChanged: ctrl.setNumber,
+          error: phoneError,
         ),
         const SizedBox(height: 22),
         OlfaCheck(value: _terms, onChanged: (v) => setState(() => _terms = v), label: l.agreeTerms),
+        const SizedBox(height: 8),
+        Text(l.phonePrivacyNote, style: context.type.caption),
       ],
     );
   }
 }
 
 /// 5 — OTP verification
-class OtpScreen extends StatefulWidget {
-  const OtpScreen({super.key, required this.phone});
-  final String phone;
+class OtpScreen extends ConsumerStatefulWidget {
+  const OtpScreen({super.key});
   @override
-  State<OtpScreen> createState() => _OtpScreenState();
+  ConsumerState<OtpScreen> createState() => _OtpScreenState();
 }
 
-class _OtpScreenState extends State<OtpScreen> {
-  final _code = TextEditingController();
-  bool _error = false;
+class _OtpScreenState extends ConsumerState<OtpScreen> {
+  String _code = '';
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
 
   @override
   void dispose() {
-    _code.dispose();
+    _tick?.cancel();
     super.dispose();
+  }
+
+  Future<void> _verify() async {
+    final ok = await ref.read(authControllerProvider.notifier).verify(_code);
+    if (ok && mounted) context.push(Routes.age);
   }
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final s = ref.watch(authControllerProvider);
+    final remaining = s.resendAt == null ? Duration.zero : s.resendAt!.difference(DateTime.now());
+    final canResend = remaining <= Duration.zero && !s.busy;
+    final mmss = '00:${remaining.inSeconds.clamp(0, 59).toString().padLeft(2, '0')}';
+    final locked = s.attemptsLeft <= 0;
+
     return FormPage(
       action: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          OlfaButton(
-            label: l.verify,
-            onPressed: _code.text.length == 6
-                ? () {
-                    // Phase 2: POST /v1/auth/otp/verify. Demo: 000000 = error.
-                    if (_code.text == '000000') {
-                      setState(() => _error = true);
-                    } else {
-                      context.push(Routes.age);
-                    }
-                  }
-                : null,
-          ),
+          PrimaryButton(label: l.verify, loading: s.busy, onPressed: _code.length == 6 && !locked ? _verify : null),
           TextButton(onPressed: () => context.pop(), child: Text(l.changeNumber)),
         ],
       ),
       children: [
-        _Title(l.otpTitle, l.otpBody(widget.phone)),
-        Directionality(
-          textDirection: TextDirection.ltr,
-          child: TextField(
-            controller: _code,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            autofillHints: const [AutofillHints.oneTimeCode],
-            textAlign: TextAlign.center,
-            maxLength: 6,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            style: const TextStyle(fontFamily: 'Montserrat', fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: 14),
-            decoration: InputDecoration(counterText: '', errorText: _error ? l.otpError(4) : null),
-            onChanged: (_) => setState(() => _error = false),
-          ),
+        PageHeading(l.otpTitle, body: l.otpBody(s.masked)),
+        OtpInput(
+          enabled: !locked,
+          hasError: s.failure is InvalidOtpFailure,
+          onChanged: (v) {
+            setState(() => _code = v);
+            if (v.length == 6) _verify();
+          },
+        ),
+        if (s.failure != null) ...[
+          const SizedBox(height: 12),
+          Center(child: Text(locked ? l.otpLocked : failureMessage(context, s.failure!), style: context.type.bodySmall.copyWith(color: OlfaColors.primary, fontWeight: FontWeight.w500), textAlign: TextAlign.center)),
+        ],
+        const SizedBox(height: 24),
+        Center(
+          child: canResend
+              ? TextButton(onPressed: () => ref.read(authControllerProvider.notifier).requestOtp(), child: Text(l.resend))
+              : Text(l.resendIn(mmss), style: context.type.caption),
         ),
         const SizedBox(height: 20),
-        Center(child: Text(l.resendIn('00:45'), style: context.type.caption)),
+        InfoBanner(text: l.otpDemoHint),
       ],
     );
   }
 }
 
 /// 6 — Age confirmation (18+)
-class AgeScreen extends StatefulWidget {
+class AgeScreen extends ConsumerStatefulWidget {
   const AgeScreen({super.key});
   @override
-  State<AgeScreen> createState() => _AgeScreenState();
+  ConsumerState<AgeScreen> createState() => _AgeScreenState();
 }
 
-class _AgeScreenState extends State<AgeScreen> {
+class _AgeScreenState extends ConsumerState<AgeScreen> {
   DateTime? _dob;
   bool _c1 = false, _c2 = false;
 
-  int? get _age {
-    final d = _dob;
-    if (d == null) return null;
-    final now = DateTime.now();
-    var a = now.year - d.year;
-    if (now.month < d.month || (now.month == d.month && now.day < d.day)) a--;
+  static int ageOn(DateTime dob, DateTime now) {
+    var a = now.year - dob.year;
+    if (now.month < dob.month || (now.month == dob.month && now.day < dob.day)) a--;
     return a;
   }
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final locale = Localizations.localeOf(context);
-    final under = _age != null && _age! < 18;
-    final ok = _c1 && _c2 && _age != null && !under;
+    final age = _dob == null ? null : ageOn(_dob!, DateTime.now());
+    final under = age != null && age < 18;
+    final ok = _c1 && _c2 && age != null && !under;
     return FormPage(
-      action: OlfaButton(label: l.continueLabel, onPressed: ok ? () => context.go(Routes.gender) : null),
+      action: PrimaryButton(
+        label: l.continueLabel,
+        onPressed: ok
+            ? () {
+                ref.read(profileDraftProvider.notifier).update((d) => d.copyWith(birthDate: _dob));
+                context.go(Routes.gender);
+              }
+            : null,
+      ),
       children: [
         Container(
           width: 64,
@@ -233,27 +187,28 @@ class _AgeScreenState extends State<AgeScreen> {
           decoration: BoxDecoration(color: OlfaColors.primaryTint(), borderRadius: OlfaRadius.all(20)),
           child: const Icon(Icons.verified_user_outlined, color: OlfaColors.primary, size: 30),
         ),
-        _Title(l.ageTitle, l.ageBody),
+        PageHeading(l.ageTitle, body: l.ageBody),
         Text(l.dateOfBirth, style: context.type.inputLabel),
         const SizedBox(height: 8),
         InkWell(
+          key: const Key('dobPicker'),
           borderRadius: OlfaRadius.all(OlfaRadius.input),
           onTap: () async {
             final now = DateTime.now();
             final picked = await showDatePicker(
               context: context,
-              locale: locale,
-              initialDate: DateTime(now.year - 25),
+              initialDate: _dob ?? DateTime(now.year - 25, now.month, now.day),
               firstDate: DateTime(now.year - 90),
               lastDate: now,
+              initialEntryMode: DatePickerEntryMode.calendarOnly,
             );
             if (picked != null) setState(() => _dob = picked);
           },
           child: InputDecorator(
             decoration: InputDecoration(errorText: under ? l.under18 : null, suffixIcon: const Icon(Icons.calendar_today_outlined, size: 20)),
             child: Text(
-              _dob == null ? '—' : MaterialLocalizations.of(context).formatMediumDate(_dob!),
-              style: context.type.bodyLarge,
+              _dob == null ? l.selectDate : MaterialLocalizations.of(context).formatMediumDate(_dob!),
+              style: context.type.bodyLarge.copyWith(color: _dob == null ? OlfaColors.textDisabled : null),
             ),
           ),
         ),

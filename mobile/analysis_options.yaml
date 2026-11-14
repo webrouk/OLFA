@@ -8,8 +8,8 @@ analyzer:
 
 linter:
   rules:
-    prefer_const_constructors: true
-    prefer_const_literals_to_create_immutables: true
     prefer_single_quotes: true
     avoid_print: true
-    require_trailing_commas: true
+    # Readability over micro-optimisation; keep the analyzer output signal-rich.
+    prefer_const_constructors: false
+    prefer_const_literals_to_create_immutables: false

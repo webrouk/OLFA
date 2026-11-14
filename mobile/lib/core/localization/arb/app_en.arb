@@ -7,7 +7,21 @@
   "getStarted": "Get started",
   "continueLabel": "Continue",
   "save": "Save",
+  "saved": "Saved",
   "cancel": "Cancel",
+  "retry": "Try again",
+  "reset": "Reset",
+  "select": "Select",
+  "add": "Add",
+  "all": "All",
+  "any": "Any",
+  "to": "to",
+  "optional": "Optional",
+  "send": "Send",
+  "message": "Message",
+  "category": "Category",
+  "today": "Today",
+  "earlier": "Earlier",
   "onboarding1Title": "Serious, with marriage in mind",
   "onboarding1Body": "A community of people looking for a life partner — not a fling.",
   "onboarding2Title": "Truly mutual compatibility",
@@ -19,20 +33,45 @@
   "phoneTitle": "What's your phone number?",
   "phoneBody": "We'll text you a code to confirm it's yours.",
   "phoneLabel": "Phone number",
+  "chooseCountry": "Choose country",
   "agreeTerms": "I agree to the Terms of Use and Privacy Policy",
+  "phonePrivacyNote": "Your number is never shown on your profile.",
   "sendCode": "Send code",
+  "errorPhone": "Enter a valid phone number.",
   "otpTitle": "Enter verification code",
   "otpBody": "We sent a 6-digit code to {phone}",
-  "@otpBody": { "placeholders": { "phone": { "type": "String" } } },
+  "@otpBody": {
+    "placeholders": {
+      "phone": {
+        "type": "String"
+      }
+    }
+  },
   "otpError": "Incorrect code. {left} attempts left.",
-  "@otpError": { "placeholders": { "left": { "type": "int" } } },
+  "@otpError": {
+    "placeholders": {
+      "left": {
+        "type": "int"
+      }
+    }
+  },
+  "otpLocked": "Too many attempts. Request a new code.",
+  "otpDemoHint": "Demo: any 6 digits work. 000000 shows the error state.",
   "verify": "Verify",
   "changeNumber": "Change number",
+  "resend": "Resend code",
   "resendIn": "Resend in {time}",
-  "@resendIn": { "placeholders": { "time": { "type": "String" } } },
+  "@resendIn": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
   "ageTitle": "Confirm your age",
   "ageBody": "OLFA is for adults seeking marriage. You must be 18 or older.",
   "dateOfBirth": "Date of birth",
+  "selectDate": "Select date",
   "ageConfirm": "I confirm I am 18 years or older",
   "ageSerious": "I confirm I am using OLFA to find a spouse",
   "under18": "Accounts are not available to anyone under 18.",
@@ -41,39 +80,394 @@
   "man": "Man",
   "woman": "Woman",
   "genderNote": "Gender can only be changed through Support once your profile is approved.",
+  "infoTitle": "Tell us about yourself",
+  "displayName": "Display name",
+  "displayNameHint": "e.g. Ahmed",
+  "country": "Country",
+  "city": "City",
+  "allCities": "All cities",
+  "maritalStatus": "Marital status",
+  "education": "Education",
+  "occupation": "Occupation",
+  "occupationHint": "e.g. Engineer",
+  "marriageTimeline": "When do you plan to marry?",
+  "bio": "About you",
+  "bioHint": "Briefly describe your personality and what you look for in a spouse.",
+  "interests": "Interests",
+  "interestsCount": "{count}/{max}",
+  "@interestsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "maritalNever": "Never married",
+  "maritalDivorced": "Divorced",
+  "maritalWidowed": "Widowed",
+  "eduHighSchool": "High school",
+  "eduDiploma": "Diploma",
+  "eduBachelor": "Bachelor's",
+  "eduMaster": "Master's",
+  "eduDoctorate": "Doctorate",
+  "timeline6m": "Within 6 months",
+  "timeline1y": "Within a year",
+  "timeline2y": "Within 2 years",
+  "timelineNotSure": "Not sure yet",
+  "errorRequired": "This field is required.",
+  "errorNameLength": "Name must be 2–40 characters.",
+  "errorNameChars": "Use letters only.",
+  "errorBioShort": "Write at least 20 characters.",
+  "errorBioLong": "Keep it under 500 characters.",
+  "errorBioContact": "Contact details are not allowed in your bio.",
+  "errorMinPhotos": "Add at least 2 photos.",
+  "errorMessageShort": "Please describe the issue (10+ characters).",
+  "prefsTitle": "Who are you looking for?",
+  "prefsTitleShort": "Partner preferences",
+  "prefsBody": "These preferences are used for mutual matching.",
+  "ageRange": "Age range",
+  "ageMin": "Minimum age",
+  "ageMax": "Maximum age",
+  "sameCountry": "My country only",
+  "anyCountry": "Any country",
+  "acceptedMarital": "Accepted marital status",
+  "children": "Children",
+  "wantsChildren": "Wants children",
+  "noPreference": "Doesn't matter",
+  "mutualNote": "You'll only be shown to people whose preferences you fit, and only see people who fit yours.",
+  "photosTitle": "Add your photos",
+  "photosBody": "Add at least 2 photos. The first one is your main photo.",
+  "mainPhoto": "Main",
+  "addPhoto": "Add photo",
+  "removePhoto": "Remove photo",
+  "photoTip1": "Clear, recent face photo",
+  "photoTip2": "No group photos or filters",
+  "photoTip3": "Modest, appropriate clothing",
+  "selfieTitle": "Selfie verification",
+  "selfieBody": "Adds a \"Real person\" badge.",
+  "selfieLater": "Selfie verification opens with the camera integration in Phase 3.",
+  "photoRights": "I confirm these are my own photos and I have the right to use them",
+  "photoPolicy": "I agree to the photo & content policy",
+  "submitForReview": "Submit for review",
+  "previewStates": "Preview states (demo)",
+  "statusPending": "Pending",
+  "statusRejected": "Rejected",
+  "statusApproved": "Approved",
+  "verifPendingTitle": "Your profile is under review",
+  "verifPendingBody": "We review every profile by hand before it goes live. Usually within 24 hours.",
+  "verifRejectedTitle": "A few changes needed",
+  "verifRejectedBody": "We couldn't approve your profile yet. Fix the items below and resubmit.",
+  "verifApprovedTitle": "Your profile is approved",
+  "verifApprovedBody": "Your profile is now visible to compatible members.",
+  "rejectReason": "Reason",
+  "howToFix": "How to fix it",
+  "stepSubmitted": "Submitted",
+  "stepAutoCheck": "Automated check",
+  "stepHumanReview": "Human review",
+  "stepLive": "Profile live",
+  "notIdentityNote": "this badge means photos were reviewed, not identity verification.",
+  "startDiscovering": "Start discovering",
+  "fixAndResubmit": "Edit & resubmit",
   "navDiscover": "Discover",
   "navLikes": "Likes",
   "navMatches": "Matches",
   "navMessages": "Messages",
   "navProfile": "Profile",
   "likesLeftToday": "{count} likes left today",
-  "@likesLeftToday": { "placeholders": { "count": { "type": "int" } } },
+  "@likesLeftToday": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "like": "LIKE",
   "pass": "PASS",
+  "undo": "Undo",
+  "viewProfile": "View profile",
   "compatibility": "{percent}% match",
-  "@compatibility": { "placeholders": { "percent": { "type": "int" } } },
+  "@compatibility": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "profileCompleteShort": "{percent}% complete",
+  "@profileCompleteShort": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
   "noMoreTitle": "You're all caught up for today",
   "noMoreBody": "Come back tomorrow for new suggestions, or broaden your preferences.",
   "adjustFilters": "Adjust filters",
   "photosReviewed": "Photos reviewed",
-  "screenProfileInfo": "Profile information",
-  "screenPreferences": "Partner preferences",
-  "screenPhotos": "Photo upload",
-  "screenVerification": "Verification status",
-  "screenProfileDetails": "Profile details",
+  "matchTitle": "It's a match!",
+  "matchBody": "You and {name} liked each other.",
+  "@matchBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "startConversation": "Start conversation",
+  "keepDiscovering": "Keep discovering",
+  "startConversationTitle": "Start a conversation with {name}?",
+  "@startConversationTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "startConversationBody": "This uses 1 of your daily conversation starters ({left} left).",
+  "@startConversationBody": {
+    "placeholders": {
+      "left": {
+        "type": "int"
+      }
+    }
+  },
+  "about": "About",
+  "basics": "Basics",
+  "verification": "Verification",
+  "realPerson": "Real person (selfie)",
+  "identityVerified": "Identity verified",
+  "identityNotVerified": "Identity not verified",
+  "reportOrBlock": "Report or block",
+  "reportTitle": "Report {name}",
+  "@reportTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reasonFake": "Fake profile",
+  "reasonPhotos": "Inappropriate photos",
+  "reasonHarassment": "Harassment",
+  "reasonScam": "Scam or asking for money",
+  "reasonUnderage": "Appears under 18",
+  "reasonNotSerious": "Not serious",
+  "alsoBlock": "Also block this person",
+  "submitReport": "Submit report",
+  "reportedToast": "Report received — our team will review it.",
+  "blockedToast": "Blocked. You won't see each other again.",
+  "basicFilters": "Basic filters",
+  "advancedFilters": "Advanced filters",
+  "showResults": "Show results",
+  "multiInterests": "Choose several",
+  "oneBasicInterest": "Free plan: one basic interest",
+  "minCompatibility": "Minimum compatibility",
+  "paidFiltersNote": "Available on Plus and Premium.",
+  "upgrade": "Upgrade",
+  "likesCount": "{count} people liked your profile",
+  "@likesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "seeWhoLikes": "See who likes you",
+  "seeWhoLikesBody": "Subscribe to Plus to see your likes and respond right away.",
+  "noLikesTitle": "No likes yet",
+  "noLikesBody": "Complete your profile to be seen by more compatible people.",
+  "startersLeft": "Conversation starters left today",
+  "newMatches": "New",
+  "allMatches": "All matches",
+  "openChat": "Open",
+  "startChat": "Start chat",
+  "noMatchesTitle": "No matches yet",
+  "noMatchesBody": "When someone you like likes you back, they appear here.",
+  "profileCompleteness": "Profile completeness",
+  "completenessTip": "Add more photos and interests to improve your matches.",
+  "currentPlan": "Current plan",
+  "manage": "Manage",
+  "editProfile": "Edit profile",
+  "searchConversations": "Search conversations",
+  "saySalam": "You matched — say hello",
+  "noChatsTitle": "No conversations yet",
+  "noChatsBody": "Start a conversation from your matches.",
+  "offlineBanner": "You're offline. Showing saved conversations.",
+  "offlineChat": "You're offline. Messages will fail until you reconnect.",
+  "typing": "typing…",
+  "onlineNow": "Online now",
+  "matchedRecently": "Matched recently",
+  "matchedSayHello": "You matched — say hello",
+  "messageHint": "Write a message…",
+  "notSentRetry": "Not sent — tap to retry",
+  "jumpToLatest": "Jump to latest",
+  "markAllRead": "Mark all as read",
+  "noNotificationsTitle": "No notifications",
+  "noNotificationsBody": "Likes, matches and messages will appear here.",
+  "reReviewNote": "Changing your name or photos sends your profile back to review.",
+  "reReviewTitle": "Send for review?",
+  "reReviewBody": "Your profile stays visible with the previous version until the changes are approved.",
+  "plansBody": "Choose the plan that fits your journey.",
+  "planFree": "Free",
+  "mostPopular": "Most popular",
+  "priceFromStore": "Price shown by your app store",
+  "planLikesPerDay": "{count} likes per day",
+  "@planLikesPerDay": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "planStartersPerDay": "{count} conversation starters per day",
+  "@planStartersPerDay": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "planBasicFilters": "Basic filters",
+  "planExtraFilters": "Extra filters",
+  "planAllFilters": "All advanced filters",
+  "planSeeLikes": "See who liked you",
+  "planUndos": "{count} undos per day",
+  "@planUndos": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "planPriority": "Priority visibility",
+  "autoRenewNote": "Subscriptions renew automatically unless cancelled at least 24 hours before the period ends. Manage them in your store settings.",
+  "restorePurchases": "Restore purchases",
+  "restoredToast": "Purchases restored",
+  "terms": "Terms of Use",
+  "privacyPolicy": "Privacy Policy",
+  "legalLinkNote": "Opens the published page once the legal URLs are configured.",
+  "subscribe": "Subscribe",
+  "subscribeTo": "Subscribe to {plan}",
+  "@subscribeTo": {
+    "placeholders": {
+      "plan": {
+        "type": "String"
+      }
+    }
+  },
+  "confirmPurchaseTitle": "Subscribe to {plan}?",
+  "@confirmPurchaseTitle": {
+    "placeholders": {
+      "plan": {
+        "type": "String"
+      }
+    }
+  },
+  "confirmPurchaseBody": "Demo: activates the plan without payment. In production this opens App Store / Google Play.",
+  "subscribedToast": "{plan} is now active",
+  "@subscribedToast": {
+    "placeholders": {
+      "plan": {
+        "type": "String"
+      }
+    }
+  },
+  "manageInStore": "Manage in store",
+  "downgradeNote": "To switch to Free, cancel auto-renewal from your store.",
+  "storeManageNote": "Opens the App Store / Google Play subscriptions page on a device.",
+  "noPaymentsTitle": "No payments yet",
+  "noPaymentsBody": "Purchases and renewals will appear here.",
+  "monthly": "Monthly",
+  "paid": "Paid",
+  "refunded": "Refunded",
+  "failed": "Failed",
+  "visibility": "Visibility",
+  "showCity": "Show my city on my profile",
+  "blurPhotos": "Hide my photos until we match",
+  "blurPhotosSub": "Others see a blurred photo until a mutual like.",
+  "showOnline": "Show online status",
+  "readReceipts": "Read receipts",
+  "incognito": "Incognito browsing",
+  "incognitoSub": "Only people you like can see you.",
+  "security": "Security",
+  "blockedUsers": "Blocked users",
+  "blockedCount": "{count} blocked",
+  "@blockedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "blockedManageNote": "Unblocking is available in Phase 3.",
+  "signedInDevices": "Signed-in devices",
+  "thisDevice": "This device",
+  "sessionsNote": "Session management connects to the API in Phase 3.",
+  "downloadMyData": "Download my data",
+  "downloadMyDataSub": "A copy is emailed within 48 hours.",
+  "dataExportRequested": "Export requested",
+  "developerPreview": "Preview tools (demo only)",
+  "simulateOffline": "Simulate offline",
+  "searchHelp": "Search for a question",
+  "noResults": "No results",
+  "catAccount": "Account",
+  "catVerification": "Verification",
+  "catPayment": "Payment",
+  "catTechnical": "Technical",
+  "contactSupport": "Contact support",
+  "contactSupportBody": "We usually reply within one business day.",
+  "ticketCreated": "Ticket {number} created. We'll get back to you soon.",
+  "@ticketCreated": {
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "general": "General",
+  "language": "Language",
+  "pushNotifications": "Push notifications",
+  "notifMatchesMessages": "Matches & messages",
+  "notifLikes": "New likes",
+  "version": "Version",
+  "signOut": "Sign out",
+  "signOutConfirm": "Sign out?",
+  "signOutBody": "You can sign back in with your phone number.",
+  "deleteAccount": "Delete account",
+  "deleteBody": "Your account is hidden immediately; data and photos are permanently deleted after 30 days. Cancel subscriptions in your store.",
+  "leaveReason": "Why are you leaving? (optional)",
+  "leaveFound": "I found my spouse",
+  "leaveNoFit": "I didn't find a good fit",
+  "leaveBreak": "Taking a break",
+  "leaveOther": "Other",
+  "deleteUnderstand": "I understand this cannot be undone after 30 days",
+  "deletePermanently": "Delete my account",
+  "deletionScheduled": "Account deletion scheduled. Sign in within 30 days to undo.",
   "screenSearch": "Search & filters",
   "screenLikes": "Liked you",
   "screenMatches": "Matches",
   "screenMyProfile": "My profile",
   "screenConversations": "Messages",
-  "screenChat": "Chat",
   "screenNotifications": "Notifications",
-  "screenEditProfile": "Edit profile",
   "screenPlans": "Subscription plans",
   "screenPayments": "Payment history",
   "screenPrivacy": "Privacy & security",
-  "screenHelp": "Help",
+  "screenHelp": "FAQ & help",
   "screenSettings": "Settings",
-  "inProgressTitle": "Being built in Phase 2",
-  "inProgressBody": "The approved design for this screen is in the live preview (preview/index.html)."
+  "errorTitle": "Something went wrong",
+  "errorGeneric": "Please try again in a moment.",
+  "offlineTitle": "You're offline",
+  "errorNetwork": "Check your connection and try again.",
+  "errorRateLimited": "Too many requests. Please wait a moment.",
+  "quotaLikes": "You've used today's likes. They reset tomorrow — or upgrade for more.",
+  "quotaMessages": "You've used today's conversation starters.",
+  "quotaUndos": "Undo is available on Plus and Premium.",
+  "errorEntitlement": "This feature needs a higher plan.",
+  "errorDuplicate": "Already done.",
+  "errorValidation": "Please check the highlighted fields.",
+  "errorUnauthorized": "Please sign in again."
 }
