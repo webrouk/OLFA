@@ -18,7 +18,7 @@
     "db:seed": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f prisma/seed.sql",
     "test": "jest --config jest.config.js",
     "test:unit": "tsc -p tsconfig.unit.json && node --test dist-unit/test/unit/*.test.js",
-    "test:db": "bash test/db/run_db_tests.sh && bash test/db/discovery_query_test.sh && bash test/db/consultations_test.sh && python3 test/db/check_prisma_vs_db.py \"$PGDATABASE\"",
+    "test:db": "bash test/db/run_db_tests.sh && bash test/db/discovery_query_test.sh && bash test/db/consultations_test.sh && bash test/db/conversations_test.sh && python3 test/db/check_prisma_vs_db.py \"$PGDATABASE\"",
     "test:e2e": "jest --config jest.e2e.config.js --runInBand"
   },
   "dependencies": {

@@ -176,6 +176,9 @@ enum NotificationType {
   CONSULTATION_COMPLETED
   COUNSELOR_APPROVED
   COUNSELOR_REJECTED
+  CONVERSATION_EXPIRING
+  REMATCH_REQUEST
+  REMATCH_ACCEPTED
 
   @@map("notification_type")
 }
@@ -309,6 +312,7 @@ model User {
   counselorProfile     CounselorProfile?
   consultationsBooked  Consultation[]       @relation("ConsultationClient")
   reviewsWritten       ConsultationReview[]
+  rematchRequests      RematchRequest[]
 
   @@map("users")
 }
@@ -532,6 +536,7 @@ model Conversation {
   starter       User                 @relation(fields: [startedBy], references: [id])
   members       ConversationMember[]
   messages      Message[]
+  rematch       RematchRequest?
 
   @@index([lastMessageAt(sort: Desc)], map: "conversations_last_idx")
   @@map("conversations")
@@ -543,6 +548,10 @@ model ConversationMember {
   joinedAt       DateTime     @default(now()) @map("joined_at") @db.Timestamptz
   lastReadAt     DateTime?    @map("last_read_at") @db.Timestamptz
   muted          Boolean      @default(false)
+  folder            ConversationFolder @default(INBOX)
+  archivedAt        DateTime?    @map("archived_at") @db.Timestamptz
+  retentionAnchorAt DateTime     @default(now()) @map("retention_anchor_at") @db.Timestamptz
+  expiryWarnedAt    DateTime?    @map("expiry_warned_at") @db.Timestamptz
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1107,4 +1116,34 @@ model ConsultationReview {
 
   @@index([counselorId, createdAt(sort: Desc)], map: "consultation_reviews_counselor_idx")
   @@map("consultation_reviews")
+}
+
+// ───────────── Conversation lifecycle (migration 20261114150000) ─────────────
+
+enum ConversationFolder {
+  INBOX
+  ARCHIVE
+
+  @@map("conversation_folder")
+}
+
+enum RematchStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+
+  @@map("rematch_status")
+}
+
+/// One re-match request per conversation, ever (primary key).
+model RematchRequest {
+  conversationId String        @id @map("conversation_id") @db.Uuid
+  requestedBy    String        @map("requested_by") @db.Uuid
+  status         RematchStatus @default(PENDING)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  respondedAt    DateTime?     @map("responded_at") @db.Timestamptz
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  requester      User          @relation(fields: [requestedBy], references: [id], onDelete: Cascade)
+
+  @@map("rematch_requests")
 }
