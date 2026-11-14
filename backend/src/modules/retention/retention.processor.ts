@@ -39,9 +39,11 @@ export class RetentionProcessor extends WorkerHost implements OnApplicationBoots
         await this.notifications.push(r.user_id, 'push.conversation_expiring', { conversationId: r.conversation_id }).catch((e: unknown) => this.log.warn(`push failed: ${String(e)}`));
       }
     }
+    // Incognito switches off when the plan no longer includes it.
+    const [{ reset }] = await this.prisma.$queryRaw<{ reset: number }[]>`SELECT olfa_reset_lapsed_privacy() AS reset`;
     const expired = await this.prisma.consultation.updateMany({ where: { status: 'AWAITING_PAYMENT', expiresAt: { lt: new Date() } }, data: { status: 'EXPIRED' } });
     const counts = rows.reduce<Record<string, number>>((a, r) => ((a[r.action] = (a[r.action] ?? 0) + 1), a), {});
-    this.log.log(`sweep: ${JSON.stringify(counts)} bookingsExpired=${expired.count}`);
-    return { ...counts, bookingsExpired: expired.count };
+    this.log.log(`sweep: ${JSON.stringify(counts)} bookingsExpired=${expired.count} incognitoReset=${reset}`);
+    return { ...counts, bookingsExpired: expired.count, incognitoReset: reset };
   }
 }

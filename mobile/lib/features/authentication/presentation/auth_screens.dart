@@ -65,6 +65,11 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
         ),
         const SizedBox(height: 22),
         OlfaCheck(value: _terms, onChanged: (v) => setState(() => _terms = v), label: l.agreeTerms),
+        // Apple 1.2 / Play: the terms and privacy policy are readable before accepting.
+        Wrap(spacing: 4, children: [
+          TextButton(onPressed: () => context.push(Routes.terms), child: Text(l.terms)),
+          TextButton(onPressed: () => context.push(Routes.privacyPolicy), child: Text(l.privacyPolicy)),
+        ]),
         const SizedBox(height: 8),
         Text(l.phonePrivacyNote, style: context.type.caption),
       ],

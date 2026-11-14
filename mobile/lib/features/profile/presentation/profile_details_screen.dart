@@ -14,6 +14,7 @@ import '../../discovery/application/discover_controller.dart';
 import '../../discovery/domain/swipe_use_cases.dart';
 import '../application/profile_controllers.dart';
 import '../../../shared/components/reference_pickers.dart';
+import '../../../shared/components/verification_ticks.dart';
 
 /// 13 — Profile details with a paginated, lazily loaded photo gallery.
 class ProfileDetailsScreen extends ConsumerWidget {
@@ -126,7 +127,7 @@ class _DetailsState extends ConsumerState<_Details> {
                     Row(
                       children: [
                         Flexible(child: Text('${p.name}, ${p.age}', style: t.h1)),
-                        if (p.photosReviewed) ...[const SizedBox(width: 8), VerifiedBadge(size: 24, semanticLabel: l.photosReviewed)],
+                        ...[const SizedBox(width: 8), VerificationTicks(profile: p, size: 22)],
                       ],
                     ),
                     if (p.showLocation) ...[

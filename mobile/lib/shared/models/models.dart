@@ -90,7 +90,15 @@ class UserProfile {
     this.online = false,
     this.nationality,
     this.distanceKm,
+    this.photosBlurred = false,
+    this.underReview = false,
   });
+
+  /// New account awaiting moderation: shown with basics only.
+  final bool underReview;
+
+  /// The owner shows photos only after a match (server sends blurred copies).
+  final bool photosBlurred;
 
   /// ISO code of the nationality (independent of the residence country).
   final String? nationality;
@@ -163,7 +171,20 @@ class Entitlements {
     this.resetsAt,
     this.searchOutsideCountry = false,
     this.visibleConversations = 5,
+    this.monthlyCompliments = 0,
+    this.complimentsUsed = 0,
+    this.complimentsResetAt,
+    this.accountActive = true,
   });
+
+  /// Compliments (a message sent with a like) per calendar month: Free 3, Plus 10, Premium 20.
+  final int monthlyCompliments;
+  final int complimentsUsed;
+  final DateTime? complimentsResetAt;
+  int get complimentsLeft => (monthlyCompliments - complimentsUsed).clamp(0, monthlyCompliments);
+
+  /// False while the profile awaits review: discovery is read-only.
+  final bool accountActive;
 
   /// Discovery beyond the user's current country (Plus / Premium).
   final bool searchOutsideCountry;
@@ -188,7 +209,7 @@ class Entitlements {
   int get messagesLeft => (dailyMessages - messagesUsed).clamp(0, dailyMessages);
   int get undosLeft => (dailyUndos - undosUsed).clamp(0, dailyUndos);
 
-  Entitlements copyWith({int? likesUsed, int? messagesUsed, int? undosUsed}) => Entitlements(
+  Entitlements copyWith({int? likesUsed, int? messagesUsed, int? undosUsed, int? complimentsUsed}) => Entitlements(
         plan: plan,
         dailyLikes: dailyLikes,
         likesUsed: likesUsed ?? this.likesUsed,
@@ -200,6 +221,12 @@ class Entitlements {
         seeWhoLikedYou: seeWhoLikedYou,
         incognito: incognito,
         resetsAt: resetsAt,
+        searchOutsideCountry: searchOutsideCountry,
+        visibleConversations: visibleConversations,
+        monthlyCompliments: monthlyCompliments,
+        complimentsUsed: complimentsUsed ?? this.complimentsUsed,
+        complimentsResetAt: complimentsResetAt,
+        accountActive: accountActive,
       );
 }
 
@@ -306,8 +333,32 @@ class DiscoverFilters {
       };
 }
 
+/// One like received; compliments carry their message and arrive first.
+class ReceivedLike {
+  const ReceivedLike({required this.profile, required this.at, this.compliment});
+  final UserProfile profile;
+  final DateTime at;
+  final String? compliment;
+}
+
+class LikesInbox {
+  const LikesInbox({required this.count, required this.compliments, required this.items, required this.locked, this.nextCursor});
+  final int count;
+
+  /// Always visible with the sender, whatever the plan.
+  final List<ReceivedLike> compliments;
+
+  /// Empty when [locked] (Free: count only).
+  final List<ReceivedLike> items;
+  final bool locked;
+  final String? nextCursor;
+}
+
 class MatchItem {
-  const MatchItem({required this.id, required this.peer, required this.createdAt, this.conversationId, this.isNew = false});
+  const MatchItem({required this.id, required this.peer, required this.createdAt, this.conversationId, this.isNew = false, this.paused = false});
+
+  /// The other person froze their account (taking a break).
+  final bool paused;
   final String id;
   final UserProfile peer;
   final DateTime createdAt;
@@ -592,28 +643,85 @@ class VerificationInfo {
   final List<String> fixSteps;
 }
 
+/// Privacy choices — stored and enforced by the server (GET/PUT /me/privacy).
 class PrivacySettings {
   const PrivacySettings({
+    this.discoverable = true,
     this.showCity = true,
     this.blurPhotosUntilMatch = false,
     this.showOnline = true,
     this.readReceipts = true,
     this.incognito = false,
   });
+
+  /// Off: hidden from discovery; existing matches and chats continue.
+  final bool discoverable;
   final bool showCity;
   final bool blurPhotosUntilMatch;
+
+  /// Reciprocal: hiding yours also hides other people's from you.
   final bool showOnline;
+
+  /// Reciprocal, like [showOnline].
   final bool readReceipts;
+
+  /// Premium: only people you liked can see you.
   final bool incognito;
 
-  PrivacySettings copyWith({bool? showCity, bool? blurPhotosUntilMatch, bool? showOnline, bool? readReceipts, bool? incognito}) =>
+  PrivacySettings copyWith({bool? discoverable, bool? showCity, bool? blurPhotosUntilMatch, bool? showOnline, bool? readReceipts, bool? incognito}) =>
       PrivacySettings(
+        discoverable: discoverable ?? this.discoverable,
         showCity: showCity ?? this.showCity,
         blurPhotosUntilMatch: blurPhotosUntilMatch ?? this.blurPhotosUntilMatch,
         showOnline: showOnline ?? this.showOnline,
         readReceipts: readReceipts ?? this.readReceipts,
         incognito: incognito ?? this.incognito,
       );
+
+  factory PrivacySettings.fromJson(Map<String, dynamic> j) => PrivacySettings(
+        discoverable: j['discoverable'] as bool? ?? true,
+        showCity: j['showCity'] as bool? ?? true,
+        blurPhotosUntilMatch: j['blurPhotos'] as bool? ?? false,
+        showOnline: j['showOnline'] as bool? ?? true,
+        readReceipts: j['readReceipts'] as bool? ?? true,
+        incognito: j['incognito'] as bool? ?? false,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'discoverable': discoverable,
+        'showCity': showCity,
+        'blurPhotos': blurPhotosUntilMatch,
+        'showOnline': showOnline,
+        'readReceipts': readReceipts,
+        'incognito': incognito,
+      };
+
+  /// How others currently find you (shown on My profile).
+  ProfileVisibility get visibility => !discoverable
+      ? ProfileVisibility.hidden
+      : incognito
+          ? ProfileVisibility.incognito
+          : ProfileVisibility.visible;
+}
+
+enum ProfileVisibility { visible, incognito, hidden }
+
+/// A signed-in device (one session per device; GET /auth/sessions).
+class DeviceSession {
+  const DeviceSession({required this.id, required this.platform, required this.lastUsedAt, required this.createdAt, this.appVersion, this.current = false});
+  final String id;
+  final String platform; // ios | android
+  final String? appVersion;
+  final DateTime createdAt;
+  final DateTime lastUsedAt;
+  final bool current;
+}
+
+class BlockedUser {
+  const BlockedUser({required this.userId, required this.name, required this.blockedAt});
+  final String userId;
+  final String name;
+  final DateTime blockedAt;
 }
 
 /// Realtime chat event (WebSocket in production).

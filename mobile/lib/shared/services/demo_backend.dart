@@ -101,6 +101,9 @@ class DemoBackend {
       seeWhoLikedYou: p.seeWhoLikedYou,
       incognito: plan == PlanCode.premium,
       searchOutsideCountry: plan != PlanCode.free,
+      monthlyCompliments: monthlyCompliments,
+      complimentsUsed: complimentsUsed,
+      complimentsResetAt: DateTime(DateTime.now().year, DateTime.now().month + 1),
       visibleConversations: visibleLimit,
       resetsAt: DateTime.now().toUtc().add(const Duration(days: 1)).copyWith(hour: 0, minute: 0, second: 0, millisecond: 0, microsecond: 0).toLocal(),
     );
@@ -153,9 +156,16 @@ class DemoBackend {
       });
 
   /// Returns the created match, or null when the like is not mutual.
-  Future<MatchItem?> like(String id) => _call(() {
+  int complimentsUsed = 0;
+  int get monthlyCompliments => switch (plan) { PlanCode.free => 3, PlanCode.plus => 10, PlanCode.premium => 20 };
+
+  Future<MatchItem?> like(String id, {String? compliment}) => _call(() {
         if (_liked.contains(id)) throw const AlreadyActedFailure();
         if (likesUsed >= plans[plan]!.dailyLikes) throw const QuotaExceededFailure('likes');
+        if (compliment != null) {
+          if (complimentsUsed >= monthlyCompliments) throw const QuotaExceededFailure('compliments');
+          complimentsUsed++;
+        }
         _liked.add(id);
         likesUsed++;
         if (_likesMe.contains(id)) {
@@ -180,9 +190,18 @@ class DemoBackend {
       }, ms: 250);
 
   /// Free users get the count only — identities are never sent to them.
-  Future<({int count, List<UserProfile> profiles})> likesReceived() => _call(() {
-        final ps = _all().where((p) => _likesMe.contains(p.id) && !_blocked.contains(p.id) && p.gender != myGender).toList();
-        return (count: ps.length + 8, profiles: plans[plan]!.seeWhoLikedYou ? ps : <UserProfile>[]);
+  Future<LikesInbox> likesReceived() => _call(() {
+        final ps = _all().where((p) => _likesMe.contains(p.id) && !_blocked.contains(p.id) && !_liked.contains(p.id) && p.gender != myGender).toList();
+        final now = DateTime.now();
+        // Demo: the first one arrived with a compliment (always shown with the sender).
+        final compliments = ps.take(1).map((p) => ReceivedLike(profile: p, at: now.subtract(const Duration(hours: 2)), compliment: lang == 'ar' ? 'أعجبتني نبذتك عن العائلة والطموح، تبدو صادقًا وواضحًا.' : 'I loved what you wrote about family and ambition — you seem genuine.')).toList();
+        final rest = ps.skip(1).toList();
+        return LikesInbox(
+          count: ps.length + 8,
+          compliments: compliments,
+          items: plans[plan]!.seeWhoLikedYou ? [for (var i = 0; i < rest.length; i++) ReceivedLike(profile: rest[i], at: now.subtract(Duration(hours: 5 + i * 9)))] : const [],
+          locked: !plans[plan]!.seeWhoLikedYou,
+        );
       });
 
   // ───────────── matches & chat ─────────────
@@ -364,7 +383,7 @@ class DemoBackend {
 
   void _scheduleReply(String convId, ChatMessage mine) {
     Timer(const Duration(milliseconds: 700), () {
-      _events.add(ChatEvent.readReceipt(convId, mine.clientId));
+      if (privacy.readReceipts) _events.add(ChatEvent.readReceipt(convId, mine.clientId)); // reciprocal
       _events.add(ChatEvent.typingChanged(convId, true));
     });
     Timer(const Duration(milliseconds: 2200), () {
@@ -629,6 +648,27 @@ class DemoBackend {
 
   Future<void> block(String userId) => _call(() => _blocked.add(userId));
   Future<int> blockedCount() => _call(() => _blocked.length);
+  Future<List<BlockedUser>> blockedUsers() => _call(() {
+        final all = _all();
+        return [
+          for (final id in _blocked)
+            BlockedUser(userId: id, name: all.where((p) => p.id == id).firstOrNull?.name ?? id, blockedAt: DateTime.now().subtract(const Duration(days: 2))),
+        ];
+      });
+  Future<void> unblock(String userId) => _call(() => _blocked.remove(userId));
+
+  // ───────────── devices (demo: this phone + one tablet) ─────────────
+  final _devices = <DeviceSession>[
+    DeviceSession(id: 's-this', platform: 'ios', appVersion: '0.3.0', createdAt: DateTime.now().subtract(const Duration(days: 20)), lastUsedAt: DateTime.now(), current: true),
+    DeviceSession(id: 's-tab', platform: 'android', appVersion: '0.3.0', createdAt: DateTime.now().subtract(const Duration(days: 40)), lastUsedAt: DateTime.now().subtract(const Duration(days: 3))),
+  ];
+  Future<List<DeviceSession>> devices() => _call(() => List.unmodifiable(_devices));
+  Future<void> signOutDevice(String id) => _call(() => _devices.removeWhere((d) => d.id == id && !d.current));
+
+  // ───────────── freeze ─────────────
+  bool frozen = false;
+  Future<void> freeze() => _call(() => frozen = true, ms: 600);
+  Future<void> unfreeze() => _call(() => frozen = false, ms: 600);
 
   // ───────────── notifications ─────────────
   Future<List<AppNotification>> notifications() => _call(() {
@@ -647,9 +687,9 @@ class DemoBackend {
 
   // ───────────── settings & support ─────────────
   Future<PrivacySettings> getPrivacy() => _call(() => privacy, ms: 200);
-  Future<void> setPrivacy(PrivacySettings s) => _call(() {
+  Future<PrivacySettings> setPrivacy(PrivacySettings s) => _call(() {
         if (s.incognito && plan != PlanCode.premium) throw const EntitlementRequiredFailure('incognito');
-        privacy = s;
+        return privacy = s;
       }, ms: 200);
 
   Future<void> requestDeletion(String? reason) => _call(() => deletionScheduled = true, ms: 800);
@@ -739,7 +779,8 @@ class DemoBackend {
       livenessVerified: live,
       compatibility: cmp,
       completeness: completeness,
-      online: id == 'd1' || id == 'd5',
+      // reciprocal, like the server: hiding your own status hides everyone's from you
+      online: privacy.showOnline && (id == 'd1' || id == 'd5'),
     );
   }
 }

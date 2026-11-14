@@ -179,6 +179,7 @@ enum NotificationType {
   CONVERSATION_EXPIRING
   REMATCH_REQUEST
   REMATCH_ACCEPTED
+  NEW_COMPLIMENT
 
   @@map("notification_type")
 }
@@ -271,6 +272,9 @@ model User {
   termsAcceptedAt     DateTime?     @map("terms_accepted_at") @db.Timestamptz
   lastActiveAt        DateTime?     @map("last_active_at") @db.Timestamptz
   deletionRequestedAt DateTime?     @map("deletion_requested_at") @db.Timestamptz
+  frozenAt            DateTime?     @map("frozen_at") @db.Timestamptz
+  freezeReason        String?       @map("freeze_reason") @db.VarChar(40)
+  privacy             UserPrivacySettings?
   deletedAt           DateTime?     @map("deleted_at") @db.Timestamptz
   createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt           DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
@@ -454,6 +458,7 @@ model Like {
   fromUserId String   @map("from_user_id") @db.Uuid
   toUserId   String   @map("to_user_id") @db.Uuid
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  compliment String?  @db.VarChar(300) // sent with the like; monthly quota
   from       User     @relation("LikeFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
   to         User     @relation("LikeTo", fields: [toUserId], references: [id], onDelete: Cascade)
 
@@ -1146,4 +1151,18 @@ model RematchRequest {
   requester      User          @relation(fields: [requestedBy], references: [id], onDelete: Cascade)
 
   @@map("rematch_requests")
+}
+
+/// Privacy choices enforced by the server (discovery, presence, receipts, photos).
+model UserPrivacySettings {
+  userId       String   @id @map("user_id") @db.Uuid
+  discoverable Boolean  @default(true)
+  showOnline   Boolean  @default(true) @map("show_online")
+  readReceipts Boolean  @default(true) @map("read_receipts")
+  incognito    Boolean  @default(false)
+  blurPhotos   Boolean  @default(false) @map("blur_photos")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_privacy_settings")
 }

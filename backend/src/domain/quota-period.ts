@@ -60,3 +60,14 @@ export function dayWindow(now: Date, timeZone: string): DayWindow {
   const dayKey = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   return { start: new Date(start), end: new Date(end), dayKey };
 }
+
+/** Calendar-month window in the user's time zone (monthly quotas such as compliments). */
+export function monthWindow(now: Date, timeZone: string): DayWindow {
+  const tz = isValidTimeZone(timeZone) ? timeZone : 'UTC';
+  const { y, m } = localDate(now.getTime(), tz);
+  const start = zonedMidnightUtc(y, m, 1, tz);
+  const ny = m === 12 ? y + 1 : y;
+  const nm = m === 12 ? 1 : m + 1;
+  const end = zonedMidnightUtc(ny, nm, 1, tz);
+  return { start: new Date(start), end: new Date(end), dayKey: `${y}-${String(m).padStart(2, '0')}` };
+}

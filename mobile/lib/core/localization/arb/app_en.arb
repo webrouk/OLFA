@@ -786,5 +786,137 @@
         "type": "int"
       }
     }
-  }
+  },
+  "activity": "Activity",
+  "blockedNote": "Blocked members can't find you, like you or message you. They aren't told that you blocked them.",
+  "blockedOn": "Blocked on {date}",
+  "@blockedOn": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "chatting": "Chatting",
+  "cityHiddenTag": "City hidden",
+  "complimentBody": "A compliment arrives with your like and is shown to them first — with your name, even on a free plan.",
+  "complimentHint": "Say what caught your attention in their profile",
+  "complimentNoContact": "Phone numbers, emails and links can't be sent in a compliment.",
+  "complimentTitle": "A compliment for {name}",
+  "@complimentTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "complimentsCount": "{count, plural, =1{1 compliment} other{{count} compliments}}",
+  "@complimentsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "complimentsLeftMonth": "{left} of {total} compliments left this month",
+  "@complimentsLeftMonth": {
+    "placeholders": {
+      "left": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "complimentsTab": "Compliments",
+  "continueToDelete": "No, delete my account",
+  "dataCopied": "Your data was copied as JSON. Paste it into a note or email to keep it.",
+  "devicesFootnote": "Signing out a device ends its session at once. Someone with your phone number still needs a new SMS code to sign in.",
+  "devicesNote": "These devices are signed in to your account. If you don't recognise one, sign it out.",
+  "freezeAccount": "Freeze account",
+  "freezeAccountSub": "Take a break — keep everything",
+  "freezeConfirm": "Freeze my account",
+  "freezeInsteadTitle": "Freeze instead of deleting?",
+  "freezeIntro": "Instead of deleting permanently, you can freeze your account and come back to it exactly as it is.",
+  "freezePointData": "Your profile, photos, matches and conversations are kept as they are.",
+  "freezePointHidden": "You're hidden from discovery and likes straight away.",
+  "freezePointReturn": "Sign in and tap Reactivate whenever you're ready.",
+  "freezePointSubscription": "Your subscription stays active. To stop renewals, cancel it in App Store or Google Play.",
+  "frozenBody": "You're hidden from everyone. Your data, matches, conversations and subscription are waiting for you.",
+  "frozenDone": "Your account is frozen",
+  "frozenTitle": "Your account is frozen",
+  "kmAway": "{km} km",
+  "@kmAway": {
+    "placeholders": {
+      "km": {
+        "type": "int"
+      }
+    }
+  },
+  "languageNote": "On iPhone you can also choose OLFA's language in Settings › OLFA › Language; on Android 13+ in Settings › Apps › OLFA › Language.",
+  "languageSystem": "Device language",
+  "languageSystemSub": "Follows your phone's language",
+  "lastActive": "Last active {when}",
+  "@lastActive": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "likeBack": "Like back",
+  "likedYou": "Liked you",
+  "matchPaused": "Taking a break",
+  "matchedOn": "Matched {when}",
+  "@matchedOn": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "newUnderReview": "New · under review",
+  "newUnderReviewBody": "Photos appear once our team approves this profile.",
+  "noBlocked": "No blocked members",
+  "noBlockedBody": "People you block appear here. You can unblock them at any time.",
+  "onlineHiddenTag": "Online status hidden",
+  "pendingDiscoverBanner": "Your profile is under review. You can browse now; likes and full profiles open once you're approved.",
+  "pendingReadOnly": "Available once your profile is approved.",
+  "photosBlurredTag": "Photos blurred until match",
+  "quotaCompliments": "You've used this month's compliments. More with Plus or Premium.",
+  "quotaVoiceNotes": "You've reached the voice-note limit for this conversation on your plan.",
+  "reactivate": "Reactivate my account",
+  "readReceiptsSub": "If you turn it off, you won't see others' read receipts either.",
+  "receiptsOffTag": "Read receipts off",
+  "searchMatches": "Search matches",
+  "sendCompliment": "Send a compliment",
+  "sendWithLike": "Send with a like",
+  "showCitySub": "Your city and approximate distance on your profile",
+  "showInDiscovery": "Show me in Discover",
+  "showInDiscoverySub": "Off: new people won't see you; your matches and chats continue",
+  "showOnlineSub": "If you hide yours, you won't see others' either",
+  "signOutDevice": "Sign out",
+  "signOutDeviceBody": "This device will be signed out of OLFA right away.",
+  "signedInDevicesSub": "See and sign out devices",
+  "tickIdentity": "Personal details verified",
+  "tickPhoto": "Photo verified",
+  "unblock": "Unblock",
+  "unblockBody": "They'll be able to find and like you again if your preferences match.",
+  "unblockTitle": "Unblock {name}?",
+  "@unblockTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "upgradeForCompliments": "Get more compliments",
+  "verifiedOnly": "Verified",
+  "visibilityHidden": "Hidden",
+  "visibilityHiddenBody": "new people can't see you in Discover",
+  "visibilityIncognito": "Incognito",
+  "visibilityIncognitoBody": "only people you've liked can see you",
+  "visibilityVisible": "Visible",
+  "visibilityVisibleBody": "compatible members can find you"
 }

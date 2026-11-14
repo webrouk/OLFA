@@ -190,7 +190,7 @@ export class AuthGuard implements CanActivate {
     // Session must still be live (logout / revoke take effect immediately).
     const session = await this.prisma.userSession.findUnique({
       where: { id: payload.sid },
-      select: { revokedAt: true, user: { select: { id: true, status: true, deletedAt: true } } },
+      select: { revokedAt: true, user: { select: { id: true, status: true, deletedAt: true, frozenAt: true, lastActiveAt: true } } },
     });
     if (!session || session.revokedAt || session.user.deletedAt || session.user.id !== payload.sub) {
       throw new AppError(ErrorCode.UNAUTHORIZED);
@@ -198,7 +198,14 @@ export class AuthGuard implements CanActivate {
     const status = session.user.status;
     if (status === 'SUSPENDED' || status === 'DELETED') throw new AppError(ErrorCode.ACCOUNT_NOT_ACTIVE);
     if (!allowPending && status !== 'ACTIVE' && status !== 'RESTRICTED') throw new AppError(ErrorCode.ACCOUNT_NOT_ACTIVE);
+    // A frozen account can only reach account routes (me, reactivate, settings, deletion).
+    if (session.user.frozenAt && !allowPending) throw new AppError(ErrorCode.ACCOUNT_FROZEN);
     req.user = { id: payload.sub, sessionId: payload.sid, status };
+    // Presence: at most one write per user per 2 minutes (cheap at scale).
+    const seen = session.user.lastActiveAt?.getTime() ?? 0;
+    if (!session.user.frozenAt && Date.now() - seen > 120_000) {
+      void this.prisma.user.updateMany({ where: { id: payload.sub }, data: { lastActiveAt: new Date() } }).catch(() => undefined);
+    }
   }
 
   private async authenticateAdmin(req: OlfaRequest, required: string[]) {

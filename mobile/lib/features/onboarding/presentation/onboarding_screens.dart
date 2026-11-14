@@ -9,25 +9,43 @@ import '../../../core/theme/olfa_colors.dart';
 import '../../../core/theme/olfa_spacing.dart';
 import '../../../core/theme/olfa_typography.dart';
 import '../../../core/widgets/olfa_widgets.dart';
+import '../../../core/network/api_client.dart';
+import '../../../core/security/secure_store.dart';
 
 /// 1 — Splash
-class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
-  @override
-  State<SplashScreen> createState() => _SplashScreenState();
+/// Where a returning user lands, from the server's view of the account.
+Future<String> resolveStartRoute(WidgetRef ref) async {
+  if (!useApi) return Routes.onboarding;
+  final token = await ref.read(secureStoreProvider).readAccessToken();
+  if (token == null) return Routes.onboarding;
+  try {
+    final me = (await ref.read(apiClientProvider).dio.get<Map<String, dynamic>>('/me')).data!;
+    // keep server-side push language in sync with the app
+    LocaleController.onChanged = (code) => ref.read(apiClientProvider).dio.put<void>('/me/locale', data: {'locale': code});
+    if (me['frozenAt'] != null) return Routes.frozen;
+    if (me['profile'] == null) return Routes.gender;
+    return Routes.discover; // pending accounts browse discovery read-only until approved
+  } catch (_) {
+    return Routes.onboarding;
+  }
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class SplashScreen extends ConsumerStatefulWidget {
+  const SplashScreen({super.key});
+  @override
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends ConsumerState<SplashScreen> {
   bool _visible = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => setState(() => _visible = true));
-    // Phase 3: restore the session (secure storage + GET /me) and route by
-    // account status instead of the fixed delay.
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      if (mounted) context.go(Routes.onboarding);
+    // Restore the session (secure storage + GET /me) and route by account state.
+    Future.wait([resolveStartRoute(ref), Future<void>.delayed(const Duration(milliseconds: 1200))]).then((r) {
+      if (mounted) context.go(r.first as String);
     });
   }
 

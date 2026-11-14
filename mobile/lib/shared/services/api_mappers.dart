@@ -44,6 +44,9 @@ abstract final class ApiMappers {
         showLocation: j['showLocation'] as bool? ?? true,
         nationality: j['nationality'] as String?,
         distanceKm: (j['distanceKm'] as num?)?.round(),
+        photosBlurred: j['photosBlurred'] == true,
+        underReview: j['underReview'] == true,
+        online: j['online'] == true, // reciprocal; computed by the server
       );
 
   /// GET /me/entitlements
@@ -65,6 +68,10 @@ abstract final class ApiMappers {
       resetsAt: j['resetsAt'] is String ? DateTime.tryParse(j['resetsAt'] as String)?.toLocal() : null,
       searchOutsideCountry: f['searchOutsideCountry'] == true,
       visibleConversations: (f['visibleConversations'] as num?)?.toInt() ?? 5,
+      monthlyCompliments: j['compliments'] is Map ? n(m('compliments'), 'limit') : 0,
+      complimentsUsed: j['compliments'] is Map ? n(m('compliments'), 'used') : 0,
+      complimentsResetAt: j['compliments'] is Map && m('compliments')['resetsAt'] is String ? DateTime.tryParse(m('compliments')['resetsAt'] as String)?.toLocal() : null,
+      accountActive: j['accountStatus'] == null || j['accountStatus'] == 'ACTIVE' || j['accountStatus'] == 'RESTRICTED',
     );
   }
 

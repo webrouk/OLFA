@@ -6,7 +6,8 @@ abstract interface class DiscoveryRepository {
   Future<List<UserProfile>> suggestions(DiscoverFilters filters);
 
   /// Returns a match when the like is mutual.
-  Future<MatchItem?> like(String userId);
+  /// [compliment] travels with the like (monthly quota) and is shown first.
+  Future<MatchItem?> like(String userId, {String? compliment});
   Future<void> pass(String userId);
   Future<void> undo(String userId);
 }

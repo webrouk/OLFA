@@ -7,7 +7,9 @@ import { AllowPending, AuthUser, CurrentUser, Public, RateLimit } from '../../co
 import { AuditService, PrismaService, SettingsService } from '../../common/infra';
 import { ageOn, profileCompleteness } from '../../domain/security';
 import { profileInclude, toOwnProfile, toPublicProfile } from './profile.mapper';
-import { CreateProfileDto, DeleteAccountDto, PreferencesDto, UpdateProfileDto, LocationDto } from './profiles.dto';
+import { CreateProfileDto, DeleteAccountDto, FreezeDto, LocaleDto, PreferencesDto, PrivacyDto, UpdateProfileDto, LocationDto } from './profiles.dto';
+import { privacyOf } from '../../domain/privacy';
+import { EntitlementsService } from '../quotas/quotas.module';
 import { defaultNationality } from '../../domain/reference';
 import { roundCoord } from '../../domain/proximity';
 
@@ -17,6 +19,7 @@ export class ProfilesService {
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
     private readonly audit: AuditService,
+    private readonly entitlements: EntitlementsService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -143,16 +146,84 @@ export class ProfilesService {
     return { locationCountry: dto.countryCode ?? null };
   }
 
+  async privacy(userId: string) {
+    const [row, p] = await Promise.all([
+      this.prisma.userPrivacySettings.findUnique({ where: { userId } }),
+      this.prisma.userProfile.findUnique({ where: { userId }, select: { showLocation: true } }),
+    ]);
+    return { ...privacyOf(row), showCity: p?.showLocation ?? true };
+  }
+
+  /** Applied by every endpoint that shows one member to another (discovery, profiles, chat). */
+  async setPrivacy(userId: string, dto: PrivacyDto) {
+    if (dto.incognito === true) {
+      const ent = await this.entitlements.forUser(userId);
+      if (!ent.incognito) throw new AppError(ErrorCode.ENTITLEMENT_REQUIRED, 'Incognito is a Premium feature', { feature: 'incognito' });
+    }
+    const { showCity, ...rest } = dto;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userPrivacySettings.upsert({ where: { userId }, create: { userId, ...rest }, update: rest });
+      if (showCity !== undefined) await tx.userProfile.updateMany({ where: { userId }, data: { showLocation: showCity } });
+    });
+    await this.audit.record({ actorType: 'USER', actorId: userId, action: 'privacy.update', entityType: 'user', entityId: userId, after: dto as Record<string, unknown> });
+    return this.privacy(userId);
+  }
+
+  /**
+   * Temporary freeze instead of deletion: hidden from discovery, likes and
+   * search; matches, conversations, photos and the subscription stay as they
+   * are. Store subscriptions keep renewing until cancelled in the store.
+   */
+  async freeze(userId: string, reason?: string) {
+    await this.prisma.user.update({ where: { id: userId }, data: { frozenAt: new Date(), freezeReason: reason ?? null } });
+    await this.audit.record({ actorType: 'USER', actorId: userId, action: 'user.freeze', entityType: 'user', entityId: userId, reason });
+    return { frozen: true };
+  }
+
+  /** Push notifications and SMS use the same language as the app. */
+  async setLocale(userId: string, locale: 'ar' | 'en') {
+    await this.prisma.user.update({ where: { id: userId }, data: { locale } });
+    return { locale };
+  }
+
+  /**
+   * Personal data export (JSON): profile, preferences, privacy, photos
+   * metadata, likes sent, matches, own messages and payments.
+   */
+  async exportData(userId: string) {
+    const [me, likes, matches, messages, payments, consultations] = await Promise.all([
+      this.me(userId),
+      this.prisma.like.findMany({ where: { fromUserId: userId }, select: { toUserId: true, createdAt: true, compliment: true } }),
+      this.prisma.match.findMany({ where: { OR: [{ userAId: userId }, { userBId: userId }] }, select: { id: true, status: true, createdAt: true, endedAt: true } }),
+      this.prisma.message.findMany({ where: { senderId: userId, deletedAt: null }, select: { conversationId: true, body: true, createdAt: true }, orderBy: { createdAt: 'asc' } }),
+      this.prisma.payment.findMany({ where: { userId }, select: { provider: true, amountMinor: true, currency: true, status: true, createdAt: true } }),
+      this.prisma.consultation.findMany({ where: { clientId: userId }, select: { id: true, service: true, language: true, durationMinutes: true, status: true, createdAt: true } }),
+    ]);
+    await this.audit.record({ actorType: 'USER', actorId: userId, action: 'user.export', entityType: 'user', entityId: userId });
+    return { exportedAt: new Date(), account: me, likesSent: likes, matches, messagesSent: messages, payments, consultations };
+  }
+
+  async unfreeze(userId: string) {
+    await this.prisma.user.update({ where: { id: userId }, data: { frozenAt: null, freezeReason: null, lastActiveAt: new Date() } });
+    await this.audit.record({ actorType: 'USER', actorId: userId, action: 'user.unfreeze', entityType: 'user', entityId: userId });
+    return this.me(userId);
+  }
+
   async publicProfile(viewerId: string, targetId: string) {
     if (viewerId === targetId) throw new AppError(ErrorCode.NOT_FOUND);
     const blocked = await this.prisma.blockedUser.findFirst({
       where: { OR: [{ blockerId: viewerId, blockedId: targetId }, { blockerId: targetId, blockedId: viewerId }] },
     });
     if (blocked) throw new AppError(ErrorCode.NOT_FOUND);
-    const u = await this.prisma.user.findFirst({ where: { id: targetId, status: 'ACTIVE', deletedAt: null }, include: profileInclude });
+    const u = await this.prisma.user.findFirst({ where: { id: targetId, status: 'ACTIVE', deletedAt: null, frozenAt: null }, include: profileInclude });
     if (!u?.profile) throw new AppError(ErrorCode.NOT_FOUND);
-    const score = await this.prisma.compatibilityScore.findUnique({ where: { viewerId_candidateId: { viewerId, candidateId: targetId } }, select: { score: true } });
-    return toPublicProfile(u, this.env.CDN_BASE_URL, { compatibility: score?.score });
+    const [a, b] = [viewerId, targetId].sort();
+    const [score, viewer, match] = await Promise.all([
+      this.prisma.compatibilityScore.findUnique({ where: { viewerId_candidateId: { viewerId, candidateId: targetId } }, select: { score: true } }),
+      this.prisma.userPrivacySettings.findUnique({ where: { userId: viewerId } }),
+      this.prisma.match.findUnique({ where: { userAId_userBId: { userAId: a, userBId: b } }, select: { status: true } }),
+    ]);
+    return toPublicProfile(u, this.env.CDN_BASE_URL, { compatibility: score?.score, viewer: privacyOf(viewer), matched: match?.status === 'ACTIVE' });
   }
 
   async refreshCompleteness(userId: string) {
@@ -212,6 +283,37 @@ export class ProfilesController {
   @AllowPending() @Put('me/preferences') @HttpCode(200)
   preferences(@CurrentUser() u: AuthUser, @Body() dto: PreferencesDto) {
     return this.profiles.setPreferences(u.id, dto);
+  }
+
+  @AllowPending() @Get('me/privacy')
+  getPrivacy(@CurrentUser() u: AuthUser) {
+    return this.profiles.privacy(u.id);
+  }
+
+  @AllowPending() @RateLimit(60, 3600) @Put('me/privacy') @HttpCode(200)
+  putPrivacy(@CurrentUser() u: AuthUser, @Body() dto: PrivacyDto) {
+    return this.profiles.setPrivacy(u.id, dto);
+  }
+
+  /** Take a break instead of deleting: everything is kept, including the subscription. */
+  @AllowPending() @RateLimit(10, 86400) @Post('me/freeze') @HttpCode(200)
+  freeze(@CurrentUser() u: AuthUser, @Body() dto: FreezeDto) {
+    return this.profiles.freeze(u.id, dto.reason);
+  }
+
+  @AllowPending() @Put('me/locale') @HttpCode(200)
+  locale(@CurrentUser() u: AuthUser, @Body() dto: LocaleDto) {
+    return this.profiles.setLocale(u.id, dto.locale);
+  }
+
+  @AllowPending() @RateLimit(5, 86400) @Get('me/export')
+  export(@CurrentUser() u: AuthUser) {
+    return this.profiles.exportData(u.id);
+  }
+
+  @AllowPending() @Post('me/unfreeze') @HttpCode(200)
+  unfreeze(@CurrentUser() u: AuthUser) {
+    return this.profiles.unfreeze(u.id);
   }
 
   @AllowPending() @RateLimit(60, 3600) @Put('me/location') @HttpCode(200)

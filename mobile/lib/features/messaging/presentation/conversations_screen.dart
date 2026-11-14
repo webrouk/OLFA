@@ -13,6 +13,7 @@ import '../../../shared/components/labels.dart';
 import '../../../shared/models/models.dart';
 import '../../settings/presentation/report_sheet.dart';
 import '../data/messaging_repository_impl.dart';
+import '../../../shared/components/verification_ticks.dart';
 
 /// 18 — Messages: search, Archive and Unmatched shortcuts, the plan's
 /// visible-conversation meter, consultation chats, expiry chips and the
@@ -287,7 +288,7 @@ class ConversationTile extends ConsumerWidget {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
                   Flexible(child: Text(c.title, overflow: TextOverflow.ellipsis, style: t.bodyMedium.copyWith(fontWeight: unread ? FontWeight.w700 : FontWeight.w500))),
-                  if (c.peer?.photosReviewed ?? false) ...[const SizedBox(width: 6), const VerifiedBadge(size: 16)],
+                  if (c.peer != null) ...[const SizedBox(width: 6), VerificationTicks(profile: c.peer!, size: 15)],
                   if (c.isConsultation) ...[const SizedBox(width: 6), OlfaTag(l.consultationTag, style: OlfaTagStyle.accent)],
                   const Spacer(),
                   if (c.lastAt != null) Text(shortTime(context, c.lastAt!), style: t.caption),

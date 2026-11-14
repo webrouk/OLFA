@@ -13,6 +13,7 @@ import { PrismaService, RateLimiter, SettingsService } from '../../common/infra'
 import { profileInclude, toPublicProfile } from '../profiles/profile.mapper';
 import { NotificationsService } from '../notifications/notifications.module';
 import { EntitlementsService, QuotaService } from '../quotas/quotas.module';
+import { privacyOf, readReceiptsVisible } from '../../domain/privacy';
 
 export class SendMessageDto {
   @ApiProperty({ description: 'Client-generated UUID (idempotency key)' }) @IsUUID() clientMessageId: string;
@@ -100,6 +101,7 @@ export class MessagingService {
    */
   async list(userId: string, section?: string) {
     const rows = (await this.listRows(userId)).filter((r) => !section || r.section === section);
+    const viewer = privacyOf(await this.prisma.userPrivacySettings.findUnique({ where: { userId } }));
     const ids = rows.filter((r) => !r.locked).map((r) => r.conversation_id);
     const convs = await this.prisma.conversation.findMany({
       where: { id: { in: ids } },
@@ -129,6 +131,7 @@ export class MessagingService {
         }
         const m = c.match!;
         const peer = m.userAId === userId ? m.userB : m.userA;
+        const matched = r.section !== 'UNMATCHED';
         return {
           ...base,
           kind: c.kind,
@@ -138,7 +141,7 @@ export class MessagingService {
           unmatchedAt: r.section === 'UNMATCHED' ? m.endedAt : null,
           unmatchedByMe: r.section === 'UNMATCHED' ? m.endedBy === userId : null,
           rematch,
-          peer: peer.profile ? toPublicProfile(peer, this.env.CDN_BASE_URL) : null,
+          peer: peer.profile ? toPublicProfile(peer, this.env.CDN_BASE_URL, { viewer, matched }) : null,
         };
       }),
     );
@@ -200,7 +203,14 @@ export class MessagingService {
       select: { id: true, clientMessageId: true, senderId: true, body: true, type: true, createdAt: true, receipts: { select: { userId: true, deliveredAt: true, readAt: true } } },
     });
     const hasMore = items.length > q.limit;
-    return { items: items.slice(0, q.limit).reverse(), hasMore };
+    // Read receipts are reciprocal: hide "read" on my messages unless both of us keep them on.
+    const { peerId } = await this.assertCanChat(userId, conversationId).catch(() => ({ peerId: '' }));
+    const prefs = await this.prisma.userPrivacySettings.findMany({ where: { userId: { in: [userId, peerId] } } });
+    const mine = privacyOf(prefs.find((p) => p.userId === userId));
+    const theirs = privacyOf(prefs.find((p) => p.userId === peerId));
+    const showRead = readReceiptsVisible(mine, theirs);
+    const out = items.slice(0, q.limit).reverse().map((m) => (showRead ? m : { ...m, receipts: m.receipts.map((r) => ({ ...r, readAt: null })) }));
+    return { items: out, hasMore, readReceipts: showRead };
   }
 
   /**
@@ -258,8 +268,13 @@ export class MessagingService {
       this.prisma.messageReceipt.updateMany({ where: { userId, readAt: null, message: { conversationId } }, data: { readAt: now, deliveredAt: now } }),
     ]);
     const c = await this.prisma.conversation.findUniqueOrThrow({ where: { id: conversationId }, select: { members: { select: { userId: true } } } });
-    // Respect the reader's read-receipt preference in Phase 4 (privacy settings).
-    this.events.emit('read', { conversationId, userIds: c.members.map((m) => m.userId), readerId: userId, at: now });
+    const ids = c.members.map((m) => m.userId);
+    const prefs = await this.prisma.userPrivacySettings.findMany({ where: { userId: { in: ids } } });
+    const reader = privacyOf(prefs.find((p) => p.userId === userId));
+    const others = ids.filter((id) => id !== userId);
+    // The other person learns "read" only when both keep read receipts on; the reader's own devices always sync.
+    const notify = others.filter((id) => readReceiptsVisible(privacyOf(prefs.find((p) => p.userId === id)), reader));
+    this.events.emit('read', { conversationId, userIds: [userId, ...notify], readerId: userId, at: now });
   }
 }
 

@@ -6,6 +6,7 @@ import '../../features/authentication/presentation/auth_screens.dart';
 import '../../features/consultations/presentation/consultation_screens.dart';
 import '../../features/discovery/presentation/discover_screen.dart';
 import '../../features/discovery/presentation/search_filters_screen.dart';
+import '../../features/legal/legal_screens.dart';
 import '../../features/likes/presentation/likes_screen.dart';
 import '../../features/location/presentation/location_screen.dart';
 import '../../features/matching/presentation/matches_screen.dart';
@@ -70,6 +71,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       _root(Routes.privacy, (_) => const PrivacyScreen()),
       _root(Routes.help, (_) => const HelpScreen()),
       _root(Routes.settings, (_) => const SettingsScreen()),
+      _root(Routes.devices, (_) => const DevicesScreen()),
+      _root(Routes.blockedUsers, (_) => const BlockedUsersScreen()),
+      _root(Routes.languageSettings, (_) => const LanguageSettingsScreen()),
+      _root(Routes.terms, (_) => const LegalScreen.terms()),
+      _root(Routes.privacyPolicy, (_) => const LegalScreen.privacy()),
+      _root(Routes.frozen, (_) => const FrozenAccountScreen()),
       // C/D — Tabs with the floating navigation
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => MainShell(shell: shell),

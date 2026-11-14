@@ -9,6 +9,7 @@ import { compatibility, DEFAULT_WEIGHTS, Member, mutuallyCompatible, parseWeight
 import { dayWindow } from '../../domain/quota-period';
 import { ageOn } from '../../domain/security';
 import { discoveryScope, publicDistanceKm, sortNearest } from '../../domain/proximity';
+import { privacyOf } from '../../domain/privacy';
 import { profileInclude, toPublicProfile } from '../profiles/profile.mapper';
 import { EntitlementsService } from '../quotas/quotas.module';
 
@@ -156,6 +157,7 @@ export class MatchingService {
     const minBirth = yearsAgo(ageMax + 1, 1); // oldest allowed
     const maxBirth = yearsAgo(ageMin); // youngest allowed
 
+    const viewerPrivacy = privacyOf(await this.prisma.userPrivacySettings.findUnique({ where: { userId: viewerId } }));
     const vp = await this.prisma.userProfile.findUniqueOrThrow({
       where: { userId: viewerId },
       select: { birthDate: true, countryCode: true, locationCountry: true, latitude: true, longitude: true },
@@ -261,7 +263,7 @@ export class MatchingService {
     return {
       items: ranked.map((r) => {
         const row = rowById.get(r.member.profile.id);
-        return toPublicProfile(byId.get(r.member.profile.id)!, this.env.CDN_BASE_URL, { compatibility: r.result.score, distanceKm: publicDistanceKm(row?.distance_km, row?.show_location ?? false) });
+        return toPublicProfile(byId.get(r.member.profile.id)!, this.env.CDN_BASE_URL, { compatibility: r.result.score, distanceKm: publicDistanceKm(row?.distance_km, row?.show_location ?? false), viewer: viewerPrivacy });
       }),
       weightsVersion: weights.version,
     };

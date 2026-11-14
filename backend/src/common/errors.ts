@@ -18,6 +18,7 @@ export enum ErrorCode {
   NOT_ELIGIBLE = 'NOT_ELIGIBLE',
   BLOCKED = 'BLOCKED',
   ACCOUNT_NOT_ACTIVE = 'ACCOUNT_NOT_ACTIVE',
+  ACCOUNT_FROZEN = 'ACCOUNT_FROZEN',
   UNDERAGE = 'UNDERAGE',
   UPLOAD_INVALID = 'UPLOAD_INVALID',
   CONVERSATION_CLOSED = 'CONVERSATION_CLOSED',
@@ -45,6 +46,7 @@ const STATUS: Record<ErrorCode, HttpStatus> = {
   NOT_ELIGIBLE: HttpStatus.UNPROCESSABLE_ENTITY,
   BLOCKED: HttpStatus.FORBIDDEN,
   ACCOUNT_NOT_ACTIVE: HttpStatus.FORBIDDEN,
+  ACCOUNT_FROZEN: HttpStatus.FORBIDDEN,
   UNDERAGE: HttpStatus.UNPROCESSABLE_ENTITY,
   UPLOAD_INVALID: HttpStatus.BAD_REQUEST,
   CONVERSATION_CLOSED: HttpStatus.FORBIDDEN,
@@ -73,8 +75,11 @@ export function fromPgError(e: unknown): AppError | null {
   const err = e as { code?: string; meta?: { code?: string }; message?: string };
   const code = err?.meta?.code ?? err?.code ?? (err?.message?.match(/SQLSTATE[: ]+(\w{5})/)?.[1]);
   switch (code) {
-    case 'OLQ01':
-      return new AppError(ErrorCode.QUOTA_EXCEEDED);
+    case 'OLQ01': {
+      // "quota exceeded: <key>" → tell the client which quota ran out
+      const quota = err?.message?.match(/quota exceeded: ([\w:-]+)/)?.[1];
+      return new AppError(ErrorCode.QUOTA_EXCEEDED, undefined, quota && !quota.startsWith('msg:') ? { quota } : undefined);
+    }
     case 'OLL01':
       return new AppError(ErrorCode.DUPLICATE);
     case 'OLL02':

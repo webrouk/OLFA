@@ -40,8 +40,8 @@ class ApiDiscoveryRepository implements DiscoveryRepository {
       });
 
   @override
-  Future<MatchItem?> like(String userId) => guard(() async {
-        final r = await _api.dio.post<Map<String, dynamic>>('/likes', data: {'userId': userId});
+  Future<MatchItem?> like(String userId, {String? compliment}) => guard(() async {
+        final r = await _api.dio.post<Map<String, dynamic>>('/likes', data: {'userId': userId, if (compliment != null) 'compliment': compliment});
         if (r.data!['matched'] != true) return null;
         final peer = _cache[userId] ?? await _fetch(userId);
         return MatchItem(id: r.data!['matchId'] as String, peer: peer, createdAt: DateTime.now(), isNew: true);
@@ -66,7 +66,7 @@ class DemoDiscoveryRepository implements DiscoveryRepository {
   @override
   Future<List<UserProfile>> suggestions(DiscoverFilters filters) => _b.discover(filters);
   @override
-  Future<MatchItem?> like(String userId) => _b.like(userId);
+  Future<MatchItem?> like(String userId, {String? compliment}) => _b.like(userId, compliment: compliment);
   @override
   Future<void> pass(String userId) => _b.pass(userId);
   @override

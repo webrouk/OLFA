@@ -8,6 +8,7 @@ import '../../core/widgets/olfa_widgets.dart';
 import '../models/models.dart';
 import 'labels.dart';
 import 'reference_pickers.dart';
+import 'verification_ticks.dart';
 
 /// Discovery card: main photo (card-size variant, never the original),
 /// name, age, location, verification, short bio, interests and completeness.
@@ -37,7 +38,6 @@ class _ProfileCardState extends State<ProfileCard> {
     final t = context.type;
     final p = widget.profile;
     final photos = p.photos;
-    final rtl = Directionality.of(context) == TextDirection.rtl;
 
     return Semantics(
       container: true,
@@ -54,19 +54,16 @@ class _ProfileCardState extends State<ProfileCard> {
           children: [
             Expanded(
               child: GestureDetector(
-                // Tap left/right half to page photos; tap is direction-aware.
-                onTapUp: photos.length < 2
-                    ? null
-                    : (d) {
-                        final box = context.findRenderObject() as RenderBox?;
-                        final w = box?.size.width ?? 1;
-                        final forward = rtl ? d.localPosition.dx < w / 2 : d.localPosition.dx > w / 2;
-                        setState(() => _photo = (_photo + (forward ? 1 : -1)).clamp(0, photos.length - 1));
-                      },
+                // Tapping the photo (or anywhere on the card) opens the full profile.
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.onOpen,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    OlfaImage(url: photos.isEmpty ? null : photos[_photo].cardUrl),
+                    if (p.underReview)
+                      const _UnderReviewCover()
+                    else
+                      OlfaImage(url: photos.isEmpty ? null : photos[_photo].cardUrl),
                     if (photos.length > 1)
                       PositionedDirectional(
                         top: 10,
@@ -109,9 +106,10 @@ class _ProfileCardState extends State<ProfileCard> {
                     Row(
                       children: [
                         Flexible(child: Text('${p.name}  ${p.age}', style: t.h2, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                        if (p.photosReviewed) ...[const SizedBox(width: 8), VerifiedBadge(size: 22, semanticLabel: l.photosReviewed)],
+                        const SizedBox(width: 8),
+                        VerificationTicks(profile: p, size: 20),
                         const Spacer(),
-                        Icon(Icons.info_outline_rounded, size: 20, color: OlfaColors.textMuted),
+                        if (p.underReview) OlfaTag(l.newUnderReview, icon: Icons.hourglass_top_rounded),
                       ],
                     ),
                     const SizedBox(height: 2),
@@ -172,6 +170,25 @@ class _Stamp extends StatelessWidget {
           decoration: BoxDecoration(color: OlfaColors.white, border: Border.all(color: color, width: 3), borderRadius: OlfaRadius.all(12)),
           child: Text(text, style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.w800)),
         ),
+      ),
+    );
+  }
+}
+
+class _UnderReviewCover extends StatelessWidget {
+  const _UnderReviewCover();
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return ColoredBox(
+      color: OlfaColors.gray,
+      child: Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.hourglass_top_rounded, size: 46, color: OlfaColors.primary),
+          const SizedBox(height: 10),
+          Text(l.newUnderReview, style: context.type.h3),
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 6), child: Text(l.newUnderReviewBody, textAlign: TextAlign.center, style: context.type.bodySmall)),
+        ]),
       ),
     );
   }

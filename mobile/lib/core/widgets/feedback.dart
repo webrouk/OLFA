@@ -134,6 +134,8 @@ String failureMessage(BuildContext context, Object error) {
     QuotaExceededFailure(:final quota) => switch (quota) {
         'likes' => l.quotaLikes,
         'messages' => l.quotaMessages,
+        'compliments' => l.quotaCompliments,
+        'voice_notes' => l.quotaVoiceNotes,
         _ => l.quotaUndos,
       },
     EntitlementRequiredFailure(:final feature) => switch (feature) {

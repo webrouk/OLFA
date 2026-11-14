@@ -8,5 +8,5 @@ abstract interface class MatchingRepository {
   Future<String> startConversation(String matchId);
 
   /// Count is always returned; identities only when the plan allows it.
-  Future<({int count, List<UserProfile> profiles})> likesReceived();
+  Future<LikesInbox> likesReceived({String? cursor});
 }

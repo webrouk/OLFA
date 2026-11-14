@@ -40,6 +40,12 @@ abstract final class Routes {
   static const privacy = '/me/privacy';
   static const help = '/me/help';
   static const settings = '/me/settings';
+  static const devices = '/me/privacy/devices';
+  static const blockedUsers = '/me/privacy/blocked';
+  static const languageSettings = '/me/settings/language';
+  static const terms = '/legal/terms';
+  static const privacyPolicy = '/legal/privacy';
+  static const frozen = '/account/frozen';
 
   // 6. Family & marital consultations
   static const consultations = '/consultations';

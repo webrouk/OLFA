@@ -15,6 +15,7 @@ import '../application/chat_controller.dart';
 import '../data/messaging_repository_impl.dart';
 import '../../../core/errors/failure.dart';
 import 'conversations_screen.dart' show OfflineBar, showConversationMenu;
+import '../../../shared/components/verification_ticks.dart';
 
 /// 19 — Private chat: realtime, paginated, optimistic, keyboard-aware.
 class ChatScreen extends ConsumerStatefulWidget {
@@ -97,7 +98,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                       Row(mainAxisSize: MainAxisSize.min, children: [
                         Flexible(child: Text(conv.title, overflow: TextOverflow.ellipsis, style: t.bodyLarge.copyWith(fontWeight: FontWeight.w700))),
-                        if (conv.peer?.photosReviewed ?? false) ...[const SizedBox(width: 6), VerifiedBadge(size: 16, semanticLabel: l.photosReviewed)],
+                        if (conv.peer != null) ...[const SizedBox(width: 6), VerificationTicks(profile: conv.peer!, size: 15)],
                       ]),
                       Text(
                         conv.isUnmatched

@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { ageOn } from '../../domain/security';
+import { isOnlineVisible, photosBlurred, PrivacyPrefs, privacyOf } from '../../domain/privacy';
 
 /** Everything needed to render a profile; loaded with this include. */
 export const profileInclude = {
@@ -7,11 +8,20 @@ export const profileInclude = {
   interests: { include: { interest: { select: { key: true } } } },
   photos: { where: { deletedAt: null }, orderBy: { position: 'asc' } },
   verifications: { where: { revokedAt: null }, select: { type: true } },
+  privacy: true,
 } satisfies Prisma.UserInclude;
 
 export type UserWithProfile = Prisma.UserGetPayload<{ include: typeof profileInclude }>;
 
-type Variants = { thumb?: string; card?: string; full?: string };
+type Variants = { thumb?: string; card?: string; full?: string; blur?: string };
+
+/** How the viewer relates to the profile (drives privacy rules). */
+export interface ViewContext {
+  compatibility?: number;
+  distanceKm?: number | null;
+  viewer?: PrivacyPrefs; // the viewer's own privacy (reciprocal rules)
+  matched?: boolean;
+}
 
 const url = (cdn: string, key?: string) => (key ? `${cdn}/${key}` : null);
 
@@ -19,13 +29,20 @@ const url = (cdn: string, key?: string) => (key ? `${cdn}/${key}` : null);
  * PUBLIC view: no phone, no exact birth date, no status, no non-approved
  * photos, location only if the owner allows it. Photos are CDN variants only.
  */
-export function toPublicProfile(u: UserWithProfile, cdn: string, extra: { compatibility?: number; distanceKm?: number | null } = {}) {
+export function toPublicProfile(u: UserWithProfile, cdn: string, extra: ViewContext = {}, isSelf = false) {
   const p = u.profile!;
-  const photos = u.photos
+  const priv = privacyOf(u.privacy);
+  // Blurred until matched: only the pre-blurred variant leaves the server.
+  const blurred = photosBlurred(priv, extra.matched ?? false, isSelf);
+  // New account awaiting moderation: others see only the basics — never unreviewed photos or text.
+  const underReview = !isSelf && u.status === 'PENDING_VERIFICATION';
+  const photos = underReview ? [] : u.photos
     .filter((ph) => ph.status === 'APPROVED')
     .map((ph) => {
       const v = (ph.variants ?? {}) as Variants;
-      return { id: ph.id, position: ph.position, thumbUrl: url(cdn, v.thumb), cardUrl: url(cdn, v.card), fullUrl: url(cdn, v.full) };
+      return blurred
+        ? { id: ph.id, position: ph.position, thumbUrl: url(cdn, v.blur), cardUrl: url(cdn, v.blur), fullUrl: null, blurred: true }
+        : { id: ph.id, position: ph.position, thumbUrl: url(cdn, v.thumb), cardUrl: url(cdn, v.card), fullUrl: url(cdn, v.full) };
     });
   const badges = new Set(u.verifications.map((v) => v.type));
   return {
@@ -42,7 +59,7 @@ export function toPublicProfile(u: UserWithProfile, cdn: string, extra: { compat
     education: p.education,
     occupation: p.occupation,
     marriageTimeline: p.marriageTimeline,
-    bio: p.bio,
+    bio: underReview ? null : p.bio,
     interests: u.interests.map((i) => i.interest.key),
     photos,
     isPhotosReviewed: badges.has('PROFILE_REVIEW'),
@@ -50,18 +67,24 @@ export function toPublicProfile(u: UserWithProfile, cdn: string, extra: { compat
     isIdentityVerified: badges.has('IDENTITY'), // only from a real ID check
     completeness: p.completeness,
     compatibility: extra.compatibility ?? null,
+    photosBlurred: blurred,
+    underReview,
+    // reciprocal presence; never a precise last-seen time
+    online: isSelf ? null : isOnlineVisible(extra.viewer ?? privacyOf(null), priv, u.lastActiveAt),
   };
 }
 
 /** OWNER view: public view + private fields and every photo with its review state. */
 export function toOwnProfile(u: UserWithProfile, cdn: string) {
-  const base = u.profile ? toPublicProfile(u, cdn) : null;
+  const base = u.profile ? toPublicProfile(u, cdn, {}, true) : null;
   return {
     id: u.id,
     accountStatus: u.status,
     locale: u.locale,
     timezone: u.timezone,
     phone: u.phoneE164, // owner only
+    frozenAt: u.frozenAt,
+    privacy: { ...privacyOf(u.privacy), showCity: u.profile?.showLocation ?? true },
     profile: base && {
       ...base,
       countryCode: u.profile!.countryCode,

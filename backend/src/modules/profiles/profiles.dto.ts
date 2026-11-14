@@ -74,6 +74,24 @@ export class LocationDto {
   @ApiPropertyOptional({ description: 'Country detected on the device (reverse geocoding)' }) @IsOptional() @IsIn(ref.countries) countryCode?: string;
 }
 
+/** Privacy settings (all optional — send only what changes). */
+export class PrivacyDto {
+  @ApiPropertyOptional({ description: 'Show me in discovery' }) @IsOptional() @IsBoolean() discoverable?: boolean;
+  @ApiPropertyOptional({ description: 'Reciprocal' }) @IsOptional() @IsBoolean() showOnline?: boolean;
+  @ApiPropertyOptional({ description: 'Reciprocal' }) @IsOptional() @IsBoolean() readReceipts?: boolean;
+  @ApiPropertyOptional({ description: 'Premium' }) @IsOptional() @IsBoolean() incognito?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() blurPhotos?: boolean;
+  @ApiPropertyOptional({ description: 'Show city and distance' }) @IsOptional() @IsBoolean() showCity?: boolean;
+}
+
+export class LocaleDto {
+  @ApiProperty({ enum: ['ar', 'en'] }) @IsIn(['ar', 'en']) locale: 'ar' | 'en';
+}
+
+export class FreezeDto {
+  @ApiPropertyOptional({ enum: ['break', 'met_someone', 'busy', 'privacy', 'other'] }) @IsOptional() @IsIn(['break', 'met_someone', 'busy', 'privacy', 'other']) reason?: string;
+}
+
 export class DeleteAccountDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(40) reason?: string;
 }

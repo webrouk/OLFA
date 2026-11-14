@@ -22,6 +22,7 @@ class ApiMatchingRepository implements MatchingRepository {
             createdAt: DateTime.parse(j['createdAt'] as String).toLocal(),
             conversationId: j['conversationId'] as String?,
             isNew: j['conversationId'] == null,
+            paused: j['paused'] == true,
           );
         }).toList();
       });
@@ -33,10 +34,20 @@ class ApiMatchingRepository implements MatchingRepository {
       }, quota: 'messages');
 
   @override
-  Future<({int count, List<UserProfile> profiles})> likesReceived() => guard(() async {
-        final r = await _api.dio.get<Map<String, dynamic>>('/likes/received');
-        final profiles = (r.data!['profiles'] as List).map((j) => ApiMappers.profile(Map<String, dynamic>.from(j as Map))).toList();
-        return (count: (r.data!['count'] as num).toInt(), profiles: profiles);
+  Future<LikesInbox> likesReceived({String? cursor}) => guard(() async {
+        final r = await _api.dio.get<Map<String, dynamic>>('/likes/received', queryParameters: {if (cursor != null) 'cursor': cursor});
+        ReceivedLike one(dynamic x) {
+          final j = Map<String, dynamic>.from(x as Map);
+          return ReceivedLike(profile: ApiMappers.profile(Map<String, dynamic>.from(j['profile'] as Map)), at: DateTime.parse(j['at'] as String).toLocal(), compliment: j['compliment'] as String?);
+        }
+        final d = r.data!;
+        return LikesInbox(
+          count: (d['count'] as num).toInt(),
+          compliments: (d['compliments'] as List? ?? const []).map(one).toList(),
+          items: (d['items'] as List? ?? const []).map(one).toList(),
+          locked: d['locked'] == true,
+          nextCursor: d['nextCursor'] as String?,
+        );
       });
 }
 
@@ -49,7 +60,7 @@ class DemoMatchingRepository implements MatchingRepository {
   @override
   Future<String> startConversation(String matchId) => _b.startConversation(matchId);
   @override
-  Future<({int count, List<UserProfile> profiles})> likesReceived() => _b.likesReceived();
+  Future<LikesInbox> likesReceived({String? cursor}) => _b.likesReceived();
 }
 
 final matchingRepositoryProvider = Provider<MatchingRepository>(
@@ -58,5 +69,4 @@ final matchingRepositoryProvider = Provider<MatchingRepository>(
 
 final matchesProvider = FutureProvider<List<MatchItem>>((ref) => ref.watch(matchingRepositoryProvider).matches());
 
-final likesReceivedProvider =
-    FutureProvider<({int count, List<UserProfile> profiles})>((ref) => ref.watch(matchingRepositoryProvider).likesReceived());
+final likesReceivedProvider = FutureProvider<LikesInbox>((ref) => ref.watch(matchingRepositoryProvider).likesReceived());

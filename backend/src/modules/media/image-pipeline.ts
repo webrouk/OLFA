@@ -6,7 +6,8 @@ export type AllowedMime = (typeof ALLOWED_MIME)[number];
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 export const VARIANTS = { thumb: 200, card: 800, full: 1600 } as const;
-export type VariantName = keyof typeof VARIANTS;
+/** `blur` is a small, heavily blurred copy used while a member hides photos until match. */
+export type VariantName = keyof typeof VARIANTS | 'blur';
 
 export interface Processed {
   width: number;
@@ -26,13 +27,15 @@ export async function processImage(original: Buffer): Promise<Processed> {
   if (!meta.width || !meta.height || meta.width < 300 || meta.height < 300) throw new Error('image too small');
 
   const variants = {} as Record<VariantName, Buffer>;
-  for (const [name, size] of Object.entries(VARIANTS) as [VariantName, number][]) {
+  for (const [name, size] of Object.entries(VARIANTS) as [keyof typeof VARIANTS, number][]) {
     variants[name] = await base
       .clone()
       .resize({ width: size, height: size, fit: 'inside', withoutEnlargement: true })
       .webp({ quality: name === 'thumb' ? 70 : 80 })
       .toBuffer(); // sharp drops metadata unless .withMetadata() is called
   }
+  // Heavily blurred small copy for "blur photos until match" — the only one shown then.
+  variants.blur = await base.clone().resize({ width: 96, height: 96, fit: 'inside' }).blur(12).webp({ quality: 50 }).toBuffer();
   return {
     width: meta.width,
     height: meta.height,

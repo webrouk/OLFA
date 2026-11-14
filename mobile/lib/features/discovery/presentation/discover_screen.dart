@@ -12,6 +12,8 @@ import '../../matching/presentation/match_dialog.dart';
 import '../../subscriptions/application/entitlements_controller.dart';
 import '../application/discover_controller.dart';
 import '../domain/swipe_use_cases.dart';
+import '../../../core/theme/olfa_colors.dart';
+import '../../../shared/models/models.dart';
 
 /// 12 — Discover / Home
 class DiscoverScreen extends ConsumerStatefulWidget {
@@ -49,8 +51,38 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> with SingleTick
   }
 
   /// Swipe right = like, left = pass (platform convention, same in RTL).
+  /// Accounts under review browse only (the server refuses likes and profiles too).
+  bool _blockedWhilePending() {
+    final ent = ref.read(entitlementsProvider).valueOrNull;
+    if (ent == null || ent.accountActive) return false;
+    showToast(context, AppLocalizations.of(context).pendingReadOnly);
+    return true;
+  }
+
+  void _open(UserProfile p) {
+    if (_blockedWhilePending()) return;
+    context.push(Routes.profile(p.id));
+  }
+
+  Future<void> _compliment(UserProfile p) async {
+    if (_blockedWhilePending()) return;
+    final text = await showComplimentSheet(context, ref, p);
+    if (text == null || !mounted) return;
+    if (_animating) return;
+    _animating = true;
+    final w = MediaQuery.sizeOf(context).width;
+    await _animateTo(Offset(w * 1.3, _drag.dy + 30));
+    await ref.read(discoverControllerProvider.notifier).swipe(SwipeKind.like, compliment: text);
+    if (mounted) setState(() => _drag = Offset.zero);
+    _animating = false;
+  }
+
   Future<void> _decide(SwipeKind kind) async {
     if (_animating) return; // double-submission guard (UI side)
+    if (kind == SwipeKind.like && _blockedWhilePending()) {
+      await _animateTo(Offset.zero);
+      return;
+    }
     final ent = ref.read(entitlementsProvider).valueOrNull;
     if (kind == SwipeKind.like && ent != null && ent.likesLeft <= 0) {
       await _animateTo(Offset.zero);
@@ -122,6 +154,11 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> with SingleTick
                   ],
                 ),
               ),
+              if (ent != null && !ent.accountActive)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                  child: InfoBanner(accent: true, icon: Icons.hourglass_top_rounded, text: l.pendingDiscoverBanner),
+                ),
               Expanded(
                 child: state.when(
                   skipLoadingOnReload: true,
@@ -175,7 +212,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> with SingleTick
                                         profile: cur,
                                         likeOpacity: dx / 90,
                                         passOpacity: -dx / 90,
-                                        onOpen: () => context.push(Routes.profile(cur.id)),
+                                        onOpen: () => _open(cur),
                                       ),
                                     ),
                                   ),
@@ -216,14 +253,8 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> with SingleTick
                       const SizedBox(width: 16),
                       OlfaIconButton(icon: Icons.favorite_rounded, tooltip: l.like, style: OlfaIconStyle.filled, circle: true, size: 64, onPressed: () => _decide(SwipeKind.like)),
                       const SizedBox(width: 16),
-                      OlfaIconButton(
-                        icon: Icons.info_outline_rounded,
-                        tooltip: l.viewProfile,
-                        style: OlfaIconStyle.elevated,
-                        circle: true,
-                        size: 48,
-                        onPressed: () => context.push(Routes.profile(state.valueOrNull!.current!.id)),
-                      ),
+                      // Compliment: a short message that arrives with the like and is shown first.
+                      _ComplimentButton(left: ent?.complimentsLeft, onPressed: () => _compliment(state.valueOrNull!.current!)),
                     ],
                   ),
                 ),
@@ -234,4 +265,76 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> with SingleTick
       ),
     );
   }
+}
+
+class _ComplimentButton extends StatelessWidget {
+  const _ComplimentButton({required this.left, required this.onPressed});
+  final int? left;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return Stack(clipBehavior: Clip.none, children: [
+      OlfaIconButton(icon: Icons.auto_awesome_rounded, tooltip: l.sendCompliment, style: OlfaIconStyle.elevated, circle: true, size: 48, onPressed: onPressed),
+      if (left != null)
+        PositionedDirectional(
+          top: -4,
+          end: -4,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(color: left! > 0 ? OlfaColors.primary : OlfaColors.black, borderRadius: BorderRadius.circular(10), border: Border.all(color: OlfaColors.white, width: 2)),
+            child: Text('$left', style: const TextStyle(color: OlfaColors.white, fontSize: 10.5, fontWeight: FontWeight.w700, fontFamily: 'Montserrat')),
+          ),
+        ),
+    ]);
+  }
+}
+
+/// Compose a compliment (2–300 characters, no contact details). Returns the text.
+Future<String?> showComplimentSheet(BuildContext context, WidgetRef ref, UserProfile p) {
+  final l = AppLocalizations.of(context);
+  final ent = ref.read(entitlementsProvider).valueOrNull;
+  final ctrl = TextEditingController();
+  final contact = RegExp(r'(\+?\d[\d\s-]{7,})|@|https?://|www\.', caseSensitive: false);
+  return showModalBottomSheet<String>(
+    context: context,
+    isScrollControlled: true,
+    builder: (sheet) => StatefulBuilder(builder: (sheet, set) {
+      final text = ctrl.text.trim();
+      final err = contact.hasMatch(text) ? l.complimentNoContact : null;
+      final left = ent?.complimentsLeft ?? 0;
+      return Padding(
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 16 + MediaQuery.viewInsetsOf(sheet).bottom),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(color: OlfaColors.primaryTint(), borderRadius: BorderRadius.circular(15)),
+              child: const Icon(Icons.auto_awesome_rounded, color: OlfaColors.primary),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(l.complimentTitle(p.name), style: sheet.type.h3)),
+          ]),
+          const SizedBox(height: 10),
+          Text(l.complimentBody, style: sheet.type.bodySmall.copyWith(color: OlfaColors.textMuted)),
+          const SizedBox(height: 14),
+          OlfaTextField(label: l.yourCompliment, hint: l.complimentHint, controller: ctrl, maxLines: 3, maxLength: 300, counter: true, error: err, onChanged: (_) => set(() {})),
+          Text(
+            ent == null ? '' : l.complimentsLeftMonth(left, ent.monthlyCompliments),
+            style: sheet.type.caption.copyWith(color: left == 0 ? OlfaColors.primary : null),
+          ),
+          const SizedBox(height: 12),
+          if (left == 0)
+            PrimaryButton(label: l.upgradeForCompliments, icon: Icons.workspace_premium_outlined, onPressed: () {
+              Navigator.of(sheet).pop();
+              context.push(Routes.plans);
+            })
+          else
+            PrimaryButton(label: l.sendWithLike, icon: Icons.favorite_rounded, onPressed: text.length < 2 || err != null ? null : () => Navigator.of(sheet).pop(text)),
+        ]),
+      );
+    }),
+  ).whenComplete(ctrl.dispose);
 }
