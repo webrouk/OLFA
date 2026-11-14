@@ -66,7 +66,7 @@ class DiscoverController extends AsyncNotifier<DiscoverState> {
 
   /// Optimistic swipe: the card leaves immediately; on failure it returns to
   /// the top of the queue and the failure is surfaced once.
-  Future<void> swipe(SwipeKind kind) async {
+  Future<void> swipe(SwipeKind kind, {String? compliment}) async {
     final s = state.valueOrNull;
     final p = s?.current;
     if (s == null || p == null || s.inFlight.contains(p.id)) return;
@@ -82,12 +82,12 @@ class DiscoverController extends AsyncNotifier<DiscoverState> {
       history: [...s.history, (profile: p, kind: kind)],
     ));
     if (kind == SwipeKind.like) {
-      ref.read(entitlementsProvider.notifier).applyLocal((e) => e.copyWith(likesUsed: e.likesUsed + 1));
+      ref.read(entitlementsProvider.notifier).applyLocal((e) => e.copyWith(likesUsed: e.likesUsed + 1, complimentsUsed: compliment == null ? null : e.complimentsUsed + 1));
     }
     _prefetchIfLow();
 
     try {
-      final match = await ref.read(swipeUseCaseProvider).call(kind, p.id, ent ?? _fallbackEnt());
+      final match = await ref.read(swipeUseCaseProvider).call(kind, p.id, ent ?? _fallbackEnt(), compliment: compliment);
       final cur = state.valueOrNull!;
       state = AsyncData(cur.copyWith(inFlight: {...cur.inFlight}..remove(p.id), lastMatch: match == null ? null : () => match));
     } on AlreadyActedFailure {

@@ -13,6 +13,10 @@ import '../../../shared/models/models.dart';
 import '../../subscriptions/application/entitlements_controller.dart';
 import '../application/profile_controllers.dart';
 import '../domain/profile_draft.dart';
+import '../../consultations/application/consultation_providers.dart';
+import '../../../shared/components/verification_ticks.dart';
+import '../../settings/data/settings_repository.dart';
+import '../../settings/presentation/privacy_screen.dart' show VisibilityCard;
 
 /// 17 — My profile (hub for account & services)
 class MyProfileScreen extends ConsumerWidget {
@@ -50,7 +54,7 @@ class MyProfileScreen extends ConsumerWidget {
               const SizedBox(height: 12),
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 Flexible(child: Text('${me.name}, ${me.age}', style: t.h2)),
-                if (me.photosReviewed) ...[const SizedBox(width: 8), VerifiedBadge(size: 22, semanticLabel: l.photosReviewed)],
+                ...[const SizedBox(width: 8), VerificationTicks(profile: me, size: 22)],
               ]),
               Center(child: Text('${me.city} · ${countryLabel(context, me.countryIso)}', style: t.caption)),
               const SizedBox(height: 18),
@@ -63,6 +67,12 @@ class MyProfileScreen extends ConsumerWidget {
                   if (me.completeness < 100) ...[const SizedBox(height: 10), Text(l.completenessTip, style: t.caption)],
                 ]),
               ),
+              const SizedBox(height: 12),
+              // Who can see me — mirrors Privacy & security (server-enforced).
+              Consumer(builder: (context, ref, _) {
+                final priv = ref.watch(privacyProvider).valueOrNull;
+                return priv == null ? const SizedBox.shrink() : VisibilityCard(settings: priv, onTap: () => context.push(Routes.privacy));
+              }),
               const SizedBox(height: 12),
               OlfaCard(
                 color: paid ? OlfaColors.black : OlfaColors.white,
@@ -86,6 +96,18 @@ class MyProfileScreen extends ConsumerWidget {
                 OlfaListTile(icon: Icons.people_alt_outlined, title: l.prefsTitleShort, onTap: () => _editPrefs(context, ref, me)),
                 OlfaListTile(icon: Icons.workspace_premium_outlined, title: l.screenPlans, onTap: () => context.push(Routes.plans)),
                 OlfaListTile(icon: Icons.receipt_long_outlined, title: l.screenPayments, onTap: () => context.push(Routes.payments)),
+              ]),
+              const SizedBox(height: 12),
+              // Family & marital consultations — booking, and the counselor side.
+              TileGroup(children: [
+                OlfaListTile(icon: Icons.support_agent_rounded, title: l.screenConsultations, subtitle: l.consultTileSub, accent: true, onTap: () => context.push(Routes.consultations)),
+                OlfaListTile(icon: Icons.event_note_outlined, title: l.screenMyConsultations, onTap: () => context.push(Routes.myConsultations)),
+                Consumer(builder: (context, ref, _) {
+                  final c = ref.watch(myCounselorProvider).valueOrNull;
+                  return c?.status == CounselorStatus.approved
+                      ? OlfaListTile(icon: Icons.dashboard_customize_outlined, title: l.screenCounselorDesk, onTap: () => context.push(Routes.counselorDesk))
+                      : OlfaListTile(icon: Icons.badge_outlined, title: l.becomeCounselor, subtitle: c?.status == CounselorStatus.pending ? l.counselorPending : null, onTap: () => context.push(Routes.counselorApply));
+                }),
               ]),
               const SizedBox(height: 12),
               TileGroup(children: [

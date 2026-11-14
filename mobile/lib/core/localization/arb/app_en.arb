@@ -477,5 +477,581 @@
         "type": "String"
       }
     }
-  }
+  },
+  "screenArchive": "Archive",
+  "screenUnmatched": "Unmatched",
+  "conversationsOnPlan": "{used}/{limit} conversations on your plan",
+  "@conversationsOnPlan": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "lockedConversationsTitle": "More conversations",
+  "lockedConversationsBody": "Your plan shows your latest conversations. Upgrade to open the rest.",
+  "lockedConversationsCount": "{count, plural, =1{1 more conversation is waiting} other{{count} more conversations are waiting}}",
+  "@lockedConversationsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lockedLimitBody": "Free shows {limit}, Plus 10 and Premium unlimited. The archive counts too.",
+  "@lockedLimitBody": {
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "hiddenConversation": "Hidden conversation",
+  "retentionNote": "Chats with no messages for 15 days leave the list (we remind you after 10). Archived chats are kept for a month.",
+  "expiresInDays": "{days, plural, =0{Removed today} =1{Removed tomorrow} other{Removed in {days} days}} — send a message to keep it",
+  "@expiresInDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "expiresShort": "{days, plural, =0{today} =1{1 day} other{{days} days}}",
+  "@expiresShort": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "archiveNote": "Archived chats are kept for one month. You'll get a reminder a week before they are deleted — a message keeps them.",
+  "unmatchedNote": "When someone unmatches, the chat moves here at once. Messaging stops until a re-match request is accepted. One request per chat; unmatched chats are deleted after a month.",
+  "archiveEmpty": "Nothing archived",
+  "archiveEmptyBody": "Long-press a conversation to archive it.",
+  "unmatchedEmpty": "No unmatched conversations",
+  "unmatchedEmptyBody": "Conversations you or the other person unmatch appear here.",
+  "archiveAction": "Archive",
+  "restoreAction": "Move to messages",
+  "unmatchAction": "Unmatch",
+  "unmatchConfirmTitle": "Unmatch {name}?",
+  "@unmatchConfirmTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "unmatchConfirmBody": "The chat moves to Unmatched for both of you and messaging stops. Either of you can send one re-match request in this chat.",
+  "archived": "Archived",
+  "restored": "Moved to messages",
+  "unmatchedDone": "Unmatched",
+  "unmatchedByYou": "You unmatched",
+  "unmatchedByThem": "{name} unmatched",
+  "@unmatchedByThem": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "rematchPendingTag": "Re-match requested",
+  "rematchUsedTag": "Request used",
+  "chatClosedUnmatched": "This chat is closed after an unmatch. Send a re-match request to talk again.",
+  "rematchRequest": "Request re-match",
+  "rematchRequestBody": "You can send only one request in this conversation.",
+  "rematchSent": "Re-match request sent",
+  "rematchWaiting": "Waiting for {name} to accept your request.",
+  "@rematchWaiting": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "rematchIncoming": "{name} would like to match again.",
+  "@rematchIncoming": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "rematchAccept": "Accept",
+  "rematchDecline": "Decline",
+  "rematchAccepted": "Matched again — the chat is open",
+  "rematchDeclined": "The re-match request was declined. This chat stays closed.",
+  "rematchAlreadyUsed": "A re-match request was already used in this conversation.",
+  "consultationTag": "Consultation",
+  "consultationChatNote": "Private consultation chat. Your counselor may write first.",
+  "conversationMenu": "Conversation options",
+  "reportAction": "Report or block",
+  "addPricesFirst": "Add at least one price so clients can book you.",
+  "anyNationality": "Any nationality",
+  "anyOccupation": "Any occupation",
+  "becomeCounselor": "Join as a counselor",
+  "bookConsultation": "Book a consultation",
+  "bookingOpenExists": "You already have an open booking with this counselor.",
+  "cancelBooking": "Cancel booking",
+  "cancelBookingBody": "The booking is not paid yet; nothing will be charged.",
+  "cancelBookingRefund": "The counselor hasn't confirmed yet, so you'll get a full refund.",
+  "cancelBookingTitle": "Cancel this booking?",
+  "choosePreferredTime": "Choose a preferred time",
+  "confirmBooking": "Confirm",
+  "confirmedSessions": "Confirmed",
+  "consultIntro": "Licensed psychologists and family counselors. Every counselor is reviewed before being listed, and you pay securely before the request is sent.",
+  "consultPayFirst": "Complete the payment to send your request.",
+  "consultTileSub": "Psychologists & family counselors",
+  "counselorApplyBody": "Tell us about your practice. Our team verifies your licence before your profile appears to members.",
+  "counselorApproved": "Your counselor profile is live",
+  "counselorApprovedBody": "Add your prices, then confirm paid requests from your desk.",
+  "counselorBioHint": "Your approach, specialities and who you help (no contact details).",
+  "counselorPending": "Application under review",
+  "counselorPendingBody": "We'll notify you once your licence is verified, usually within 2 working days.",
+  "counselorRejected": "Application not approved",
+  "counselorSuspended": "Counselor account suspended",
+  "counselorType": "Counselor type",
+  "countryOfResidence": "Country of residence",
+  "credentialN": "Document {n}",
+  "@credentialN": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "credentialRequired": "Upload at least one licence or certificate.",
+  "credentials": "Licence & certificates",
+  "credentialsNote": "Stored privately and seen only by our review team.",
+  "declineBooking": "Decline",
+  "declineBookingBody": "The client will be refunded in full.",
+  "experience": "Years of experience",
+  "headline": "Professional title",
+  "headlineHint": "e.g. Marriage & family counselor",
+  "incomingRequests": "Paid requests",
+  "kindFamilyCounselor": "Family counselor",
+  "kindPsychologist": "Psychologist",
+  "later": "Later",
+  "licenseAuthority": "Licensing authority",
+  "licenseCountry": "Licence country",
+  "licenseNumber": "Licence number",
+  "licenseVerified": "Licence verified",
+  "licensedBy": "Licensed by",
+  "locationAllow": "Allow location",
+  "locationBody": "We show you the nearest people first, then people in your country. Nobody sees your exact location — only an approximate distance.",
+  "locationDenied": "Location wasn't allowed. You can still continue; results will use your country of residence.",
+  "locationDeniedForever": "Location is turned off for OLFA. You can enable it in Settings.",
+  "locationFound": "Your location",
+  "locationPrivacy": "Coordinates are rounded to about 1 km before saving.",
+  "locationServiceOff": "Location services are off on this device.",
+  "locationTitle": "Find people near you",
+  "markCompleted": "Mark completed",
+  "minutesShort": "{m} min",
+  "@minutesShort": {
+    "placeholders": {
+      "m": {
+        "type": "int"
+      }
+    }
+  },
+  "myPrices": "My prices",
+  "nationality": "Nationality",
+  "nationalityAutoHint": "Set from your country — you can change it.",
+  "noConsultations": "No consultations yet.",
+  "noCounselors": "No counselors match these filters.",
+  "noIncoming": "No new requests.",
+  "noReviewsYet": "No reviews yet.",
+  "noteForCounselor": "Note for the counselor",
+  "noteForCounselorHint": "What would you like to discuss? (optional)",
+  "occAgriculture": "Agriculture",
+  "occBusiness": "Business & finance",
+  "occEducation": "Education",
+  "occEngineering": "Engineering",
+  "occGovernment": "Government & military",
+  "occHealth": "Health",
+  "occHospitality": "Hospitality & tourism",
+  "occLaw": "Law",
+  "occMedia": "Media & arts",
+  "occOther": "Other",
+  "occReligion": "Religious services",
+  "occRetail": "Retail & sales",
+  "occScience": "Science & research",
+  "occSocial": "Social services",
+  "occSports": "Sports & fitness",
+  "occTech": "Technology",
+  "occTrades": "Skilled trades",
+  "occTransport": "Transport & logistics",
+  "openSettings": "Settings",
+  "outsideCountryLocked": "Searching outside your country is available on Plus and Premium.",
+  "payAndRequest": "Pay {amount} & send request",
+  "@payAndRequest": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "payBeforeConfirmNote": "Your request reaches the counselor only after payment. If they decline or you cancel before confirmation, you're refunded in full.",
+  "paymentCancelled": "Payment cancelled.",
+  "paymentDone": "Paid — waiting for the counselor to confirm.",
+  "paymentFailed": "The payment didn't go through. Please try again.",
+  "preferredTime": "Preferred time",
+  "preferredTimeNote": "The counselor confirms the final time.",
+  "price": "Price",
+  "priceFrom": "From {price} · {m} min",
+  "@priceFrom": {
+    "placeholders": {
+      "price": {
+        "type": "String"
+      },
+      "m": {
+        "type": "int"
+      }
+    }
+  },
+  "pricing": "Prices",
+  "professionalName": "Professional name",
+  "rateCounselor": "Rate",
+  "rateCounselorBody": "Your rating helps others choose. Only your first name is shown.",
+  "rateCounselorTitle": "How was your session with {name}?",
+  "@rateCounselorTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "ratingOutOf5": "{value} out of 5",
+  "@ratingOutOf5": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "ratingThanks": "Thanks for your rating",
+  "refresh": "Refresh",
+  "reviewComment": "Comment (optional)",
+  "reviews": "Reviews",
+  "reviewsCount": "{count, plural, =1{1 review} other{{count} reviews}}",
+  "@reviewsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "scopeMyCountry": "My country",
+  "scopeNearby": "Nearest",
+  "scopeNoteFree": "Free: nearest first, within your current country. Other countries with Plus or Premium.",
+  "scopeNoteOutside": "Nearest first, then your country, then everywhere.",
+  "scopeOtherCountry": "Another country",
+  "screenBookConsultation": "Book",
+  "screenConsultations": "Family consultations",
+  "screenCounselor": "Counselor",
+  "screenCounselorApply": "Join as a counselor",
+  "screenCounselorDesk": "Counselor desk",
+  "screenMyConsultations": "My consultations",
+  "searchList": "Search",
+  "searchWhere": "Where to look",
+  "serviceLanguage": "Service language",
+  "serviceType": "Service type",
+  "servicesOffered": "Services offered",
+  "sessionDuration": "Session length",
+  "stAwaitingPayment": "Awaiting payment",
+  "stCancelled": "Cancelled",
+  "stCompleted": "Completed",
+  "stConfirmed": "Confirmed",
+  "stDeclined": "Declined",
+  "stExpired": "Expired",
+  "stPaid": "Paid",
+  "stRefunded": "Refunded",
+  "submitRating": "Submit",
+  "summary": "Summary",
+  "svcDivorceRecovery": "After separation",
+  "svcFamily": "Family",
+  "svcIndividual": "Individual",
+  "svcMarital": "Marital",
+  "svcParenting": "Parenting",
+  "svcPremarital": "Pre-marriage",
+  "total": "Total",
+  "uploadCredential": "Upload document",
+  "waitingCounselorConfirm": "Paid — the counselor will confirm a time.",
+  "yearsCount": "{count, plural, =1{1 year} other{{count} years}}",
+  "@yearsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "activity": "Activity",
+  "blockedNote": "Blocked members can't find you, like you or message you. They aren't told that you blocked them.",
+  "blockedOn": "Blocked on {date}",
+  "@blockedOn": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "chatting": "Chatting",
+  "cityHiddenTag": "City hidden",
+  "complimentBody": "A compliment arrives with your like and is shown to them first — with your name, even on a free plan.",
+  "complimentHint": "Say what caught your attention in their profile",
+  "complimentNoContact": "Phone numbers, emails and links can't be sent in a compliment.",
+  "complimentTitle": "A compliment for {name}",
+  "@complimentTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "complimentsCount": "{count, plural, =1{1 compliment} other{{count} compliments}}",
+  "@complimentsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "complimentsLeftMonth": "{left} of {total} compliments left this month",
+  "@complimentsLeftMonth": {
+    "placeholders": {
+      "left": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "complimentsTab": "Compliments",
+  "continueToDelete": "No, delete my account",
+  "dataCopied": "Your data was copied as JSON. Paste it into a note or email to keep it.",
+  "devicesFootnote": "Signing out a device ends its session at once. Someone with your phone number still needs a new SMS code to sign in.",
+  "devicesNote": "These devices are signed in to your account. If you don't recognise one, sign it out.",
+  "freezeAccount": "Freeze account",
+  "freezeAccountSub": "Take a break — keep everything",
+  "freezeConfirm": "Freeze my account",
+  "freezeInsteadTitle": "Freeze instead of deleting?",
+  "freezeIntro": "Instead of deleting permanently, you can freeze your account and come back to it exactly as it is.",
+  "freezePointData": "Your profile, photos, matches and conversations are kept as they are.",
+  "freezePointHidden": "You're hidden from discovery and likes straight away.",
+  "freezePointReturn": "Sign in and tap Reactivate whenever you're ready.",
+  "freezePointSubscription": "Your subscription stays active. To stop renewals, cancel it in App Store or Google Play.",
+  "frozenBody": "You're hidden from everyone. Your data, matches, conversations and subscription are waiting for you.",
+  "frozenDone": "Your account is frozen",
+  "frozenTitle": "Your account is frozen",
+  "kmAway": "{km} km",
+  "@kmAway": {
+    "placeholders": {
+      "km": {
+        "type": "int"
+      }
+    }
+  },
+  "languageNote": "On iPhone you can also choose OLFA's language in Settings › OLFA › Language; on Android 13+ in Settings › Apps › OLFA › Language.",
+  "languageSystem": "Device language",
+  "languageSystemSub": "Follows your phone's language",
+  "lastActive": "Last active {when}",
+  "@lastActive": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "likeBack": "Like back",
+  "likedYou": "Liked you",
+  "matchPaused": "Taking a break",
+  "matchedOn": "Matched {when}",
+  "@matchedOn": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "newUnderReview": "New · under review",
+  "newUnderReviewBody": "Photos appear once our team approves this profile.",
+  "noBlocked": "No blocked members",
+  "noBlockedBody": "People you block appear here. You can unblock them at any time.",
+  "onlineHiddenTag": "Online status hidden",
+  "pendingDiscoverBanner": "Your profile is under review. You can browse now; likes and full profiles open once you're approved.",
+  "pendingReadOnly": "Available once your profile is approved.",
+  "photosBlurredTag": "Photos blurred until match",
+  "quotaCompliments": "You've used this month's compliments. More with Plus or Premium.",
+  "quotaVoiceNotes": "You've reached the voice-note limit for this conversation on your plan.",
+  "reactivate": "Reactivate my account",
+  "readReceiptsSub": "If you turn it off, you won't see others' read receipts either.",
+  "receiptsOffTag": "Read receipts off",
+  "searchMatches": "Search matches",
+  "sendCompliment": "Send a compliment",
+  "sendWithLike": "Send with a like",
+  "showCitySub": "Your city and approximate distance on your profile",
+  "showInDiscovery": "Show me in Discover",
+  "showInDiscoverySub": "Off: new people won't see you; your matches and chats continue",
+  "showOnlineSub": "If you hide yours, you won't see others' either",
+  "signOutDevice": "Sign out",
+  "signOutDeviceBody": "This device will be signed out of OLFA right away.",
+  "signedInDevicesSub": "See and sign out devices",
+  "tickIdentity": "Personal details verified",
+  "tickPhoto": "Photo verified",
+  "unblock": "Unblock",
+  "unblockBody": "They'll be able to find and like you again if your preferences match.",
+  "unblockTitle": "Unblock {name}?",
+  "@unblockTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "upgradeForCompliments": "Get more compliments",
+  "verifiedOnly": "Verified",
+  "visibilityHidden": "Hidden",
+  "visibilityHiddenBody": "new people can't see you in Discover",
+  "visibilityIncognito": "Incognito",
+  "visibilityIncognitoBody": "only people you've liked can see you",
+  "visibilityVisible": "Visible",
+  "visibilityVisibleBody": "compatible members can find you",
+  "addCaption": "Add a caption…",
+  "addPhotos": "Add photos",
+  "maxPhotosPerMessage": "Up to {n} photos per message",
+  "@maxPhotosPerMessage": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "photoAccessNeeded": "Allow photo access in Settings to send photos.",
+  "micAccessNeeded": "Allow microphone access in Settings to record voice messages.",
+  "recordVoice": "Record a voice message",
+  "recording": "Recording",
+  "secondsLeft": "{s, plural, =1{1 s left} other{{s} s left}}",
+  "@secondsLeft": {
+    "placeholders": {
+      "s": {
+        "type": "int"
+      }
+    }
+  },
+  "voiceLeft": "{n, plural, =1{1 voice message left in this chat} other{{n} voice messages left in this chat}}",
+  "@voiceLeft": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "voiceLimitTitle": "Voice message limit reached",
+  "voiceLimitBody": "Your plan includes {n} voice messages per conversation. Plus gives 30 and Premium is unlimited.",
+  "@voiceLimitBody": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "voiceMessage": "Voice message, {d}",
+  "@voiceMessage": {
+    "placeholders": {
+      "d": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceMessageShort": "Voice message",
+  "photoMessageShort": "Photo",
+  "play": "Play",
+  "pause": "Pause",
+  "phoneShareTitle": "Sharing a phone number?",
+  "phoneShareBody": "For your safety, share contact details only after you have got to know this person well. Never send money or personal documents.",
+  "sendAnyway": "Send anyway",
+  "phoneSentNote": "You shared a phone number. Make sure you know this person well before continuing outside OLFA.",
+  "phoneReceivedNote": "This message contains a phone number. Get to know this person well before contacting them outside OLFA, and report anything suspicious.",
+  "copy": "Copy",
+  "copied": "Copied",
+  "reportMessage": "Report this message",
+  "reportMessageTitle": "Report message",
+  "reportMessageNote": "Our team will see this message. The other person won't know who reported it.",
+  "reasonInappropriateMessage": "Offensive or inappropriate message",
+  "searchNamesMessages": "Search names or messages",
+  "searchPeople": "Conversations",
+  "searchMessages": "Messages",
+  "noResultsFor": "No results for “{q}”",
+  "@noResultsFor": {
+    "placeholders": {
+      "q": {
+        "type": "String"
+      }
+    }
+  },
+  "clear": "Clear",
+  "you": "You",
+  "height": "Height",
+  "weight": "Weight",
+  "cm": "cm",
+  "kg": "kg",
+  "preferNotToSay": "Prefer not to say",
+  "yourCompliment": "Your compliment",
+  "inAppSounds": "In-app sounds",
+  "inAppSoundsSub": "Message tone and notification chime",
+  "previewSound": "Play sample",
+  "notificationSettings": "Notification settings",
+  "notifPeople": "Likes & matches",
+  "notifMessages": "Messages",
+  "notifAccount": "Account",
+  "unread": "Unread",
+  "yesterday": "Yesterday",
+  "thisWeek": "This week",
+  "noNotificationsHere": "Nothing here",
+  "swipeToRemove": "Swipe a notification to remove it",
+  "agreeByContinuing": "By continuing you agree to the",
+  "and": "and",
+  "back": "Back",
+  "onboarding4Title": "Guidance when you need it",
+  "onboarding4Body": "Book licensed family counselors and psychologists in your language — private chat, secure payment.",
+  "proofSerious": "Marriage-minded members",
+  "proofOneAccount": "One verified phone, one account",
+  "proofMutual": "Shown only when it's mutual",
+  "proofNearest": "Nearest first",
+  "proofReviewed": "Every profile reviewed",
+  "proofTwoTicks": "Photo + details verified",
+  "proofCounselors": "Licensed counselors",
+  "proofPrivate": "Private by design",
+  "photoVerifiedShort": "Photo verified",
+  "detailsVerifiedShort": "Details verified",
+  "subscriptions": "Subscriptions",
+  "consultationsShort": "Consultations",
+  "consultationPayment": "Consultation",
+  "viewPlans": "View plans",
+  "manageInStoreSub": "Change or cancel in the App Store / Google Play",
+  "paymentsFootnote": "Store subscriptions renew automatically until cancelled in your store account. Consultation payments are processed securely by our payment provider; we never see your full card number.",
+  "receipt": "Receipt",
+  "amount": "Amount",
+  "date": "Date",
+  "paidVia": "Paid via",
+  "receiptReference": "Reference (for support)",
+  "pending": "Pending",
+  "storeRefundNote": "Refunds for store subscriptions are handled by Apple or Google.",
+  "consultRefundNote": "Consultation refunds go back to the card you paid with (usually 5–10 days).",
+  "counselorLive": "Live",
+  "upcomingSessions": "Upcoming",
+  "rating": "Rating",
+  "thisMonth": "This month",
+  "deskRequests": "Requests",
+  "deskUpcoming": "Upcoming",
+  "deskCompleted": "Completed",
+  "noUpcoming": "No upcoming sessions",
+  "noCompleted": "No completed sessions yet",
+  "confirmAndSchedule": "Confirm & schedule",
+  "paidOn": "Paid",
+  "edit": "Edit",
+  "deskFootnote": "Confirming opens a private chat — you can write first. Declining refunds the client in full. Amounts shown are before the platform fee."
 }

@@ -39,6 +39,8 @@ export class CreateProfileDto {
   @ApiProperty({ enum: MaritalStatus }) @IsEnum(MaritalStatus) maritalStatus: MaritalStatus;
   @ApiProperty({ enum: EducationLevel }) @IsEnum(EducationLevel) education: EducationLevel;
   @ApiProperty({ example: 'software_engineer', description: 'Key from shared/reference/occupations.tsv' }) @IsIn(ref.occupations) occupation: string;
+  @ApiPropertyOptional({ minimum: 120, maximum: 230, description: 'cm, optional' }) @IsOptional() @Type(() => Number) @IsInt() @Min(120) @Max(230) heightCm?: number;
+  @ApiPropertyOptional({ minimum: 35, maximum: 250, description: 'kg, optional' }) @IsOptional() @Type(() => Number) @IsInt() @Min(35) @Max(250) weightKg?: number;
   @ApiProperty({ enum: MarriageTimeline }) @IsEnum(MarriageTimeline) marriageTimeline: MarriageTimeline;
   @ApiProperty() @IsString() @MinLength(20) @MaxLength(500) @Matches(NO_CONTACT, { message: 'contact details are not allowed in bio' }) bio: string;
   @ApiProperty({ type: [String], example: ['reading', 'travel'] })
@@ -72,6 +74,24 @@ export class LocationDto {
   @ApiProperty() @Type(() => Number) @IsLatitude() latitude: number;
   @ApiProperty() @Type(() => Number) @IsLongitude() longitude: number;
   @ApiPropertyOptional({ description: 'Country detected on the device (reverse geocoding)' }) @IsOptional() @IsIn(ref.countries) countryCode?: string;
+}
+
+/** Privacy settings (all optional — send only what changes). */
+export class PrivacyDto {
+  @ApiPropertyOptional({ description: 'Show me in discovery' }) @IsOptional() @IsBoolean() discoverable?: boolean;
+  @ApiPropertyOptional({ description: 'Reciprocal' }) @IsOptional() @IsBoolean() showOnline?: boolean;
+  @ApiPropertyOptional({ description: 'Reciprocal' }) @IsOptional() @IsBoolean() readReceipts?: boolean;
+  @ApiPropertyOptional({ description: 'Premium' }) @IsOptional() @IsBoolean() incognito?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() blurPhotos?: boolean;
+  @ApiPropertyOptional({ description: 'Show city and distance' }) @IsOptional() @IsBoolean() showCity?: boolean;
+}
+
+export class LocaleDto {
+  @ApiProperty({ enum: ['ar', 'en'] }) @IsIn(['ar', 'en']) locale: 'ar' | 'en';
+}
+
+export class FreezeDto {
+  @ApiPropertyOptional({ enum: ['break', 'met_someone', 'busy', 'privacy', 'other'] }) @IsOptional() @IsIn(['break', 'met_someone', 'busy', 'privacy', 'other']) reason?: string;
 }
 
 export class DeleteAccountDto {

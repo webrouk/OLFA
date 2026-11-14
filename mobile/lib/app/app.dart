@@ -6,6 +6,7 @@ import '../core/localization/generated/app_localizations.dart';
 import '../core/localization/locale_provider.dart';
 import '../core/routing/app_router.dart';
 import '../core/theme/olfa_theme.dart';
+import '../features/messaging/application/incoming_sounds.dart';
 
 class OlfaApp extends ConsumerWidget {
   const OlfaApp({super.key});
@@ -14,6 +15,7 @@ class OlfaApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final locale = ref.watch(localeProvider);
     final router = ref.watch(routerProvider);
+    ref.watch(incomingSoundsProvider); // message tone while the app is open
     return MaterialApp.router(
       title: 'OLFA',
       debugShowCheckedModeBanner: false,

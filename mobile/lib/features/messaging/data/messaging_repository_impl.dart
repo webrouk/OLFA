@@ -1,9 +1,11 @@
+import 'package:dio/dio.dart';
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
 import '../../../core/network/api_client.dart';
+import '../../../core/errors/failure.dart';
 import '../../../core/network/api_errors.dart';
 import '../../../core/security/secure_store.dart';
 import '../../../shared/models/models.dart';
@@ -27,6 +29,7 @@ class ApiMessagingRepository implements MessagingRepository {
   Future<void> _connect() async {
     if (_socket != null) return;
     final token = await _store.readAccessToken();
+    if (token == null || _socket != null) return; // not signed in yet: connect on the next call
     final s = io.io('$apiBaseUrl/chat', io.OptionBuilder().setTransports(['websocket']).setAuth({'token': token}).enableReconnection().build());
     _socket = s;
     s.onConnect((_) => _onConnection(true));
@@ -45,29 +48,49 @@ class ApiMessagingRepository implements MessagingRepository {
       // Read receipts apply to all my messages in the conversation up to `at`.
       _events.add(ChatEvent.readReceipt(m['conversationId'] as String, '*'));
     });
+    s.on('conversation:moved', (data) {
+      final m = Map<String, dynamic>.from(data as Map);
+      _events.add(ChatEvent.moved(m['conversationId'] as String, fromApiEnum(ConversationSection.values, m['section'], ConversationSection.inbox)));
+    });
   }
 
   @override
-  Future<List<Conversation>> conversations() => guard(() async {
+  Future<ConversationIndex> index() => guard(() async {
         final r = await _api.dio.get<List<dynamic>>('/conversations');
-        return r.data!.where((x) => (x as Map)['peer'] != null).map((x) {
+        final ent = await _api.dio.get<Map<String, dynamic>>('/me/entitlements');
+        final limit = ((ent.data!['features'] as Map?)?['visibleConversations'] as num?)?.toInt() ?? 5;
+        final visible = <Conversation>[], locked = <LockedConversation>[];
+        for (final x in r.data!) {
           final j = Map<String, dynamic>.from(x as Map);
-          final last = j['lastMessage'] as Map?;
-          return Conversation(
-            id: j['id'] as String,
-            peer: ApiMappers.profile(Map<String, dynamic>.from(j['peer'] as Map)),
-            lastMessage: last?['body'] as String?,
-            lastAt: j['lastMessageAt'] == null ? null : DateTime.parse(j['lastMessageAt'] as String).toLocal(),
-            unread: (j['unread'] as num).toInt(),
-          );
-        }).toList();
+          final section = fromApiEnum(ConversationSection.values, j['section'], ConversationSection.inbox);
+          if (j['locked'] == true) {
+            locked.add(LockedConversation(id: j['id'] as String, section: section));
+          } else if (j['peer'] != null || j['consultation'] != null) {
+            visible.add(ApiMappers.conversation(j));
+          }
+        }
+        return ConversationIndex(visible: visible, locked: locked, visibleLimit: limit);
       });
 
   @override
   Future<Conversation> conversation(String id) async {
-    final all = await conversations();
-    return all.firstWhere((c) => c.id == id);
+    final ix = await index();
+    if (ix.locked.any((c) => c.id == id)) throw const EntitlementRequiredFailure('visibleConversations');
+    return ix.visible.firstWhere((c) => c.id == id, orElse: () => throw const ServerFailure('not_found'));
   }
+
+  Future<void> _post(String path, [Object? body]) => guard(() => _api.dio.post<void>(path, data: body));
+
+  @override
+  Future<void> archive(String conversationId) => _post('/conversations/$conversationId/archive');
+  @override
+  Future<void> restore(String conversationId) => _post('/conversations/$conversationId/restore');
+  @override
+  Future<void> unmatch(String conversationId) => _post('/conversations/$conversationId/unmatch');
+  @override
+  Future<void> requestRematch(String conversationId) => _post('/conversations/$conversationId/rematch');
+  @override
+  Future<void> respondRematch(String conversationId, {required bool accept}) => _post('/conversations/$conversationId/rematch/respond', {'accept': accept});
 
   @override
   Future<({List<ChatMessage> items, bool hasMore})> page(String conversationId, {DateTime? before}) => guard(() async {
@@ -83,11 +106,70 @@ class ApiMessagingRepository implements MessagingRepository {
       });
 
   @override
-  Future<ChatMessage> send(String conversationId, String clientId, String body) => guard(() async {
-        final r = await _api.dio.post<Map<String, dynamic>>('/conversations/$conversationId/messages', data: {'clientMessageId': clientId, 'body': body});
+  Future<ChatMessage> send(String conversationId, String clientId, String body, {OutgoingMedia? media}) => guard(() async {
+        final ids = <String>[];
+        if (media != null) {
+          // 1) ask for a private upload slot per file  2) upload straight to storage  3) send with the ids
+          final parts = media.isVoice
+              ? [(kind: 'VOICE', mime: 'audio/mp4', bytes: media.voice!.bytes, w: null, h: null, dur: media.voice!.durationMs, wave: media.voice!.waveform)]
+              : [for (final f in media.files) (kind: 'IMAGE', mime: 'image/jpeg', bytes: f.bytes, w: f.width, h: f.height, dur: null, wave: const <int>[])];
+          for (final p in parts) {
+            final slot = await _api.dio.post<Map<String, dynamic>>('/conversations/$conversationId/attachments', data: {
+              'kind': p.kind,
+              'mime': p.mime,
+              'bytes': p.bytes.length,
+              if (p.w != null) 'width': p.w,
+              if (p.h != null) 'height': p.h,
+              if (p.dur != null) 'durationMs': p.dur,
+              if (p.wave.isNotEmpty) 'waveform': p.wave,
+            });
+            final up = Map<String, dynamic>.from(slot.data!['upload'] as Map);
+            await Dio().post<void>(up['url'] as String,
+                data: FormData.fromMap({
+                  ...Map<String, dynamic>.from(up['fields'] as Map),
+                  'file': MultipartFile.fromBytes(p.bytes, filename: p.kind == 'VOICE' ? 'voice.m4a' : 'photo.jpg', contentType: DioMediaType.parse(p.mime)),
+                }));
+            ids.add(slot.data!['id'] as String);
+          }
+        }
+        final r = await _api.dio.post<Map<String, dynamic>>('/conversations/$conversationId/messages', data: {
+          'clientMessageId': clientId,
+          if (body.trim().isNotEmpty) 'body': body,
+          if (ids.isNotEmpty) 'attachmentIds': ids,
+        });
         final j = Map<String, dynamic>.from(r.data!)..putIfAbsent('receipts', () => const []);
         return ApiMappers.message(j, conversationId, await _me());
-      }, quota: 'messages');
+      }, quota: media?.isVoice ?? false ? 'voice' : 'messages');
+
+  @override
+  Future<ChatSearchResult> search(String query) => guard(() async {
+        final r = await _api.dio.get<Map<String, dynamic>>('/conversations/search', queryParameters: {'q': query});
+        final me = await _me();
+        return ChatSearchResult(
+          conversationIds: (r.data!['conversations'] as List).cast<String>(),
+          messages: (r.data!['messages'] as List).map((x) {
+            final m = Map<String, dynamic>.from(x as Map);
+            return ChatMessage(
+              id: m['id'] as String,
+              clientId: m['id'] as String,
+              conversationId: m['conversationId'] as String,
+              fromMe: m['fromMe'] == true || m['senderId'] == me,
+              body: m['body'] as String,
+              sentAt: DateTime.parse(m['createdAt'] as String).toLocal(),
+              status: MessageStatus.delivered,
+            );
+          }).toList(),
+        );
+      });
+
+  @override
+  Future<({int limit, int? remaining})> voiceQuota(String conversationId) => guard(() async {
+        final r = await _api.dio.get<Map<String, dynamic>>('/conversations/$conversationId/voice-quota');
+        return (limit: (r.data!['limit'] as num).toInt(), remaining: (r.data!['remaining'] as num?)?.toInt());
+      });
+
+  @override
+  void setTyping(String conversationId, bool on) => sendTyping(conversationId, on);
 
   @override
   Stream<ChatEvent> events() {
@@ -108,13 +190,29 @@ class DemoMessagingRepository implements MessagingRepository {
   final DemoBackend _b;
 
   @override
-  Future<List<Conversation>> conversations() => _b.conversations();
+  Future<ConversationIndex> index() => _b.conversationIndex();
   @override
   Future<Conversation> conversation(String id) => _b.conversation(id);
   @override
+  Future<void> archive(String conversationId) => _b.setFolder(conversationId, ConversationSection.archive);
+  @override
+  Future<void> restore(String conversationId) => _b.setFolder(conversationId, ConversationSection.inbox);
+  @override
+  Future<void> unmatch(String conversationId) => _b.unmatch(conversationId);
+  @override
+  Future<void> requestRematch(String conversationId) => _b.requestRematch(conversationId);
+  @override
+  Future<void> respondRematch(String conversationId, {required bool accept}) => _b.respondRematch(conversationId, accept);
+  @override
   Future<({List<ChatMessage> items, bool hasMore})> page(String conversationId, {DateTime? before}) => _b.messages(conversationId, before: before);
   @override
-  Future<ChatMessage> send(String conversationId, String clientId, String body) => _b.send(conversationId, clientId, body);
+  Future<ChatMessage> send(String conversationId, String clientId, String body, {OutgoingMedia? media}) => _b.send(conversationId, clientId, body, media: media);
+  @override
+  void setTyping(String conversationId, bool on) {} // the demo peer types on its own
+  @override
+  Future<ChatSearchResult> search(String query) => _b.searchChats(query);
+  @override
+  Future<({int limit, int? remaining})> voiceQuota(String conversationId) => _b.voiceQuota(conversationId);
   @override
   Stream<ChatEvent> events() => _b.events;
 }
@@ -140,6 +238,39 @@ final messagingRepositoryProvider = Provider<MessagingRepository>((ref) {
   return repo;
 });
 
-final conversationsProvider = FutureProvider<List<Conversation>>((ref) => ref.watch(messagingRepositoryProvider).conversations());
+/// Re-fetched whenever a conversation moves between sections (socket event).
+final conversationIndexProvider = FutureProvider<ConversationIndex>((ref) {
+  final repo = ref.watch(messagingRepositoryProvider);
+  final sub = repo.events().where((e) => e.movedTo != null).listen((_) => ref.invalidateSelf());
+  ref.onDispose(sub.cancel);
+  return repo.index();
+});
 
-final conversationProvider = FutureProvider.family<Conversation, String>((ref, id) => ref.watch(messagingRepositoryProvider).conversation(id));
+final conversationProvider = FutureProvider.family<Conversation, String>((ref, id) {
+  final repo = ref.watch(messagingRepositoryProvider);
+  final sub = repo.events().where((e) => e.conversationId == id && e.movedTo != null).listen((_) => ref.invalidateSelf());
+  ref.onDispose(sub.cancel);
+  return repo.conversation(id);
+});
+
+/// Archive / restore / unmatch / re-match, refreshing the lists afterwards.
+class ConversationActions {
+  ConversationActions(this._ref);
+  final Ref _ref;
+  MessagingRepository get _repo => _ref.read(messagingRepositoryProvider);
+
+  Future<void> _run(String id, Future<void> Function() op) async {
+    await op();
+    _ref
+      ..invalidate(conversationIndexProvider)
+      ..invalidate(conversationProvider(id));
+  }
+
+  Future<void> archive(String id) => _run(id, () => _repo.archive(id));
+  Future<void> restore(String id) => _run(id, () => _repo.restore(id));
+  Future<void> unmatch(String id) => _run(id, () => _repo.unmatch(id));
+  Future<void> requestRematch(String id) => _run(id, () => _repo.requestRematch(id));
+  Future<void> respondRematch(String id, {required bool accept}) => _run(id, () => _repo.respondRematch(id, accept: accept));
+}
+
+final conversationActionsProvider = Provider<ConversationActions>(ConversationActions.new);

@@ -2,7 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { PrismaService } from '../../common/infra';
-import { hamming, processImage, sniffImage, VariantName } from './image-pipeline';
+import { hamming, processImage, sanitizeChatImage, sniffImage, VariantName } from './image-pipeline';
 import { MEDIA_QUEUE } from './media.module';
 import { MODERATION_PROVIDER, ModerationProvider } from './moderation.provider';
 import { StorageService } from './storage.service';
@@ -23,8 +23,9 @@ export class MediaProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<{ photoId: string }>) {
-    const photo = await this.prisma.userPhoto.findUnique({ where: { id: job.data.photoId } });
+  async process(job: Job<{ photoId?: string; attachmentId?: string }>) {
+    if (job.name === 'chat-image') return this.chatImage(job.data.attachmentId!);
+    const photo = await this.prisma.userPhoto.findUnique({ where: { id: job.data.photoId! } });
     if (!photo || photo.deletedAt || photo.status !== 'PROCESSING') return;
 
     const original = await this.storage.getPrivate(photo.storageKey);
@@ -73,5 +74,20 @@ export class MediaProcessor extends WorkerHost {
 
   private async reject(photoId: string, reason: string) {
     await this.prisma.userPhoto.update({ where: { id: photoId }, data: { status: 'REJECTED', rejectReason: reason, reviewedAt: new Date() } });
+  }
+
+  /** Chat photo: verify it is really an image, strip metadata, cap at 2048 px. Non-images are removed. */
+  private async chatImage(id: string) {
+    const a = await this.prisma.messageAttachment.findUnique({ where: { id } });
+    if (!a || a.kind !== 'IMAGE') return;
+    const buf = await this.storage.getPrivate(a.storageKey);
+    if (!sniffImage(buf)) {
+      this.log.warn(`chat attachment ${id} is not an image — removed`);
+      await this.prisma.messageAttachment.delete({ where: { id } });
+      return;
+    }
+    const out = await sanitizeChatImage(buf);
+    await this.storage.putPrivate(a.storageKey, out.data, 'image/jpeg');
+    await this.prisma.messageAttachment.update({ where: { id }, data: { mime: 'image/jpeg', bytes: out.data.length, width: out.width, height: out.height } });
   }
 }

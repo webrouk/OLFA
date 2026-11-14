@@ -111,6 +111,8 @@ enum MatchStatus {
 enum MessageType {
   TEXT
   SYSTEM
+  IMAGE
+  VOICE
 
   @@map("message_type")
 }
@@ -179,6 +181,7 @@ enum NotificationType {
   CONVERSATION_EXPIRING
   REMATCH_REQUEST
   REMATCH_ACCEPTED
+  NEW_COMPLIMENT
 
   @@map("notification_type")
 }
@@ -271,6 +274,9 @@ model User {
   termsAcceptedAt     DateTime?     @map("terms_accepted_at") @db.Timestamptz
   lastActiveAt        DateTime?     @map("last_active_at") @db.Timestamptz
   deletionRequestedAt DateTime?     @map("deletion_requested_at") @db.Timestamptz
+  frozenAt            DateTime?     @map("frozen_at") @db.Timestamptz
+  freezeReason        String?       @map("freeze_reason") @db.VarChar(40)
+  privacy             UserPrivacySettings?
   deletedAt           DateTime?     @map("deleted_at") @db.Timestamptz
   createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt           DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
@@ -330,6 +336,8 @@ model UserProfile {
   wantsChildren     Boolean?         @map("wants_children")
   education         EducationLevel
   occupation        String           @db.VarChar(60) // key from shared/reference/occupations.tsv
+  heightCm          Int?             @map("height_cm") @db.SmallInt // 120–230, optional
+  weightKg          Int?             @map("weight_kg") @db.SmallInt // 35–250, optional
   marriageTimeline  MarriageTimeline @map("marriage_timeline")
   smoking           Boolean?
   willingToRelocate Boolean?         @map("willing_to_relocate")
@@ -454,6 +462,7 @@ model Like {
   fromUserId String   @map("from_user_id") @db.Uuid
   toUserId   String   @map("to_user_id") @db.Uuid
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  compliment String?  @db.VarChar(300) // sent with the like; monthly quota
   from       User     @relation("LikeFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
   to         User     @relation("LikeTo", fields: [toUserId], references: [id], onDelete: Cascade)
 
@@ -566,13 +575,15 @@ model Message {
   senderId        String           @map("sender_id") @db.Uuid
   clientMessageId String           @map("client_message_id") @db.Uuid
   type            MessageType      @default(TEXT)
-  body            String           @db.VarChar(2000)
+  body            String           @default("") @db.VarChar(2000)
   flagged         Boolean          @default(false)
+  containsPhone   Boolean          @default(false) @map("contains_phone")
   createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz
   deletedAt       DateTime?        @map("deleted_at") @db.Timestamptz
   conversation    Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender          User             @relation(fields: [senderId], references: [id], onDelete: Cascade)
   receipts        MessageReceipt[]
+  attachments     MessageAttachment[]
 
   @@unique([conversationId, senderId, clientMessageId])
   @@index([conversationId, createdAt(sort: Desc)], map: "messages_conv_idx")
@@ -1146,4 +1157,56 @@ model RematchRequest {
   requester      User          @relation(fields: [requestedBy], references: [id], onDelete: Cascade)
 
   @@map("rematch_requests")
+}
+
+/// Privacy choices enforced by the server (discovery, presence, receipts, photos).
+model UserPrivacySettings {
+  userId       String   @id @map("user_id") @db.Uuid
+  discoverable Boolean  @default(true)
+  showOnline   Boolean  @default(true) @map("show_online")
+  readReceipts Boolean  @default(true) @map("read_receipts")
+  incognito    Boolean  @default(false)
+  blurPhotos   Boolean  @default(false) @map("blur_photos")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_privacy_settings")
+}
+
+enum AttachmentKind {
+  IMAGE
+  VOICE
+
+  @@map("attachment_kind")
+}
+
+/// Chat photo (≤3 per message) or voice note (≤60 s). Private bucket only;
+/// clients get short-lived signed links.
+model MessageAttachment {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId      String?        @map("message_id") @db.Uuid
+  uploaderId     String         @map("uploader_id") @db.Uuid
+  conversationId String         @map("conversation_id") @db.Uuid
+  kind           AttachmentKind
+  storageKey     String         @unique @map("storage_key") @db.VarChar(200)
+  mime           String         @db.VarChar(40)
+  bytes          Int
+  width          Int?           @db.SmallInt
+  height         Int?           @db.SmallInt
+  durationMs     Int?           @map("duration_ms")
+  waveform       Int[]          @db.SmallInt
+  position       Int            @default(0) @db.SmallInt
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  message        Message?       @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId], map: "message_attachments_message_idx")
+  @@map("message_attachments")
+}
+
+/// Private objects to delete (filled by a trigger when attachments are removed).
+model StorageGarbage {
+  storageKey String   @id @map("storage_key") @db.VarChar(200)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("storage_garbage")
 }

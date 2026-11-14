@@ -13,7 +13,11 @@ import '../../../shared/models/models.dart';
 import '../../settings/presentation/report_sheet.dart';
 import '../application/chat_controller.dart';
 import '../data/messaging_repository_impl.dart';
-import 'conversations_screen.dart' show OfflineBar;
+import '../../../core/errors/failure.dart';
+import 'conversations_screen.dart' show OfflineBar, showConversationMenu;
+import '../../../shared/components/verification_ticks.dart';
+import 'chat_widgets.dart';
+import 'package:flutter/services.dart';
 
 /// 19 — Private chat: realtime, paginated, optimistic, keyboard-aware.
 class ChatScreen extends ConsumerStatefulWidget {
@@ -24,7 +28,6 @@ class ChatScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
-  final _input = TextEditingController();
   final _scroll = ScrollController();
   bool _showJump = false;
 
@@ -39,12 +42,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ref.read(chatControllerProvider(widget.conversationId).notifier).loadOlder();
       }
     });
-    _input.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
-    _input.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -54,12 +55,42 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _scroll.animateTo(0, duration: motion(context, const Duration(milliseconds: 250)), curve: Curves.easeOut);
   }
 
-  void _send() {
-    final text = _input.text;
-    if (text.trim().isEmpty) return;
-    _input.clear();
-    ref.read(chatControllerProvider(widget.conversationId).notifier).send(text);
-    _jumpToLatest();
+  /// Long-press a message: copy, or report a message from the other person.
+  Future<void> _messageMenu(ChatMessage m, Conversation? conv) async {
+    final l = AppLocalizations.of(context);
+    HapticFeedback.selectionClick();
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheet) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: TileGroup(children: [
+            if (m.body.isNotEmpty)
+              OlfaListTile(
+                icon: Icons.copy_rounded,
+                title: l.copy,
+                showChevron: false,
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: m.body));
+                  Navigator.of(sheet).pop();
+                  showToast(context, l.copied);
+                },
+              ),
+            if (!m.fromMe && conv?.peer != null)
+              OlfaListTile(
+                icon: Icons.flag_outlined,
+                title: l.reportMessage,
+                danger: true,
+                showChevron: false,
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  showReportSheet(context, ref, conv!.peer!, message: m);
+                },
+              ),
+          ]),
+        ),
+      ),
+    );
   }
 
   @override
@@ -80,18 +111,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         title: conv == null
             ? const OlfaSkeleton(width: 120, height: 14)
             : InkWell(
-                onTap: () => context.push(Routes.profile(conv.peer.id)),
+                onTap: conv.peer == null ? null : () => context.push(Routes.profile(conv.peer!.id)),
                 child: Row(children: [
-                  OlfaAvatar(size: 40, url: conv.peer.mainPhoto?.thumbUrl, online: conv.peer.online),
+                  if (conv.peer != null)
+                    OlfaAvatar(size: 40, url: conv.peer!.mainPhoto?.thumbUrl, online: conv.peer!.online && conv.canWrite)
+                  else
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(color: OlfaColors.primaryTint(), shape: BoxShape.circle),
+                      child: const Icon(Icons.support_agent_rounded, color: OlfaColors.primary, size: 20),
+                    ),
                   const SizedBox(width: 10),
                   Flexible(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                       Row(mainAxisSize: MainAxisSize.min, children: [
-                        Flexible(child: Text(conv.peer.name, overflow: TextOverflow.ellipsis, style: t.bodyLarge.copyWith(fontWeight: FontWeight.w700))),
-                        if (conv.peer.photosReviewed) ...[const SizedBox(width: 6), VerifiedBadge(size: 16, semanticLabel: l.photosReviewed)],
+                        Flexible(child: Text(conv.title, overflow: TextOverflow.ellipsis, style: t.bodyLarge.copyWith(fontWeight: FontWeight.w700))),
+                        if (conv.peer != null) ...[const SizedBox(width: 6), VerificationTicks(profile: conv.peer!, size: 15)],
                       ]),
                       Text(
-                        typing ? l.typing : (conv.peer.online ? l.onlineNow : l.matchedRecently),
+                        conv.isUnmatched
+                            ? l.screenUnmatched
+                            : typing
+                                ? l.typing
+                                : conv.isConsultation
+                                    ? l.consultationTag
+                                    : ((conv.peer?.online ?? false) ? l.onlineNow : l.matchedRecently),
                         style: t.caption.copyWith(color: typing ? OlfaColors.primary : null),
                       ),
                     ]),
@@ -99,13 +144,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ]),
               ),
         actions: [
-          if (conv != null) OlfaIconButton(icon: Icons.more_horiz_rounded, tooltip: l.reportOrBlock, onPressed: () => showReportSheet(context, ref, conv.peer)),
+          if (conv != null && conv.isConsultation && conv.peer != null)
+            OlfaIconButton(icon: Icons.more_horiz_rounded, tooltip: l.reportOrBlock, onPressed: () => showReportSheet(context, ref, conv.peer!)),
+          if (conv != null && !conv.isConsultation)
+            OlfaIconButton(icon: Icons.more_horiz_rounded, tooltip: l.conversationMenu, onPressed: () => showConversationMenu(context, ref, conv)),
           const SizedBox(width: 6),
         ],
       ),
       body: Column(
         children: [
           if (!online) OfflineBar(text: l.offlineChat),
+          if (conv != null && conv.expiringSoon && conv.expiresAt != null)
+            _ExpiryBanner(days: conv.expiresAt!.difference(DateTime.now()).inDays.clamp(0, 99).toInt()),
           Expanded(
             child: Stack(
               children: [
@@ -127,7 +177,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         if (idx == items.length) {
                           return s.loadingMore
                               ? const Padding(padding: EdgeInsets.all(12), child: Center(child: SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2, color: OlfaColors.primary))))
-                              : (s.hasMore ? const SizedBox(height: 24) : _SystemPill(text: l.matchedSayHello));
+                              : (s.hasMore ? const SizedBox(height: 24) : _SystemPill(text: (conv?.isConsultation ?? false) ? l.consultationChatNote : l.matchedSayHello));
                         }
                         final m = items[idx];
                         final older = idx + 1 < items.length ? items[idx + 1] : null;
@@ -136,10 +186,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           if (newDay) _SystemPill(text: DateFormat.yMMMd(Localizations.localeOf(context).languageCode).format(m.sentAt)),
                           _Bubble(
                             message: m,
+                            onLongPress: () => _messageMenu(m, conv),
                             onRetry: m.status == MessageStatus.failed
                                 ? () => ref.read(chatControllerProvider(widget.conversationId).notifier).send(m.body, retryClientId: m.clientId)
                                 : null,
                           ),
+                          if (m.containsPhone)
+                            Align(alignment: m.fromMe ? AlignmentDirectional.centerEnd : AlignmentDirectional.centerStart, child: PhoneSafetyNote(mine: m.fromMe)),
                         ]);
                       },
                     );
@@ -154,46 +207,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ],
             ),
           ),
-          // Composer
-          DecoratedBox(
-            decoration: const BoxDecoration(color: OlfaColors.white, border: Border(top: BorderSide(color: OlfaColors.gray))),
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-                child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  // Attachments are disabled by policy for now (AppSettings.chat.attachments).
-                  Expanded(
-                    child: TextField(
-                      controller: _input,
-                      minLines: 1,
-                      maxLines: 5,
-                      maxLength: 2000,
-                      textInputAction: TextInputAction.newline,
-                      decoration: InputDecoration(
-                        hintText: l.messageHint,
-                        counterText: '',
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                        border: OutlineInputBorder(borderRadius: OlfaRadius.all(24), borderSide: BorderSide.none),
-                        enabledBorder: OutlineInputBorder(borderRadius: OlfaRadius.all(24), borderSide: BorderSide.none),
-                        focusedBorder: OutlineInputBorder(borderRadius: OlfaRadius.all(24), borderSide: const BorderSide(color: OlfaColors.primary, width: 1.5)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // arrow_forward mirrors automatically in RTL.
-                  OlfaIconButton(
-                    icon: Icons.arrow_forward_rounded,
-                    tooltip: l.send,
-                    style: OlfaIconStyle.filled,
-                    circle: true,
-                    size: 48,
-                    onPressed: _input.text.trim().isEmpty ? null : _send,
-                  ),
-                ]),
-              ),
-            ),
-          ),
+          // Unmatched: messaging stops; one re-match request per conversation.
+          if (conv != null && conv.isUnmatched) _UnmatchedPanel(conversation: conv) else ChatComposer(conversationId: widget.conversationId, peerName: conv?.title, onSent: _jumpToLatest),
         ],
       ),
     );
@@ -201,9 +216,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message, this.onRetry});
+  const _Bubble({required this.message, this.onRetry, this.onLongPress});
   final ChatMessage message;
   final VoidCallback? onRetry;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -227,16 +243,24 @@ class _Bubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: me ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            ConstrainedBox(
+            GestureDetector(
+              onLongPress: onLongPress,
+              child: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: maxW),
               child: Container(
-                padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
+                padding: message.kind == MessageKind.image ? const EdgeInsets.fromLTRB(4, 4, 4, 6) : const EdgeInsets.fromLTRB(14, 10, 14, 6),
                 decoration: BoxDecoration(
                   color: me ? OlfaColors.primary : OlfaColors.gray,
                   borderRadius: BorderRadiusDirectional.only(topStart: r, topEnd: r, bottomStart: me ? r : tail, bottomEnd: me ? tail : r),
                 ),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
-                  Align(alignment: AlignmentDirectional.centerStart, widthFactor: 1, child: Text(message.body, style: context.type.bodyMedium.copyWith(color: fg))),
+                  if (message.kind == MessageKind.image && message.attachments.isNotEmpty) PhotoGrid(items: message.attachments, maxWidth: maxW - 8),
+                  if (message.kind == MessageKind.voice && message.attachments.isNotEmpty) VoiceBubble(attachment: message.attachments.first, mine: me),
+                  if (message.body.isNotEmpty)
+                    Padding(
+                      padding: message.kind == MessageKind.image ? const EdgeInsets.fromLTRB(10, 6, 10, 0) : EdgeInsets.zero,
+                      child: Align(alignment: AlignmentDirectional.centerStart, widthFactor: 1, child: Text(message.body, style: context.type.bodyMedium.copyWith(color: fg))),
+                    ),
                   const SizedBox(height: 2),
                   Row(mainAxisSize: MainAxisSize.min, children: [
                     Text(DateFormat.Hm().format(message.sentAt), style: TextStyle(fontSize: 10.5, color: fg.withValues(alpha: 0.75), fontFamily: 'Montserrat')),
@@ -250,6 +274,7 @@ class _Bubble extends StatelessWidget {
                   ]),
                 ]),
               ),
+            ),
             ),
             if (onRetry != null)
               TextButton.icon(
@@ -317,6 +342,88 @@ class _TypingBubbleState extends State<_TypingBubble> with SingleTickerProviderS
               );
             }),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ExpiryBanner extends StatelessWidget {
+  const _ExpiryBanner({required this.days});
+  final int days;
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        color: OlfaColors.primaryTint(),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        child: Row(children: [
+          const Icon(Icons.schedule_rounded, size: 17, color: OlfaColors.primary),
+          const SizedBox(width: 8),
+          Expanded(child: Text(AppLocalizations.of(context).expiresInDays(days), style: context.type.bodySmall)),
+        ]),
+      );
+}
+
+/// Replaces the composer after an unmatch.
+class _UnmatchedPanel extends ConsumerStatefulWidget {
+  const _UnmatchedPanel({required this.conversation});
+  final Conversation conversation;
+  @override
+  ConsumerState<_UnmatchedPanel> createState() => _UnmatchedPanelState();
+}
+
+class _UnmatchedPanelState extends ConsumerState<_UnmatchedPanel> {
+  bool _busy = false;
+
+  Future<void> _do(Future<void> Function() op, String done) async {
+    setState(() => _busy = true);
+    try {
+      await op();
+      if (mounted) showToast(context, done);
+    } on Failure catch (e) {
+      if (mounted) showToast(context, failureMessage(context, e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final c = widget.conversation;
+    final actions = ref.read(conversationActionsProvider);
+    final rm = c.rematch;
+    final text = switch (rm?.status) {
+      RematchStatus.pending => rm!.byMe ? l.rematchWaiting(c.title) : l.rematchIncoming(c.title),
+      RematchStatus.declined || RematchStatus.accepted => rm!.status == RematchStatus.declined ? l.rematchDeclined : l.rematchAlreadyUsed,
+      null => l.chatClosedUnmatched,
+    };
+    return DecoratedBox(
+      decoration: const BoxDecoration(color: OlfaColors.white, border: Border(top: BorderSide(color: OlfaColors.gray))),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.link_off_rounded, size: 19, color: OlfaColors.primary),
+              const SizedBox(width: 10),
+              Expanded(child: Text(text, style: context.type.bodySmall)),
+            ]),
+            const SizedBox(height: 10),
+            if (c.canRequestRematch) ...[
+              PrimaryButton(label: l.rematchRequest, loading: _busy, onPressed: _busy ? null : () => _do(() => actions.requestRematch(c.id), l.rematchSent)),
+              const SizedBox(height: 4),
+              Text(l.rematchRequestBody, textAlign: TextAlign.center, style: context.type.caption),
+            ] else if (c.canAnswerRematch)
+              Row(children: [
+                Expanded(child: SecondaryButton(label: l.rematchDecline, onPressed: _busy ? null : () => _do(() => actions.respondRematch(c.id, accept: false), l.rematchDeclined))),
+                const SizedBox(width: 10),
+                Expanded(child: PrimaryButton(label: l.rematchAccept, loading: _busy, onPressed: _busy ? null : () => _do(() => actions.respondRematch(c.id, accept: true), l.rematchAccepted))),
+              ])
+            else
+              Center(child: OlfaTag(rm?.status == RematchStatus.pending ? l.rematchPendingTag : l.rematchUsedTag, icon: Icons.hourglass_empty_rounded)),
+          ]),
         ),
       ),
     );

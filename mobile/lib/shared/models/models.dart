@@ -88,7 +88,29 @@ class UserProfile {
     this.completeness = 0,
     this.showLocation = true,
     this.online = false,
+    this.nationality,
+    this.distanceKm,
+    this.photosBlurred = false,
+    this.heightCm,
+    this.weightKg,
+    this.underReview = false,
   });
+
+  /// New account awaiting moderation: shown with basics only.
+  final bool underReview;
+
+  /// The owner shows photos only after a match (server sends blurred copies).
+  final bool photosBlurred;
+
+  /// Optional; shown on the profile and usable as filters.
+  final int? heightCm;
+  final int? weightKg;
+
+  /// ISO code of the nationality (independent of the residence country).
+  final String? nationality;
+
+  /// Rounded distance from the viewer (≥1 km); null when hidden or unknown.
+  final int? distanceKm;
 
   final String id;
   final String name;
@@ -153,7 +175,28 @@ class Entitlements {
     required this.seeWhoLikedYou,
     required this.incognito,
     this.resetsAt,
+    this.searchOutsideCountry = false,
+    this.visibleConversations = 5,
+    this.monthlyCompliments = 0,
+    this.complimentsUsed = 0,
+    this.complimentsResetAt,
+    this.accountActive = true,
   });
+
+  /// Compliments (a message sent with a like) per calendar month: Free 3, Plus 10, Premium 20.
+  final int monthlyCompliments;
+  final int complimentsUsed;
+  final DateTime? complimentsResetAt;
+  int get complimentsLeft => (monthlyCompliments - complimentsUsed).clamp(0, monthlyCompliments);
+
+  /// False while the profile awaits review: discovery is read-only.
+  final bool accountActive;
+
+  /// Discovery beyond the user's current country (Plus / Premium).
+  final bool searchOutsideCountry;
+
+  /// Inbox + archive conversations shown; -1 = unlimited.
+  final int visibleConversations;
 
   /// When today's quotas renew (server computes it in UTC; render in local time).
   final DateTime? resetsAt;
@@ -172,7 +215,7 @@ class Entitlements {
   int get messagesLeft => (dailyMessages - messagesUsed).clamp(0, dailyMessages);
   int get undosLeft => (dailyUndos - undosUsed).clamp(0, dailyUndos);
 
-  Entitlements copyWith({int? likesUsed, int? messagesUsed, int? undosUsed}) => Entitlements(
+  Entitlements copyWith({int? likesUsed, int? messagesUsed, int? undosUsed, int? complimentsUsed}) => Entitlements(
         plan: plan,
         dailyLikes: dailyLikes,
         likesUsed: likesUsed ?? this.likesUsed,
@@ -184,6 +227,12 @@ class Entitlements {
         seeWhoLikedYou: seeWhoLikedYou,
         incognito: incognito,
         resetsAt: resetsAt,
+        searchOutsideCountry: searchOutsideCountry,
+        visibleConversations: visibleConversations,
+        monthlyCompliments: monthlyCompliments,
+        complimentsUsed: complimentsUsed ?? this.complimentsUsed,
+        complimentsResetAt: complimentsResetAt,
+        accountActive: accountActive,
       );
 }
 
@@ -210,8 +259,14 @@ class PlanInfo {
   final String? localizedPrice; // from StoreKit / Play Billing, never hard-coded
 }
 
+/// Where discovery looks. Nearest first is always the order; outside the
+/// user's current country requires Plus or Premium (enforced by the server).
+enum DiscoveryScope { nearby, myCountry, otherCountry }
+
 class DiscoverFilters {
   const DiscoverFilters({
+    this.scope = DiscoveryScope.nearby,
+    this.nationality,
     this.ageMin = 22,
     this.ageMax = 38,
     this.countryIso,
@@ -221,20 +276,29 @@ class DiscoverFilters {
     this.educations = const {},
     this.profession = '',
     this.minCompatibility,
+    this.height,
+    this.weight,
   });
+
+  /// Inclusive ranges; null = any. Members who left the value empty are not shown when a range is set.
+  final (int, int)? height; // cm
+  final (int, int)? weight; // kg
 
   final int ageMin;
   final int ageMax;
-  final String? countryIso; // null = any
+  final DiscoveryScope scope;
+  final String? countryIso; // set for myCountry / otherCountry
+  final String? nationality; // paid
   final String city;
   final Set<String> interests;
   final Set<MaritalStatus> maritalStatuses; // paid
   final Set<Education> educations; // paid
-  final String profession; // paid
+  final String profession; // paid · occupation key
   final int? minCompatibility; // paid
 
   bool get usesPaidFilters =>
       maritalStatuses.isNotEmpty ||
+      nationality != null ||
       educations.isNotEmpty ||
       profession.isNotEmpty ||
       minCompatibility != null ||
@@ -242,6 +306,8 @@ class DiscoverFilters {
       interests.any((k) => interestByKey(k)?.basic == false);
 
   DiscoverFilters copyWith({
+    DiscoveryScope? scope,
+    String? Function()? nationality,
     int? ageMin,
     int? ageMax,
     String? Function()? countryIso,
@@ -251,8 +317,12 @@ class DiscoverFilters {
     Set<Education>? educations,
     String? profession,
     int? Function()? minCompatibility,
+    (int, int)? Function()? height,
+    (int, int)? Function()? weight,
   }) =>
       DiscoverFilters(
+        scope: scope ?? this.scope,
+        nationality: nationality != null ? nationality() : this.nationality,
         ageMin: ageMin ?? this.ageMin,
         ageMax: ageMax ?? this.ageMax,
         countryIso: countryIso != null ? countryIso() : this.countryIso,
@@ -262,6 +332,8 @@ class DiscoverFilters {
         educations: educations ?? this.educations,
         profession: profession ?? this.profession,
         minCompatibility: minCompatibility != null ? minCompatibility() : this.minCompatibility,
+        height: height != null ? height() : this.height,
+        weight: weight != null ? weight() : this.weight,
       );
 
   Map<String, dynamic> toQuery() => {
@@ -277,8 +349,32 @@ class DiscoverFilters {
       };
 }
 
+/// One like received; compliments carry their message and arrive first.
+class ReceivedLike {
+  const ReceivedLike({required this.profile, required this.at, this.compliment});
+  final UserProfile profile;
+  final DateTime at;
+  final String? compliment;
+}
+
+class LikesInbox {
+  const LikesInbox({required this.count, required this.compliments, required this.items, required this.locked, this.nextCursor});
+  final int count;
+
+  /// Always visible with the sender, whatever the plan.
+  final List<ReceivedLike> compliments;
+
+  /// Empty when [locked] (Free: count only).
+  final List<ReceivedLike> items;
+  final bool locked;
+  final String? nextCursor;
+}
+
 class MatchItem {
-  const MatchItem({required this.id, required this.peer, required this.createdAt, this.conversationId, this.isNew = false});
+  const MatchItem({required this.id, required this.peer, required this.createdAt, this.conversationId, this.isNew = false, this.paused = false});
+
+  /// The other person froze their account (taking a break).
+  final bool paused;
   final String id;
   final UserProfile peer;
   final DateTime createdAt;
@@ -287,6 +383,22 @@ class MatchItem {
 }
 
 enum MessageStatus { sending, sent, delivered, read, failed }
+
+enum MessageKind { text, image, voice }
+
+/// A photo or voice note. [url] is short-lived and signed (private storage);
+/// [localPath] is set while the sender's copy is still uploading.
+class ChatAttachment {
+  const ChatAttachment({required this.kind, this.id, this.url, this.localPath, this.width, this.height, this.durationMs, this.waveform = const []});
+  final MessageKind kind;
+  final String? id;
+  final String? url;
+  final String? localPath;
+  final int? width;
+  final int? height;
+  final int? durationMs;
+  final List<int> waveform; // 0–100 peaks for the voice bubble
+}
 
 class ChatMessage {
   const ChatMessage({
@@ -297,16 +409,24 @@ class ChatMessage {
     required this.body,
     required this.sentAt,
     required this.status,
+    this.kind = MessageKind.text,
+    this.attachments = const [],
+    this.containsPhone = false,
   });
   final String id;
   final String clientId; // idempotency key
   final String conversationId;
   final bool fromMe;
-  final String body;
+  final String body; // text, or the caption of photos
   final DateTime sentAt;
   final MessageStatus status;
+  final MessageKind kind;
+  final List<ChatAttachment> attachments;
 
-  ChatMessage copyWith({String? id, MessageStatus? status}) => ChatMessage(
+  /// Set by the server when the text looks like a phone number — both people see a safety note.
+  final bool containsPhone;
+
+  ChatMessage copyWith({String? id, MessageStatus? status, List<ChatAttachment>? attachments}) => ChatMessage(
         id: id ?? this.id,
         clientId: clientId,
         conversationId: conversationId,
@@ -314,38 +434,303 @@ class ChatMessage {
         body: body,
         sentAt: sentAt,
         status: status ?? this.status,
+        kind: kind,
+        attachments: attachments ?? this.attachments,
+        containsPhone: containsPhone,
       );
 }
 
+/// What the composer hands to the repository: text, up to 3 photos, or one voice note.
+class OutgoingMedia {
+  const OutgoingMedia.photos(this.files) : voice = null;
+  const OutgoingMedia.voice(VoiceClip this.voice) : files = const [];
+  final List<PreparedPhoto> files;
+  final VoiceClip? voice;
+  bool get isVoice => voice != null;
+}
+
+/// A photo already compressed on the device (≤ 2048 px, high-quality JPEG).
+class PreparedPhoto {
+  const PreparedPhoto({required this.path, required this.bytes, required this.width, required this.height});
+  final String path;
+  final List<int> bytes;
+  final int width;
+  final int height;
+}
+
+/// A recorded voice note (AAC-LC, 48 kHz mono, ≤ 60 s).
+class VoiceClip {
+  const VoiceClip({required this.path, required this.bytes, required this.durationMs, required this.waveform});
+  final String path;
+  final List<int> bytes;
+  final int durationMs;
+  final List<int> waveform;
+}
+
+/// Result of the messages search field: matching names and matching messages.
+class ChatSearchResult {
+  const ChatSearchResult({required this.conversationIds, required this.messages});
+  final List<String> conversationIds;
+  final List<ChatMessage> messages;
+  static const empty = ChatSearchResult(conversationIds: [], messages: []);
+}
+
+/// Where a conversation is listed. Inbox and archive share the plan's
+/// visible-conversation limit; unmatched and consultation chats do not.
+enum ConversationSection { inbox, archive, unmatched, consultation }
+
+enum RematchStatus { pending, accepted, declined }
+
+/// The single re-match request a conversation may ever carry.
+class RematchInfo {
+  const RematchInfo({required this.status, required this.byMe});
+  final RematchStatus status;
+  final bool byMe;
+}
+
+/// The counselor side of a consultation chat.
+class CounselorChatInfo {
+  const CounselorChatInfo({required this.consultationId, required this.name, this.status, this.scheduledAt});
+  final String consultationId;
+  final String name;
+  final ConsultationStatus? status;
+  final DateTime? scheduledAt;
+}
+
 class Conversation {
-  const Conversation({required this.id, required this.peer, this.lastMessage, this.lastAt, this.unread = 0});
+  const Conversation({
+    required this.id,
+    this.peer,
+    this.counselor,
+    this.section = ConversationSection.inbox,
+    this.lastMessage,
+    this.lastMessageKind = MessageKind.text,
+    this.lastAt,
+    this.unread = 0,
+    this.expiresAt,
+    this.expiringSoon = false,
+    this.rematch,
+    this.unmatchedByMe,
+  });
   final String id;
-  final UserProfile peer;
+
+  /// Null for consultation chats (see [counselor]).
+  final UserProfile? peer;
+  final CounselorChatInfo? counselor;
+  final ConversationSection section;
   final String? lastMessage;
+  final MessageKind lastMessageKind;
   final DateTime? lastAt;
   final int unread;
+
+  /// When the server will remove it from this section (null = never).
+  final DateTime? expiresAt;
+
+  /// Inside the warning window (inbox: after day 10 of 15; archive: last 7 of 30).
+  final bool expiringSoon;
+  final RematchInfo? rematch;
+  final bool? unmatchedByMe;
+
+  String get title => peer?.name ?? counselor?.name ?? '';
+  bool get isUnmatched => section == ConversationSection.unmatched;
+  bool get isConsultation => section == ConversationSection.consultation;
+
+  /// One request per conversation, ever.
+  bool get canRequestRematch => isUnmatched && rematch == null;
+  bool get canAnswerRematch => isUnmatched && rematch?.status == RematchStatus.pending && rematch?.byMe == false;
+  bool get canWrite => !isUnmatched;
 }
 
-enum NotificationKind { match, like, verification, message, reminder }
+/// A row past the plan's visible-conversation limit: the server sends no
+/// identity or preview for it.
+class LockedConversation {
+  const LockedConversation({required this.id, required this.section});
+  final String id;
+  final ConversationSection section;
+}
+
+/// Everything the Messages tab needs in one call.
+class ConversationIndex {
+  const ConversationIndex({required this.visible, required this.locked, required this.visibleLimit});
+  final List<Conversation> visible;
+  final List<LockedConversation> locked;
+
+  /// -1 = unlimited.
+  final int visibleLimit;
+
+  List<Conversation> section(ConversationSection s) => visible.where((c) => c.section == s).toList();
+  List<LockedConversation> lockedIn(ConversationSection s) => locked.where((c) => c.section == s).toList();
+  int count(ConversationSection s) => section(s).length + lockedIn(s).length;
+}
+
+// ───────────── consultations ─────────────
+
+enum CounselorKind { psychologist, familyCounselor }
+
+enum ConsultationService { premarital, marital, family, parenting, individual, divorceRecovery }
+
+enum ConsultationStatus { awaitingPayment, paid, confirmed, completed, declined, cancelled, refunded, expired }
+
+enum CounselorStatus { pending, approved, rejected, suspended }
+
+/// One bookable combination: service × language × duration, with its own price.
+class CounselorOffering {
+  const CounselorOffering({required this.id, required this.service, required this.language, required this.durationMinutes, required this.priceMinor, required this.currency, this.active = true});
+  final String id;
+  final ConsultationService service;
+  final String language; // ISO 639-1
+  final int durationMinutes;
+  final int priceMinor; // integer minor units
+  final String currency; // ISO 4217
+  final bool active;
+}
+
+class CounselorReview {
+  const CounselorReview({required this.rating, required this.createdAt, this.comment, this.by});
+  final int rating;
+  final String? comment;
+  final String? by; // first name only
+  final DateTime createdAt;
+}
+
+class Counselor {
+  const Counselor({
+    required this.id,
+    required this.kind,
+    required this.name,
+    required this.headline,
+    required this.bio,
+    required this.yearsExperience,
+    required this.licenseAuthority,
+    required this.licenseCountry,
+    required this.languages,
+    required this.services,
+    required this.offerings,
+    this.ratingAvg = 0,
+    this.ratingCount = 0,
+    this.reviews = const [],
+    this.status,
+    this.rejectReason,
+  });
+  final String id;
+  final CounselorKind kind;
+  final String name;
+  final String headline;
+  final String bio;
+  final int yearsExperience;
+  final String licenseAuthority;
+  final String licenseCountry;
+  final List<String> languages;
+  final List<ConsultationService> services;
+  final List<CounselorOffering> offerings;
+  final double ratingAvg;
+  final int ratingCount;
+  final List<CounselorReview> reviews;
+
+  /// Only present on the counselor's own profile.
+  final CounselorStatus? status;
+  final String? rejectReason;
+}
+
+class Consultation {
+  const Consultation({
+    required this.id,
+    required this.counselorId,
+    required this.counselorName,
+    required this.service,
+    required this.language,
+    required this.durationMinutes,
+    required this.priceMinor,
+    required this.currency,
+    required this.status,
+    required this.createdAt,
+    this.clientName,
+    this.note,
+    this.scheduledAt,
+    this.expiresAt,
+    this.conversationId,
+    this.myRating,
+    this.declineReason,
+  });
+  final String id;
+  final String counselorId;
+  final String counselorName;
+  final String? clientName; // counselor desk only
+  final ConsultationService service;
+  final String language;
+  final int durationMinutes;
+  final int priceMinor;
+  final String currency;
+  final ConsultationStatus status;
+  final DateTime createdAt;
+  final String? note;
+  final DateTime? scheduledAt;
+  final DateTime? expiresAt; // payment window
+  final String? conversationId;
+  final int? myRating;
+  final String? declineReason;
+
+  bool get canRate => status == ConsultationStatus.completed && myRating == null;
+  bool get canCancel => status == ConsultationStatus.awaitingPayment || status == ConsultationStatus.paid;
+}
+
+/// Result of creating a booking: what the payment sheet needs.
+class BookingIntent {
+  const BookingIntent({required this.consultationId, required this.amountMinor, required this.currency, required this.expiresAt, required this.provider, this.clientSecret});
+  final String consultationId;
+  final int amountMinor;
+  final String currency;
+  final DateTime expiresAt;
+  final String provider; // stripe | test
+  final String? clientSecret;
+}
+
+enum NotificationKind { match, like, compliment, message, verification, consultation, rematch, chatExpiring, account, reminder }
 
 class AppNotification {
-  const AppNotification({required this.id, required this.kind, required this.title, required this.createdAt, this.read = false});
+  const AppNotification({required this.id, required this.kind, required this.title, required this.createdAt, this.body, this.data = const {}, this.read = false});
   final String id;
   final NotificationKind kind;
-  final String title; // rendered server-side in the user's locale
+  final String title; // localised from the server's key
+  final String? body;
+  final Map<String, String> data; // conversationId, consultationId, fromUserId…
   final DateTime createdAt;
   final bool read;
+
+  AppNotification copyWith({bool? read}) => AppNotification(id: id, kind: kind, title: title, body: body, data: data, createdAt: createdAt, read: read ?? this.read);
 }
 
-enum PaymentStatus { succeeded, refunded, failed }
+enum PaymentStatus { pending, succeeded, refunded, failed }
 
+enum PaymentKind { subscription, consultation }
+
+/// One row of GET /me/payments: a store subscription charge or a consultation payment.
 class PaymentRecord {
-  const PaymentRecord({required this.id, required this.plan, required this.store, required this.date, required this.status, this.amountLabel});
+  const PaymentRecord({
+    required this.id,
+    required this.plan,
+    required this.store,
+    required this.date,
+    required this.status,
+    this.kind = PaymentKind.subscription,
+    this.amountMinor,
+    this.currency,
+    this.reference,
+    this.refundedAt,
+    this.description,
+    this.amountLabel,
+  });
   final String id;
   final PlanCode plan;
-  final String store;
+  final String store; // App Store · Google Play · Card (web)
   final DateTime date;
   final PaymentStatus status;
+  final PaymentKind kind;
+  final int? amountMinor; // integer minor units
+  final String? currency;
+  final String? reference; // short receipt reference for support
+  final DateTime? refundedAt;
+  final String? description; // consultation: counselor · service
   final String? amountLabel;
 }
 
@@ -364,39 +749,100 @@ class VerificationInfo {
   final List<String> fixSteps;
 }
 
+/// Privacy choices — stored and enforced by the server (GET/PUT /me/privacy).
 class PrivacySettings {
   const PrivacySettings({
+    this.discoverable = true,
     this.showCity = true,
     this.blurPhotosUntilMatch = false,
     this.showOnline = true,
     this.readReceipts = true,
     this.incognito = false,
   });
+
+  /// Off: hidden from discovery; existing matches and chats continue.
+  final bool discoverable;
   final bool showCity;
   final bool blurPhotosUntilMatch;
+
+  /// Reciprocal: hiding yours also hides other people's from you.
   final bool showOnline;
+
+  /// Reciprocal, like [showOnline].
   final bool readReceipts;
+
+  /// Premium: only people you liked can see you.
   final bool incognito;
 
-  PrivacySettings copyWith({bool? showCity, bool? blurPhotosUntilMatch, bool? showOnline, bool? readReceipts, bool? incognito}) =>
+  PrivacySettings copyWith({bool? discoverable, bool? showCity, bool? blurPhotosUntilMatch, bool? showOnline, bool? readReceipts, bool? incognito}) =>
       PrivacySettings(
+        discoverable: discoverable ?? this.discoverable,
         showCity: showCity ?? this.showCity,
         blurPhotosUntilMatch: blurPhotosUntilMatch ?? this.blurPhotosUntilMatch,
         showOnline: showOnline ?? this.showOnline,
         readReceipts: readReceipts ?? this.readReceipts,
         incognito: incognito ?? this.incognito,
       );
+
+  factory PrivacySettings.fromJson(Map<String, dynamic> j) => PrivacySettings(
+        discoverable: j['discoverable'] as bool? ?? true,
+        showCity: j['showCity'] as bool? ?? true,
+        blurPhotosUntilMatch: j['blurPhotos'] as bool? ?? false,
+        showOnline: j['showOnline'] as bool? ?? true,
+        readReceipts: j['readReceipts'] as bool? ?? true,
+        incognito: j['incognito'] as bool? ?? false,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'discoverable': discoverable,
+        'showCity': showCity,
+        'blurPhotos': blurPhotosUntilMatch,
+        'showOnline': showOnline,
+        'readReceipts': readReceipts,
+        'incognito': incognito,
+      };
+
+  /// How others currently find you (shown on My profile).
+  ProfileVisibility get visibility => !discoverable
+      ? ProfileVisibility.hidden
+      : incognito
+          ? ProfileVisibility.incognito
+          : ProfileVisibility.visible;
+}
+
+enum ProfileVisibility { visible, incognito, hidden }
+
+/// A signed-in device (one session per device; GET /auth/sessions).
+class DeviceSession {
+  const DeviceSession({required this.id, required this.platform, required this.lastUsedAt, required this.createdAt, this.appVersion, this.current = false});
+  final String id;
+  final String platform; // ios | android
+  final String? appVersion;
+  final DateTime createdAt;
+  final DateTime lastUsedAt;
+  final bool current;
+}
+
+class BlockedUser {
+  const BlockedUser({required this.userId, required this.name, required this.blockedAt});
+  final String userId;
+  final String name;
+  final DateTime blockedAt;
 }
 
 /// Realtime chat event (WebSocket in production).
 class ChatEvent {
-  const ChatEvent._(this.conversationId, {this.message, this.typing, this.readClientId});
+  const ChatEvent._(this.conversationId, {this.message, this.typing, this.readClientId, this.movedTo});
   factory ChatEvent.newMessage(ChatMessage m) => ChatEvent._(m.conversationId, message: m);
   factory ChatEvent.typingChanged(String convId, bool on) => ChatEvent._(convId, typing: on);
   factory ChatEvent.readReceipt(String convId, String clientId) => ChatEvent._(convId, readClientId: clientId);
+
+  /// Unmatch / re-match / archive moved the conversation to another section.
+  factory ChatEvent.moved(String convId, ConversationSection to) => ChatEvent._(convId, movedTo: to);
 
   final String conversationId;
   final ChatMessage? message;
   final bool? typing;
   final String? readClientId;
+  final ConversationSection? movedTo;
 }

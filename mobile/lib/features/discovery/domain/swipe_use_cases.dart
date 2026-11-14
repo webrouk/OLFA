@@ -10,10 +10,11 @@ class SwipeUseCase {
   const SwipeUseCase(this._repo);
   final DiscoveryRepository _repo;
 
-  Future<MatchItem?> call(SwipeKind kind, String userId, Entitlements e) async {
+  Future<MatchItem?> call(SwipeKind kind, String userId, Entitlements e, {String? compliment}) async {
     if (kind == SwipeKind.like) {
       if (e.likesLeft <= 0) throw const QuotaExceededFailure('likes');
-      return _repo.like(userId);
+      if (compliment != null && e.complimentsLeft <= 0) throw const QuotaExceededFailure('compliments');
+      return _repo.like(userId, compliment: compliment);
     }
     await _repo.pass(userId);
     return null;

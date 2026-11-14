@@ -13,6 +13,8 @@ import '../../../shared/models/models.dart';
 import '../../discovery/application/discover_controller.dart';
 import '../../discovery/domain/swipe_use_cases.dart';
 import '../application/profile_controllers.dart';
+import '../../../shared/components/reference_pickers.dart';
+import '../../../shared/components/verification_ticks.dart';
 
 /// 13 — Profile details with a paginated, lazily loaded photo gallery.
 class ProfileDetailsScreen extends ConsumerWidget {
@@ -125,7 +127,7 @@ class _DetailsState extends ConsumerState<_Details> {
                     Row(
                       children: [
                         Flexible(child: Text('${p.name}, ${p.age}', style: t.h1)),
-                        if (p.photosReviewed) ...[const SizedBox(width: 8), VerifiedBadge(size: 24, semanticLabel: l.photosReviewed)],
+                        ...[const SizedBox(width: 8), VerificationTicks(profile: p, size: 22)],
                       ],
                     ),
                     if (p.showLocation) ...[
@@ -143,7 +145,10 @@ class _DetailsState extends ConsumerState<_Details> {
                     _KeyValueGrid(items: [
                       (l.maritalStatus, l.maritalLabel(p.maritalStatus)),
                       (l.education, l.educationLabel(p.education)),
-                      (l.occupation, p.occupation),
+                      (l.occupation, occupationLabel(context, p.occupation)),
+                      if (p.heightCm != null) (l.height, '${p.heightCm} ${l.cm}'),
+                      if (p.weightKg != null) (l.weight, '${p.weightKg} ${l.kg}'),
+                      if (p.nationality != null) (l.nationality, nationalityByIso(p.nationality)?.label(langOf(context), female: p.gender == Gender.female) ?? p.nationality!),
                       (l.marriageTimeline, l.timelineLabel(p.timeline)),
                     ]),
                     SectionLabel(l.interests),

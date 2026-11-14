@@ -11,6 +11,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { MatchingModule } from './modules/matching/matching.module';
 import { MediaModule } from './modules/media/media.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 import { ConsultationsModule } from './modules/consultations/consultations.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -59,6 +60,7 @@ export const bullConnection = {
     MatchingModule,
     MessagingModule,
     ConsultationsModule,
+    PaymentsModule,
     SafetyModule,
     AdminModule,
   ],

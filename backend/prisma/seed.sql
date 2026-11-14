@@ -7,11 +7,11 @@ ON CONFLICT (code) DO NOTHING;
 
 WITH v(code, key, value) AS (VALUES
   ('FREE','daily_likes','10'), ('FREE','daily_messages','1'), ('FREE','daily_undos','0'),
-  ('FREE','advanced_filters','false'), ('FREE','see_who_liked_you','false'), ('FREE','incognito','false'), ('FREE','priority_visibility','false'), ('FREE','search_outside_country','false'), ('FREE','visible_conversations','5'),
+  ('FREE','advanced_filters','false'), ('FREE','see_who_liked_you','false'), ('FREE','incognito','false'), ('FREE','priority_visibility','false'), ('FREE','search_outside_country','false'), ('FREE','visible_conversations','5'), ('FREE','monthly_compliments','3'),
   ('PLUS','daily_likes','100'), ('PLUS','daily_messages','5'), ('PLUS','daily_undos','3'),
-  ('PLUS','advanced_filters','true'), ('PLUS','see_who_liked_you','true'), ('PLUS','incognito','false'), ('PLUS','priority_visibility','false'), ('PLUS','search_outside_country','true'), ('PLUS','visible_conversations','10'),
+  ('PLUS','advanced_filters','true'), ('PLUS','see_who_liked_you','true'), ('PLUS','incognito','false'), ('PLUS','priority_visibility','false'), ('PLUS','search_outside_country','true'), ('PLUS','visible_conversations','10'), ('PLUS','monthly_compliments','10'),
   ('PREMIUM','daily_likes','200'), ('PREMIUM','daily_messages','10'), ('PREMIUM','daily_undos','10'),
-  ('PREMIUM','advanced_filters','true'), ('PREMIUM','see_who_liked_you','true'), ('PREMIUM','incognito','true'), ('PREMIUM','priority_visibility','true'), ('PREMIUM','search_outside_country','true'), ('PREMIUM','visible_conversations','-1')
+  ('PREMIUM','advanced_filters','true'), ('PREMIUM','see_who_liked_you','true'), ('PREMIUM','incognito','true'), ('PREMIUM','priority_visibility','true'), ('PREMIUM','search_outside_country','true'), ('PREMIUM','visible_conversations','-1'), ('PREMIUM','monthly_compliments','20')
 )
 INSERT INTO feature_entitlements (plan_id, feature_key, value)
 SELECT p.id, v.key, v.value::jsonb FROM v JOIN subscription_plans p ON p.code = v.code::plan_code
@@ -76,3 +76,9 @@ SELECT r.id, p.id FROM roles r JOIN permissions p ON
   OR (r.key = 'finance' AND p.key IN ('users.read','payments.read','payments.refund','plans.manage'))
   OR (r.key = 'viewer' AND p.key IN ('users.read','payments.read','audit.read'))
 ON CONFLICT DO NOTHING;
+
+-- Voice notes per conversation (-1 = unlimited).
+INSERT INTO feature_entitlements (plan_id, feature_key, value)
+SELECT p.id, v.k, v.val::jsonb FROM subscription_plans p
+JOIN (VALUES ('FREE','voice_notes_per_conversation','10'), ('PLUS','voice_notes_per_conversation','30'), ('PREMIUM','voice_notes_per_conversation','-1')) v(code, k, val) ON v.code = p.code::text
+ON CONFLICT (plan_id, feature_key) DO NOTHING;

@@ -27,7 +27,11 @@ class ApiDiscoveryRepository implements DiscoveryRepository {
           if (f.maritalStatuses.isNotEmpty) 'maritalStatuses': f.maritalStatuses.map(toApiEnum).join(','),
           if (f.educations.isNotEmpty) 'educations': f.educations.map(toApiEnum).join(','),
           if (f.profession.isNotEmpty) 'occupation': f.profession,
+          if (f.nationality != null) 'nationality': f.nationality,
+          'sort': 'nearest',
           if (f.minCompatibility != null) 'minCompatibility': f.minCompatibility,
+          if (f.height != null) ...{'heightMin': f.height!.$1, 'heightMax': f.height!.$2},
+          if (f.weight != null) ...{'weightMin': f.weight!.$1, 'weightMax': f.weight!.$2},
         };
         final r = await _api.dio.get<Map<String, dynamic>>('/discovery', queryParameters: q);
         final list = (r.data!['items'] as List).map((j) => ApiMappers.profile(Map<String, dynamic>.from(j as Map))).toList();
@@ -38,8 +42,8 @@ class ApiDiscoveryRepository implements DiscoveryRepository {
       });
 
   @override
-  Future<MatchItem?> like(String userId) => guard(() async {
-        final r = await _api.dio.post<Map<String, dynamic>>('/likes', data: {'userId': userId});
+  Future<MatchItem?> like(String userId, {String? compliment}) => guard(() async {
+        final r = await _api.dio.post<Map<String, dynamic>>('/likes', data: {'userId': userId, if (compliment != null) 'compliment': compliment});
         if (r.data!['matched'] != true) return null;
         final peer = _cache[userId] ?? await _fetch(userId);
         return MatchItem(id: r.data!['matchId'] as String, peer: peer, createdAt: DateTime.now(), isNew: true);
@@ -64,7 +68,7 @@ class DemoDiscoveryRepository implements DiscoveryRepository {
   @override
   Future<List<UserProfile>> suggestions(DiscoverFilters filters) => _b.discover(filters);
   @override
-  Future<MatchItem?> like(String userId) => _b.like(userId);
+  Future<MatchItem?> like(String userId, {String? compliment}) => _b.like(userId, compliment: compliment);
   @override
   Future<void> pass(String userId) => _b.pass(userId);
   @override

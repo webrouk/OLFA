@@ -8,9 +8,11 @@ import '../../../core/theme/olfa_colors.dart';
 import '../../../core/theme/olfa_spacing.dart';
 import '../../../core/theme/olfa_typography.dart';
 import '../../../core/widgets/olfa_widgets.dart';
+import '../../../shared/components/labels.dart';
 import '../../../shared/models/models.dart';
 import '../../subscriptions/application/entitlements_controller.dart';
 import '../data/matching_repository_impl.dart';
+import '../../../shared/components/verification_ticks.dart';
 
 /// 16 — Matches. Starting a new conversation spends one daily credit.
 class MatchesScreen extends ConsumerStatefulWidget {
@@ -55,6 +57,9 @@ class _MatchesScreenState extends ConsumerState<MatchesScreen> {
     }
   }
 
+  String _q = '';
+  int _tab = 0; // 0 all · 1 new · 2 chatting
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -65,75 +70,133 @@ class _MatchesScreenState extends ConsumerState<MatchesScreen> {
       body: AsyncView<List<MatchItem>>(
         value: ref.watch(matchesProvider),
         onRetry: () => ref.invalidate(matchesProvider),
-        data: (list) {
-          if (list.isEmpty) {
+        data: (all) {
+          if (all.isEmpty) {
             return EmptyState(icon: Icons.people_outline_rounded, title: l.noMatchesTitle, body: l.noMatchesBody, action: PrimaryButton(label: l.navDiscover, expand: false, onPressed: () => context.go(Routes.discover)));
           }
+          final q = _q.toLowerCase();
+          final list = all.where((m) => q.isEmpty || m.peer.name.toLowerCase().contains(q)).toList();
           final fresh = list.where((m) => m.conversationId == null).toList();
+          final chatting = list.where((m) => m.conversationId != null).toList();
+          final shown = switch (_tab) { 1 => fresh, 2 => chatting, _ => list };
           return RefreshIndicator(
             color: OlfaColors.primary,
             onRefresh: () => ref.refresh(matchesProvider.future),
             child: ListView(
               padding: EdgeInsets.fromLTRB(20, 0, 20, OlfaSize.navBarClearance(context)),
               children: [
-                if (ent != null)
-                  OlfaCard(
-                    padding: const EdgeInsets.all(14),
-                    child: Row(children: [
-                      const Icon(Icons.chat_bubble_outline_rounded, color: OlfaColors.primary),
-                      const SizedBox(width: 12),
-                      Expanded(child: Text(l.startersLeft, style: t.bodySmall)),
-                      Text('${ent.messagesLeft}/${ent.dailyMessages}', textDirection: TextDirection.ltr, style: const TextStyle(fontFamily: 'Montserrat', fontWeight: FontWeight.w700, fontSize: 17)),
-                    ]),
-                  ),
-                if (fresh.isNotEmpty) ...[
+                TextField(
+                  onChanged: (v) => setState(() => _q = v.trim()),
+                  decoration: InputDecoration(hintText: l.searchMatches, prefixIcon: const Icon(Icons.search_rounded)),
+                ),
+                const SizedBox(height: 12),
+                Row(children: [
+                  for (final (i, label) in [(0, '${l.all} · ${list.length}'), (1, '${l.newMatches} · ${fresh.length}'), (2, '${l.chatting} · ${chatting.length}')])
+                    Padding(padding: const EdgeInsetsDirectional.only(end: 8), child: OlfaChoice(small: true, label: label, selected: _tab == i, onTap: () => setState(() => _tab = i))),
+                ]),
+                if (ent != null) ...[
+                  const SizedBox(height: 12),
+                  InfoBanner(icon: Icons.chat_bubble_outline_rounded, text: '${l.startersLeft}: ${ent.messagesLeft}/${ent.dailyMessages}'),
+                ],
+                if (_tab != 2 && fresh.isNotEmpty) ...[
                   SectionLabel(l.newMatches),
                   SizedBox(
-                    height: 104,
+                    height: 190,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: fresh.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 14),
-                      itemBuilder: (_, i) => InkWell(
-                        borderRadius: OlfaRadius.all(16),
-                        onTap: () => context.push(Routes.profile(fresh[i].peer.id)),
-                        child: Column(children: [
-                          OlfaAvatar(size: 64, ring: true, url: fresh[i].peer.mainPhoto?.thumbUrl),
-                          const SizedBox(height: 6),
-                          Text(fresh[i].peer.name, style: t.bodySmall.copyWith(fontWeight: FontWeight.w600)),
-                        ]),
-                      ),
+                      separatorBuilder: (_, __) => const SizedBox(width: 12),
+                      itemBuilder: (_, i) => _NewMatchCard(m: fresh[i], busy: _starting == fresh[i].id, onStart: () => _open(fresh[i])),
                     ),
                   ),
                 ],
-                SectionLabel(l.allMatches),
-                TileGroup(children: [
-                  for (final m in list)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      child: Row(children: [
-                        InkWell(onTap: () => context.push(Routes.profile(m.peer.id)), child: OlfaAvatar(size: 52, url: m.peer.mainPhoto?.thumbUrl, online: m.peer.online)),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Row(children: [
-                              Flexible(child: Text('${m.peer.name}, ${m.peer.age}', style: t.bodyMedium.copyWith(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
-                              if (m.peer.photosReviewed) ...[const SizedBox(width: 6), const VerifiedBadge(size: 16)],
-                            ]),
-                            Text('${m.peer.city} · ${l.compatibility(m.peer.compatibility)}', style: t.caption, overflow: TextOverflow.ellipsis),
+                if (_tab != 1) ...[
+                  SectionLabel(_tab == 2 ? l.chatting : l.allMatches),
+                  if (shown.isEmpty) Text(l.noResults, style: t.bodySmall.copyWith(color: OlfaColors.textMuted)),
+                  TileGroup(children: [
+                    for (final m in shown)
+                      InkWell(
+                        onTap: () => _open(m),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          child: Row(children: [
+                            InkWell(onTap: () => context.push(Routes.profile(m.peer.id)), child: OlfaAvatar(size: 52, url: m.peer.mainPhoto?.thumbUrl, online: m.peer.online)),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Row(children: [
+                                  Flexible(child: Text('${m.peer.name}, ${m.peer.age}', style: t.bodyMedium.copyWith(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                                  ...[const SizedBox(width: 6), VerificationTicks(profile: m.peer, size: 16)],
+                                ]),
+                                Text(
+                                  m.paused
+                                      ? l.matchPaused
+                                      : [l.compatibility(m.peer.compatibility), if (m.peer.distanceKm != null) l.kmAway(m.peer.distanceKm!), l.matchedOn(shortTime(context, m.createdAt))].join(' · '),
+                                  style: t.caption,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ]),
+                            ),
+                            const SizedBox(width: 8),
+                            m.conversationId != null
+                                ? OlfaIconButton(icon: Icons.chat_bubble_outline_rounded, tooltip: l.openChat, style: OlfaIconStyle.soft, onPressed: () => _open(m))
+                                : PrimaryButton(label: l.startChat, expand: false, loading: _starting == m.id, onPressed: () => _open(m)),
                           ]),
                         ),
-                        const SizedBox(width: 8),
-                        m.conversationId != null
-                            ? SecondaryButton(label: l.openChat, expand: false, onPressed: () => _open(m))
-                            : PrimaryButton(label: l.startChat, expand: false, loading: _starting == m.id, onPressed: () => _open(m)),
-                      ]),
-                    ),
-                ]),
+                      ),
+                  ]),
+                ],
               ],
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _NewMatchCard extends StatelessWidget {
+  const _NewMatchCard({required this.m, required this.busy, required this.onStart});
+  final MatchItem m;
+  final bool busy;
+  final VoidCallback onStart;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final t = context.type;
+    return SizedBox(
+      width: 132,
+      child: ClipRRect(
+        borderRadius: OlfaRadius.all(18),
+        child: Material(
+          color: OlfaColors.white,
+          child: InkWell(
+            onTap: () => context.push(Routes.profile(m.peer.id)),
+            child: Column(children: [
+              Expanded(
+                child: Stack(fit: StackFit.expand, children: [
+                  OlfaImage(url: m.peer.mainPhoto?.cardUrl ?? m.peer.mainPhoto?.thumbUrl),
+                  PositionedDirectional(top: 8, start: 8, child: OlfaTag(l.compatibility(m.peer.compatibility), style: OlfaTagStyle.onImage)),
+                ]),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                child: Row(children: [
+                  Expanded(child: Text(m.peer.name, style: t.bodySmall.copyWith(fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis)),
+                  InkWell(
+                    onTap: busy ? null : onStart,
+                    child: Semantics(
+                      button: true,
+                      label: l.startChat,
+                      child: Container(width: 30, height: 30, decoration: const BoxDecoration(color: OlfaColors.primary, shape: BoxShape.circle), child: const Icon(Icons.chat_bubble_rounded, size: 15, color: OlfaColors.white)),
+                    ),
+                  ),
+                ]),
+              ),
+            ]),
+          ),
+        ),
       ),
     );
   }

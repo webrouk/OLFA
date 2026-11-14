@@ -28,6 +28,13 @@ dependencies:
   image_picker: ^1.1.2
   socket_io_client: ^3.0.2
   flutter_timezone: ^3.0.1
+  geolocator: ^13.0.2 # approximate location for "nearest first" (rounded to ~1 km)
+  geocoding: ^3.0.0 # device-side country/city lookup
+  flutter_stripe: ^11.4.0 # consultation payments (person-to-person service, web payment)
+  flutter_image_compress: ^2.3.0 # chat photos: ≤2048 px, q86, EXIF removed on device
+  record: ^5.2.0 # voice notes: AAC-LC 48 kHz mono, ≤60 s
+  just_audio: ^0.9.42 # voice-note playback + notification/message sounds
+  path_provider: ^2.1.4
   # Phase 3 (needs Firebase project config files first):
   # firebase_core, firebase_messaging, in_app_purchase
 
@@ -44,6 +51,7 @@ flutter:
   generate: true
   assets:
     - assets/brand/
+    - assets/sounds/
   # Font files are fetched by scripts/fetch_fonts.sh (SIL OFL, from google/fonts).
   fonts:
     - family: Tajawal

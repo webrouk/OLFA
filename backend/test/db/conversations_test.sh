@@ -106,4 +106,30 @@ check "unmatched chats survive until their own month" "$(q "SELECT count(*) FROM
 q "SELECT * FROM olfa_run_retention(now() + interval '31 days')" >/dev/null
 check "unmatched for a month → deleted" "$(q "SELECT count(*) FROM conversations WHERE kind='MATCH'")" "0"
 
-echo; echo "conversation tests: $pass passed, $fail failed"; [ "$fail" -eq 0 ]
+echo; 
+echo "chat media, phone flag, search, height/weight"
+C3=00000000-0000-0000-0000-3000000000e1; PE=00000000-0000-0000-0000-1000000000e1
+$PSQL -d "$DB" <<SQL >/dev/null
+INSERT INTO users (id, phone_e164, phone_country, status) VALUES ('$PE','+971509990001','AE','ACTIVE');
+INSERT INTO matches (id, user_a_id, user_b_id) VALUES ('00000000-0000-0000-0000-2000000000e1', '$ME', '$PE');
+INSERT INTO conversations (id, match_id, started_by) VALUES ('$C3','00000000-0000-0000-0000-2000000000e1','$ME');
+INSERT INTO conversation_members (conversation_id, user_id) VALUES ('$C3','$ME'), ('$C3','$PE');
+SQL
+M=$(q "INSERT INTO messages (conversation_id, sender_id, client_message_id, body, type) VALUES ('$C3','$ME',gen_random_uuid(),'','IMAGE') RETURNING id")
+check "a photo message may have no caption" "$([ -n "$M" ] && echo yes)" "yes"
+expect_error "a text message still needs text" 23514 "INSERT INTO messages (conversation_id, sender_id, client_message_id, body) VALUES ('$C3','$ME',gen_random_uuid(),'  ')"
+att(){ q "INSERT INTO message_attachments (message_id, uploader_id, conversation_id, kind, storage_key, mime, bytes, duration_ms) VALUES ($1,'$ME','$C3','$2','chat/$C3/'||gen_random_uuid(),'$3',1000,$4) RETURNING 'ok'"; }
+for k in 1 2 3; do att "'$M'" IMAGE image/jpeg NULL >/dev/null; done
+check "three photos fit in one message" "$(q "SELECT count(*) FROM message_attachments WHERE message_id='$M'")" "3"
+expect_error "a fourth photo is refused" P0020 "INSERT INTO message_attachments (message_id, uploader_id, conversation_id, kind, storage_key, mime, bytes) VALUES ('$M','$ME','$C3','IMAGE','x4','image/jpeg',10)"
+expect_error "photos and voice don't mix in one message" P0020 "INSERT INTO message_attachments (message_id, uploader_id, conversation_id, kind, storage_key, mime, bytes, duration_ms) VALUES ('$M','$ME','$C3','VOICE','v1','audio/mp4',10,5000)"
+expect_error "voice notes are at most 60 seconds" 23514 "INSERT INTO message_attachments (uploader_id, conversation_id, kind, storage_key, mime, bytes, duration_ms) VALUES ('$ME','$C3','VOICE','v2','audio/mp4',10,61000)"
+expect_error "a voice note needs a duration" 23514 "INSERT INTO message_attachments (uploader_id, conversation_id, kind, storage_key, mime, bytes) VALUES ('$ME','$C3','VOICE','v3','audio/mp4',10)"
+q "DELETE FROM messages WHERE id='$M'" >/dev/null
+check "deleted media is queued for storage clean-up" "$(q "SELECT count(*) FROM storage_garbage WHERE storage_key LIKE 'chat/$C3/%'")" "3"
+q "INSERT INTO messages (conversation_id, sender_id, client_message_id, body) VALUES ('$C3','$ME',gen_random_uuid(),'نلتقي في المكتبة العامة')" >/dev/null
+check "message search uses the trigram index" "$(q "SET enable_seqscan=off; EXPLAIN SELECT id FROM messages WHERE deleted_at IS NULL AND type='TEXT' AND body ILIKE '%المكتبة%'" | grep -c messages_body_trgm_idx)" "1"
+check "message search finds Arabic text" "$(q "SELECT count(*) FROM messages WHERE deleted_at IS NULL AND type='TEXT' AND body ILIKE '%المكتبة%'")" "1"
+expect_error "height must be realistic" 23514 "INSERT INTO user_profiles (user_id, display_name, birth_date, gender, country_code, city, marital_status, education, occupation, marriage_timeline, bio, height_cm) VALUES ('$ME','n','1990-01-01','MALE','AE','c','NEVER_MARRIED','BACHELOR','doctor','WITHIN_1_YEAR','b',300)"
+check "voice-note plans: Free 10 · Plus 30 · Premium unlimited" "$(q "SELECT string_agg(p.code || '=' || fe.value, ',' ORDER BY CASE p.code::text WHEN 'FREE' THEN 0 WHEN 'PLUS' THEN 1 ELSE 2 END) FROM feature_entitlements fe JOIN subscription_plans p ON p.id=fe.plan_id WHERE fe.feature_key='voice_notes_per_conversation'")" "FREE=10,PLUS=30,PREMIUM=-1"
+echo "conversation tests: $pass passed, $fail failed"; [ "$fail" -eq 0 ]

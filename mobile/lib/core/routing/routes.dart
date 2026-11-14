@@ -1,4 +1,5 @@
-/// Route map for the 26 core screens. Paths are stable identifiers used by
+/// Route map: the 26 core screens plus the location step, Archive /
+/// Unmatched and the consultation screens (C1–C6). Paths are stable identifiers used by
 /// deep links, push notifications and analytics — do not rename casually.
 abstract final class Routes {
   // 1. Authentication & onboarding (6)
@@ -15,6 +16,7 @@ abstract final class Routes {
   static const preferences = '/setup/preferences';
   static const photos = '/setup/photos';
   static const verification = '/setup/verification';
+  static const location = '/setup/location';
 
   // 3. Discovery (6) — tabs live inside the floating-nav shell
   static const discover = '/discover';
@@ -27,6 +29,8 @@ abstract final class Routes {
   // 4. Communication (3)
   static const conversations = '/messages';
   static const chat = '/messages/:conversationId';
+  static const archive = '/messages/archive'; // registered before [chat]
+  static const unmatched = '/messages/unmatched';
   static const notifications = '/notifications';
 
   // 5. Account & services (6)
@@ -36,7 +40,23 @@ abstract final class Routes {
   static const privacy = '/me/privacy';
   static const help = '/me/help';
   static const settings = '/me/settings';
+  static const devices = '/me/privacy/devices';
+  static const blockedUsers = '/me/privacy/blocked';
+  static const languageSettings = '/me/settings/language';
+  static const terms = '/legal/terms';
+  static const privacyPolicy = '/legal/privacy';
+  static const frozen = '/account/frozen';
 
+  // 6. Family & marital consultations
+  static const consultations = '/consultations';
+  static const myConsultations = '/consultations/mine';
+  static const counselor = '/consultations/counselor/:id';
+  static const book = '/consultations/counselor/:id/book';
+  static const counselorApply = '/counselor/apply';
+  static const counselorDesk = '/counselor/desk';
+
+  static String counselorDetails(String id) => '/consultations/counselor/$id';
+  static String bookCounselor(String id) => '/consultations/counselor/$id/book';
   static String profile(String id) => '/discover/profile/$id';
   static String chatWith(String conversationId) => '/messages/$conversationId';
 }

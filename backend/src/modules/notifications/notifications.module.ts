@@ -1,4 +1,4 @@
-import { Controller, Get, Global, HttpCode, Inject, Injectable, Logger, Module, OnModuleInit, Post, Query } from '@nestjs/common';
+import { Controller, Delete, Get, Global, HttpCode, Inject, Injectable, Logger, Module, OnModuleInit, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { NotificationType, Prisma } from '@prisma/client';
 import { App, cert, initializeApp } from 'firebase-admin/app';
@@ -12,9 +12,28 @@ const PUSH_TEXT: Record<string, { ar: [string, string]; en: [string, string] }> 
   'push.new_match': { ar: ['توافق جديد', 'أعجب كلٌّ منكما بالآخر — ابدأ المحادثة'], en: ["It's a match", 'You both liked each other — say hello'] },
   'push.new_like': { ar: ['إعجاب جديد', 'أعجب شخص بملفك'], en: ['New like', 'Someone liked your profile'] },
   'push.new_message': { ar: ['رسالة جديدة', 'لديك رسالة جديدة'], en: ['New message', 'You have a new message'] },
+  'push.new_photo': { ar: ['صورة جديدة', 'أرسل إليك صورة'], en: ['New photo', 'You received a photo'] },
+  'push.new_voice': { ar: ['رسالة صوتية', 'وصلتك رسالة صوتية'], en: ['Voice message', 'You received a voice message'] },
   'push.verification_approved': { ar: ['تم اعتماد ملفك', 'ملفك ظاهر الآن لمن يناسبك'], en: ['Profile approved', 'Your profile is now live'] },
   'push.verification_rejected': { ar: ['نحتاج بعض التعديلات', 'راجع سبب الرفض وأعد الإرسال'], en: ['Changes needed', 'See why and resubmit'] },
+  'push.new_compliment': { ar: ['رسالة إطراء', 'وصلك إطراء مع إعجاب — اطّلع عليه'], en: ['A compliment for you', 'Someone liked you and left a compliment'] },
+  'push.rematch_request': { ar: ['طلب إعادة تطابق', 'يرغب شخص في إعادة التطابق معك'], en: ['Re-match request', 'Someone would like to match again'] },
+  'push.rematch_accepted': { ar: ['تمت إعادة التطابق', 'المحادثة مفتوحة من جديد'], en: ['Matched again', 'Your chat is open again'] },
+  'push.conversation_expiring': { ar: ['محادثة ستُحذف قريبًا', 'أرسل رسالة لتبقى المحادثة'], en: ['A chat expires soon', 'Send a message to keep it'] },
+  'push.consultation_request': { ar: ['طلب استشارة مدفوع', 'لديك طلب جديد بانتظار التأكيد'], en: ['Paid consultation request', 'A new request is waiting for you'] },
+  'push.consultation_confirmed': { ar: ['تم تأكيد استشارتك', 'يمكنك الآن التحدث مع الاستشاري'], en: ['Consultation confirmed', 'You can now chat with your counselor'] },
+  'push.consultation_declined': { ar: ['اعتذر الاستشاري', 'سيُسترد المبلغ كاملًا'], en: ['Counselor declined', 'You will be refunded in full'] },
+  'push.consultation_completed': { ar: ['اكتملت الجلسة', 'شاركنا تقييمك للاستشاري'], en: ['Session completed', 'Rate your counselor'] },
+  'push.counselor_approved': { ar: ['تم اعتماد ملفك كاستشاري', 'أضف أسعارك لاستقبال الطلبات'], en: ['Counselor profile approved', 'Add your prices to receive requests'] },
+  'push.counselor_rejected': { ar: ['طلب الاستشاري', 'راجع ملاحظات المراجعة'], en: ['Counselor application', 'See the review notes'] },
 };
+
+/** Message sounds vs. everything else; a match / compliment gets the warm chime. */
+export function soundFor(key: string): { ios: string; android: string; channel: string } {
+  if (key === 'push.new_message' || key === 'push.new_photo' || key === 'push.new_voice') return { ios: 'olfa_message.wav', android: 'olfa_message', channel: 'olfa_messages' };
+  if (key === 'push.new_match' || key === 'push.new_compliment' || key === 'push.rematch_accepted') return { ios: 'olfa_match.wav', android: 'olfa_match', channel: 'olfa_matches' };
+  return { ios: 'olfa_notification.wav', android: 'olfa_notification', channel: 'olfa_general' };
+}
 
 @Injectable()
 export class NotificationsService implements OnModuleInit {
@@ -51,7 +70,9 @@ export class NotificationsService implements OnModuleInit {
       tokens: sessions.map((s) => s.fcmToken!),
       notification: text ? { title: text[0], body: text[1] } : undefined,
       data: { type: key, ...data },
-      apns: { payload: { aps: { sound: 'default' } } },
+      // OLFA's own sounds (bundled in the app): one for messages, one for everything else.
+      apns: { payload: { aps: { sound: soundFor(key).ios, 'thread-id': data.conversationId ?? key } } },
+      android: { notification: { channelId: soundFor(key).channel, sound: soundFor(key).android, tag: data.conversationId } },
     });
     // Drop tokens FCM reports as invalid.
     const dead = res.responses.map((r, i) => (!r.success && /registration-token-not-registered|invalid-argument/.test(r.error?.code ?? '') ? sessions[i].id : null)).filter(Boolean) as string[];
@@ -70,6 +91,18 @@ export class NotificationsService implements OnModuleInit {
   markAllRead(userId: string) {
     return this.prisma.notification.updateMany({ where: { userId, readAt: null }, data: { readAt: new Date() } });
   }
+
+  markRead(userId: string, id: string) {
+    return this.prisma.notification.updateMany({ where: { id, userId, readAt: null }, data: { readAt: new Date() } });
+  }
+
+  remove(userId: string, id: string) {
+    return this.prisma.notification.deleteMany({ where: { id, userId } });
+  }
+
+  unreadCount(userId: string) {
+    return this.prisma.notification.count({ where: { userId, readAt: null } });
+  }
 }
 
 @ApiTags('notifications')
@@ -83,9 +116,24 @@ export class NotificationsController {
     return this.n.list(u.id, before ? new Date(before) : undefined);
   }
 
+  @AllowPending() @Get('unread-count')
+  async unread(@CurrentUser() u: AuthUser) {
+    return { count: await this.n.unreadCount(u.id) };
+  }
+
   @AllowPending() @Post('read-all') @HttpCode(204)
   async readAll(@CurrentUser() u: AuthUser) {
     await this.n.markAllRead(u.id);
+  }
+
+  @AllowPending() @Post(':id/read') @HttpCode(204)
+  async readOne(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    await this.n.markRead(u.id, id);
+  }
+
+  @AllowPending() @Delete(':id') @HttpCode(204)
+  async remove(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    await this.n.remove(u.id, id);
   }
 }
 

@@ -7,6 +7,7 @@ import '../../../core/theme/olfa_colors.dart';
 import '../../../core/theme/olfa_typography.dart';
 import '../../../core/widgets/olfa_widgets.dart';
 import '../../../shared/components/labels.dart';
+import '../../../shared/components/reference_pickers.dart';
 import '../../../shared/models/models.dart';
 import '../application/profile_controllers.dart';
 import '../data/profile_repository_impl.dart';
@@ -70,8 +71,22 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           Padding(padding: const EdgeInsets.only(top: 6), child: Text(l.errorMinPhotos, style: context.type.bodySmall.copyWith(color: OlfaColors.primary))),
         const SizedBox(height: 20),
         OlfaTextField(label: l.displayName, initialValue: d.name, error: nameErr == null ? null : l.errorNameLength, onChanged: (v) => ctrl.update((x) => x.copyWith(name: v))),
+        CountryField(label: l.countryOfResidence, value: d.countryIso, onChanged: (v) => ctrl.update((x) => v == null ? x : x.withCountry(v))),
+        NationalityField(
+          label: l.nationality,
+          value: d.nationality,
+          female: d.gender == Gender.female,
+          helper: d.nationalityEdited ? null : l.nationalityAutoHint,
+          onChanged: (v) => ctrl.update((x) => x.copyWith(nationality: v, nationalityEdited: true)),
+        ),
         OlfaTextField(label: l.city, initialValue: d.city, onChanged: (v) => ctrl.update((x) => x.copyWith(city: v))),
-        OlfaTextField(label: l.occupation, initialValue: d.occupation, onChanged: (v) => ctrl.update((x) => x.copyWith(occupation: v))),
+        OccupationField(label: l.occupation, value: occupationByKey(d.occupation)?.key, onChanged: (v) => ctrl.update((x) => x.copyWith(occupation: v ?? x.occupation))),
+        BodyMetricsFields(
+          heightCm: d.heightCm,
+          weightKg: d.weightKg,
+          onHeight: (v) => ctrl.update((x) => x.copyWith(heightCm: () => v)),
+          onWeight: (v) => ctrl.update((x) => x.copyWith(weightKg: () => v)),
+        ),
         OlfaTextField(
           label: l.bio,
           initialValue: d.bio,

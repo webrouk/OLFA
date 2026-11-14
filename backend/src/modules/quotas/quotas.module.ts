@@ -4,7 +4,7 @@ import { Prisma, PlanCode } from '@prisma/client';
 import { fromPgError } from '../../common/errors';
 import { AllowPending, AuthUser, CurrentUser, Public } from '../../common/http';
 import { PrismaService } from '../../common/infra';
-import { dayWindow, DayWindow } from '../../domain/quota-period';
+import { dayWindow, DayWindow, monthWindow } from '../../domain/quota-period';
 
 export interface Entitlements {
   plan: PlanCode;
@@ -20,6 +20,10 @@ export interface Entitlements {
   searchOutsideCountry: boolean;
   /** Conversations visible in Messages + Archive; -1 = unlimited. */
   visibleConversations: number;
+  /** Compliments (a message sent with a like) per calendar month. */
+  monthlyCompliments: number;
+  /** Voice notes a member may send in one conversation; -1 = unlimited. */
+  voiceNotesPerConversation: number;
 }
 
 /** Resolves the user's effective plan and its feature values from the DB. */
@@ -50,6 +54,8 @@ export class EntitlementsService {
       priorityVisibility: bool('priority_visibility'),
       searchOutsideCountry: bool('search_outside_country'),
       visibleConversations: typeof v['visible_conversations'] === 'number' ? (v['visible_conversations'] as number) : 5,
+      monthlyCompliments: num('monthly_compliments'),
+      voiceNotesPerConversation: typeof v['voice_notes_per_conversation'] === 'number' ? (v['voice_notes_per_conversation'] as number) : 10,
     };
   }
 
@@ -67,7 +73,7 @@ export class EntitlementsService {
   }
 }
 
-export type CounterKey = 'likes' | 'messages' | 'undos' | `msg:${string}`;
+export type CounterKey = 'likes' | 'messages' | 'undos' | 'compliments' | `msg:${string}`;
 
 /** Server-side daily quotas. UTC storage, user-local reset. */
 @Injectable()
@@ -80,8 +86,8 @@ export class QuotaService {
   }
 
   /** Atomically consume one unit (throws QUOTA_EXCEEDED). Returns remaining. */
-  async consume(userId: string, key: CounterKey, limit: number, ref?: { type: string; id: string }, tx?: Prisma.TransactionClient): Promise<number> {
-    const w = await this.window(userId);
+  async consume(userId: string, key: CounterKey, limit: number, ref?: { type: string; id: string }, tx?: Prisma.TransactionClient, period?: DayWindow): Promise<number> {
+    const w = period ?? (await this.window(userId));
     const db = tx ?? this.prisma;
     try {
       const rows = await db.$queryRaw<{ remaining: number }[]>`
@@ -102,15 +108,26 @@ export class QuotaService {
 
   async status(userId: string) {
     const [e, w] = await Promise.all([this.entitlements.forUser(userId), this.window(userId)]);
-    const [likes, messages, undos] = await Promise.all([this.used(userId, 'likes', w), this.used(userId, 'messages', w), this.used(userId, 'undos', w)]);
+    const acct = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true, status: true } });
+    const tz = acct.timezone;
+    const mw = monthWindow(new Date(), tz);
+    const [likes, messages, undos, compliments] = await Promise.all([
+      this.used(userId, 'likes', w),
+      this.used(userId, 'messages', w),
+      this.used(userId, 'undos', w),
+      this.used(userId, 'compliments', mw),
+    ]);
     const c = (used: number, limit: number) => ({ used, limit, remaining: Math.max(0, limit - used) });
     return {
       plan: e.plan,
       planExpiresAt: e.planExpiresAt,
+      // PENDING_VERIFICATION: discovery is read-only until the profile is approved
+      accountStatus: acct.status,
       resetsAt: w.end, // client renders in local time
       likes: c(likes, e.dailyLikes),
       messages: c(messages, e.dailyMessages),
       undos: c(undos, e.dailyUndos),
+      compliments: { ...c(compliments, e.monthlyCompliments), resetsAt: mw.end, period: 'month' },
       features: {
         advancedFilters: e.advancedFilters,
         seeWhoLikedYou: e.seeWhoLikedYou,
@@ -118,6 +135,8 @@ export class QuotaService {
         priorityVisibility: e.priorityVisibility,
         searchOutsideCountry: e.searchOutsideCountry,
         visibleConversations: e.visibleConversations,
+        voiceNotesPerConversation: e.voiceNotesPerConversation,
+        monthlyCompliments: e.monthlyCompliments,
       },
     };
   }

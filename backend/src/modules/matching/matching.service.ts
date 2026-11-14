@@ -9,6 +9,7 @@ import { compatibility, DEFAULT_WEIGHTS, Member, mutuallyCompatible, parseWeight
 import { dayWindow } from '../../domain/quota-period';
 import { ageOn } from '../../domain/security';
 import { discoveryScope, publicDistanceKm, sortNearest } from '../../domain/proximity';
+import { privacyOf } from '../../domain/privacy';
 import { profileInclude, toPublicProfile } from '../profiles/profile.mapper';
 import { EntitlementsService } from '../quotas/quotas.module';
 
@@ -26,8 +27,20 @@ export interface DiscoveryFilters {
   educations?: EducationLevel[];
   occupation?: string;
   nationality?: string;
+  /** Height / weight ranges; members who left them empty are excluded only when a range is set. */
+  heightMin?: number;
+  heightMax?: number;
+  weightMin?: number;
+  weightMax?: number;
   minCompatibility?: number;
   sort?: 'nearest' | 'best';
+}
+
+/** Inclusive range check; an empty value fails only when a bound is set. */
+export function inRange(v: number | null | undefined, min?: number, max?: number): boolean {
+  if (min == null && max == null) return true;
+  if (v == null) return false;
+  return (min == null || v >= min) && (max == null || v <= max);
 }
 
 export function usesPaidFilters(f: DiscoveryFilters, basicInterests: Set<string>): boolean {
@@ -67,6 +80,8 @@ type CandidateRow = {
   pref_wants_children: boolean | null;
   interests: string[];
   nationality: string | null;
+  height_cm: number | null;
+  weight_kg: number | null;
   show_location: boolean;
   distance_km: number | null;
 };
@@ -156,6 +171,7 @@ export class MatchingService {
     const minBirth = yearsAgo(ageMax + 1, 1); // oldest allowed
     const maxBirth = yearsAgo(ageMin); // youngest allowed
 
+    const viewerPrivacy = privacyOf(await this.prisma.userPrivacySettings.findUnique({ where: { userId: viewerId } }));
     const vp = await this.prisma.userProfile.findUniqueOrThrow({
       where: { userId: viewerId },
       select: { birthDate: true, countryCode: true, locationCountry: true, latitude: true, longitude: true },
@@ -198,6 +214,7 @@ export class MatchingService {
       .filter((r) => !f.maritalStatuses?.length || f.maritalStatuses.includes(r.marital_status))
       .filter((r) => !f.educations?.length || f.educations.includes(r.education))
       .filter((r) => !f.occupation || r.occupation === f.occupation)
+      .filter((r) => inRange(r.height_cm, f.heightMin, f.heightMax) && inRange(r.weight_kg, f.weightMin, f.weightMax))
       .filter((r) => !f.nationality || r.nationality === f.nationality)
       .map((r) => ({
         profile: {
@@ -261,7 +278,7 @@ export class MatchingService {
     return {
       items: ranked.map((r) => {
         const row = rowById.get(r.member.profile.id);
-        return toPublicProfile(byId.get(r.member.profile.id)!, this.env.CDN_BASE_URL, { compatibility: r.result.score, distanceKm: publicDistanceKm(row?.distance_km, row?.show_location ?? false) });
+        return toPublicProfile(byId.get(r.member.profile.id)!, this.env.CDN_BASE_URL, { compatibility: r.result.score, distanceKm: publicDistanceKm(row?.distance_km, row?.show_location ?? false), viewer: viewerPrivacy });
       }),
       weightsVersion: weights.version,
     };

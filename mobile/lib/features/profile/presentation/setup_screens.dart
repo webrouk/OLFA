@@ -9,6 +9,7 @@ import '../../../core/theme/olfa_spacing.dart';
 import '../../../core/theme/olfa_typography.dart';
 import '../../../core/widgets/olfa_widgets.dart';
 import '../../../shared/components/labels.dart';
+import '../../../shared/components/reference_pickers.dart';
 import '../../../shared/models/models.dart';
 import '../application/profile_controllers.dart';
 import '../domain/profile_draft.dart';
@@ -125,15 +126,14 @@ class _ProfileInfoScreenState extends ConsumerState<ProfileInfoScreen> {
       children: [
         PageHeading(l.infoTitle),
         OlfaTextField(label: l.displayName, hint: l.displayNameHint, initialValue: d.name, error: e('name'), autofillHints: const [AutofillHints.givenName], onChanged: (v) => ctrl.update((x) => x.copyWith(name: v))),
-        Text(l.country, style: context.type.inputLabel),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          value: d.countryIso,
-          isExpanded: true,
-          items: [for (final c in kCountries) DropdownMenuItem(value: c.iso, child: Text('${c.flag}  ${c.label(lang)}'))],
-          onChanged: (v) => ctrl.update((x) => x.copyWith(countryIso: v)),
+        CountryField(label: l.countryOfResidence, value: d.countryIso, onChanged: (v) => ctrl.update((x) => v == null ? x : x.withCountry(v))),
+        NationalityField(
+          label: l.nationality,
+          value: d.nationality,
+          female: d.gender == Gender.female,
+          helper: d.nationalityEdited ? null : l.nationalityAutoHint,
+          onChanged: (v) => ctrl.update((x) => x.copyWith(nationality: v, nationalityEdited: true)),
         ),
-        const SizedBox(height: 18),
         OlfaTextField(label: l.city, initialValue: d.city, error: e('city'), onChanged: (v) => ctrl.update((x) => x.copyWith(city: v))),
         Text(l.maritalStatus, style: context.type.inputLabel),
         const SizedBox(height: 8),
@@ -150,7 +150,13 @@ class _ProfileInfoScreenState extends ConsumerState<ProfileInfoScreen> {
           onChanged: (v) => ctrl.update((x) => x.copyWith(education: v)),
         ),
         const SizedBox(height: 18),
-        OlfaTextField(label: l.occupation, hint: l.occupationHint, initialValue: d.occupation, error: e('job'), onChanged: (v) => ctrl.update((x) => x.copyWith(occupation: v))),
+        OccupationField(label: l.occupation, value: d.occupation.isEmpty ? null : d.occupation, error: e('job'), onChanged: (v) => ctrl.update((x) => x.copyWith(occupation: v ?? ''))),
+        BodyMetricsFields(
+          heightCm: d.heightCm,
+          weightKg: d.weightKg,
+          onHeight: (v) => ctrl.update((x) => x.copyWith(heightCm: () => v)),
+          onWeight: (v) => ctrl.update((x) => x.copyWith(weightKg: () => v)),
+        ),
         Text(l.marriageTimeline, style: context.type.inputLabel),
         const SizedBox(height: 8),
         ChoiceWrap<MarriageTimeline>(options: MarriageTimeline.values, label: l.timelineLabel, isSelected: (t) => d.timeline == t, onTap: (t) => ctrl.update((x) => x.copyWith(timeline: t))),
@@ -181,7 +187,7 @@ class PreferencesScreen extends ConsumerWidget {
     final ctrl = ref.read(profileDraftProvider.notifier);
     return FormPage(
       header: const SetupProgress(step: 3),
-      action: PrimaryButton(label: l.continueLabel, onPressed: () => context.push(Routes.photos)),
+      action: PrimaryButton(label: l.continueLabel, onPressed: () => context.push(Routes.location)),
       children: [
         PageHeading(l.prefsTitle, body: l.prefsBody),
         Text(l.ageRange, style: context.type.inputLabel),
