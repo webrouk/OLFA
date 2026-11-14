@@ -2,6 +2,8 @@
 // data layer can swap the demo data source for the REST API without touching
 // presentation code.
 
+export '../reference/reference_data.dart';
+
 enum Gender { male, female }
 
 enum MaritalStatus { neverMarried, divorced, widowed }
@@ -48,33 +50,6 @@ Interest? interestByKey(String key) {
   }
   return null;
 }
-
-class Country {
-  const Country(this.iso, this.dial, this.flag, this.ar, this.en);
-  final String iso;
-  final String dial;
-  final String flag;
-  final String ar;
-  final String en;
-  String label(String lang) => lang == 'ar' ? ar : en;
-}
-
-const kCountries = <Country>[
-  Country('AE', '+971', '🇦🇪', 'الإمارات', 'United Arab Emirates'),
-  Country('SA', '+966', '🇸🇦', 'السعودية', 'Saudi Arabia'),
-  Country('EG', '+20', '🇪🇬', 'مصر', 'Egypt'),
-  Country('KW', '+965', '🇰🇼', 'الكويت', 'Kuwait'),
-  Country('QA', '+974', '🇶🇦', 'قطر', 'Qatar'),
-  Country('BH', '+973', '🇧🇭', 'البحرين', 'Bahrain'),
-  Country('OM', '+968', '🇴🇲', 'عُمان', 'Oman'),
-  Country('JO', '+962', '🇯🇴', 'الأردن', 'Jordan'),
-  Country('MA', '+212', '🇲🇦', 'المغرب', 'Morocco'),
-  Country('GB', '+44', '🇬🇧', 'المملكة المتحدة', 'United Kingdom'),
-  Country('US', '+1', '🇺🇸', 'الولايات المتحدة', 'United States'),
-];
-
-Country countryByIso(String iso) =>
-    kCountries.firstWhere((c) => c.iso == iso, orElse: () => kCountries.first);
 
 class ProfilePhoto {
   const ProfilePhoto({required this.id, this.thumbUrl, this.cardUrl, this.fullUrl});

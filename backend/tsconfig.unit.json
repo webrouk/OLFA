@@ -7,7 +7,14 @@
     "skipLibCheck": true,
     "outDir": "dist-unit",
     "rootDir": ".",
-    "types": ["node"]
+    "types": [
+      "node"
+    ],
+    "resolveJsonModule": true
   },
-  "include": ["src/domain/**/*.ts", "src/modules/media/image-pipeline.ts", "test/unit/**/*.ts"]
+  "include": [
+    "src/domain/**/*.ts",
+    "src/modules/media/image-pipeline.ts",
+    "test/unit/**/*.ts"
+  ]
 }

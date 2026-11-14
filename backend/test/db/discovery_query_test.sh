@@ -9,7 +9,7 @@ pass=0; fail=0
 check(){ if [ "$2" == "$3" ]; then echo "  ✓ $1"; pass=$((pass+1)); else echo "  ✗ $1 (expected '$3', got '$2')"; fail=$((fail+1)); fi; }
 createdb "$DB" || exit 1
 trap 'dropdb --if-exists "$DB" >/dev/null 2>&1' EXIT
-$PSQL -d "$DB" -f prisma/migrations/20261114000000_init/migration.sql >/dev/null
+for m in prisma/migrations/*/migration.sql; do $PSQL -d "$DB" -f "$m"; done >/dev/null
 $PSQL -d "$DB" -f prisma/seed.sql >/dev/null
 
 # Viewer: man, 32, AE, wants 24–34. Candidates: women with different situations.
