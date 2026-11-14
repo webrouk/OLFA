@@ -28,6 +28,10 @@ class DiscoveryQuery {
   @ApiPropertyOptional({ enum: MaritalStatus, isArray: true, description: 'paid' }) @IsOptional() @Transform(csv) @IsArray() @IsEnum(MaritalStatus, { each: true }) maritalStatuses?: MaritalStatus[];
   @ApiPropertyOptional({ enum: EducationLevel, isArray: true, description: 'paid' }) @IsOptional() @Transform(csv) @IsArray() @IsEnum(EducationLevel, { each: true }) educations?: EducationLevel[];
   @ApiPropertyOptional({ description: 'paid · occupation key' }) @IsOptional() @IsIn(ref.occupations) occupation?: string;
+  @ApiPropertyOptional({ minimum: 120, maximum: 230 }) @IsOptional() @Type(() => Number) @IsInt() @Min(120) @Max(230) heightMin?: number;
+  @ApiPropertyOptional({ minimum: 120, maximum: 230 }) @IsOptional() @Type(() => Number) @IsInt() @Min(120) @Max(230) heightMax?: number;
+  @ApiPropertyOptional({ minimum: 35, maximum: 250 }) @IsOptional() @Type(() => Number) @IsInt() @Min(35) @Max(250) weightMin?: number;
+  @ApiPropertyOptional({ minimum: 35, maximum: 250 }) @IsOptional() @Type(() => Number) @IsInt() @Min(35) @Max(250) weightMax?: number;
   @ApiPropertyOptional({ description: 'paid · nationality ISO code' }) @IsOptional() @IsIn(ref.nationalities) nationality?: string;
   @ApiPropertyOptional({ enum: ['nearest', 'best'], description: 'nearest (default): closest first, then own country' }) @IsOptional() @IsIn(['nearest', 'best']) sort?: 'nearest' | 'best';
   @ApiPropertyOptional({ description: 'paid' }) @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(100) minCompatibility?: number;

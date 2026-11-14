@@ -77,3 +77,17 @@ export function sniffImage(buf: Buffer): AllowedMime | null {
   if (/^ftyp(heic|heix|mif1|msf1)/.test(brand)) return 'image/heic';
   return null;
 }
+
+/**
+ * Chat photo: already compressed on the device (≤ 2048 px, high quality).
+ * The server re-encodes once more to guarantee no metadata (EXIF/GPS)
+ * survives and the long side stays ≤ 2048 px — visually lossless (q86, 4:4:4).
+ */
+export async function sanitizeChatImage(buf: Buffer): Promise<{ data: Buffer; width: number; height: number }> {
+  const { data, info } = await sharp(buf, { failOn: 'error' })
+    .rotate() // apply EXIF orientation, then drop all metadata
+    .resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 86, mozjpeg: true, chromaSubsampling: '4:4:4' })
+    .toBuffer({ resolveWithObject: true });
+  return { data, width: info.width, height: info.height };
+}

@@ -27,8 +27,20 @@ export interface DiscoveryFilters {
   educations?: EducationLevel[];
   occupation?: string;
   nationality?: string;
+  /** Height / weight ranges; members who left them empty are excluded only when a range is set. */
+  heightMin?: number;
+  heightMax?: number;
+  weightMin?: number;
+  weightMax?: number;
   minCompatibility?: number;
   sort?: 'nearest' | 'best';
+}
+
+/** Inclusive range check; an empty value fails only when a bound is set. */
+export function inRange(v: number | null | undefined, min?: number, max?: number): boolean {
+  if (min == null && max == null) return true;
+  if (v == null) return false;
+  return (min == null || v >= min) && (max == null || v <= max);
 }
 
 export function usesPaidFilters(f: DiscoveryFilters, basicInterests: Set<string>): boolean {
@@ -68,6 +80,8 @@ type CandidateRow = {
   pref_wants_children: boolean | null;
   interests: string[];
   nationality: string | null;
+  height_cm: number | null;
+  weight_kg: number | null;
   show_location: boolean;
   distance_km: number | null;
 };
@@ -200,6 +214,7 @@ export class MatchingService {
       .filter((r) => !f.maritalStatuses?.length || f.maritalStatuses.includes(r.marital_status))
       .filter((r) => !f.educations?.length || f.educations.includes(r.education))
       .filter((r) => !f.occupation || r.occupation === f.occupation)
+      .filter((r) => inRange(r.height_cm, f.heightMin, f.heightMax) && inRange(r.weight_kg, f.weightMin, f.weightMax))
       .filter((r) => !f.nationality || r.nationality === f.nationality)
       .map((r) => ({
         profile: {

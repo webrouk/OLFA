@@ -39,6 +39,8 @@ export class CreateProfileDto {
   @ApiProperty({ enum: MaritalStatus }) @IsEnum(MaritalStatus) maritalStatus: MaritalStatus;
   @ApiProperty({ enum: EducationLevel }) @IsEnum(EducationLevel) education: EducationLevel;
   @ApiProperty({ example: 'software_engineer', description: 'Key from shared/reference/occupations.tsv' }) @IsIn(ref.occupations) occupation: string;
+  @ApiPropertyOptional({ minimum: 120, maximum: 230, description: 'cm, optional' }) @IsOptional() @Type(() => Number) @IsInt() @Min(120) @Max(230) heightCm?: number;
+  @ApiPropertyOptional({ minimum: 35, maximum: 250, description: 'kg, optional' }) @IsOptional() @Type(() => Number) @IsInt() @Min(35) @Max(250) weightKg?: number;
   @ApiProperty({ enum: MarriageTimeline }) @IsEnum(MarriageTimeline) marriageTimeline: MarriageTimeline;
   @ApiProperty() @IsString() @MinLength(20) @MaxLength(500) @Matches(NO_CONTACT, { message: 'contact details are not allowed in bio' }) bio: string;
   @ApiProperty({ type: [String], example: ['reading', 'travel'] })

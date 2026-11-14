@@ -53,9 +53,23 @@ export class SafetyService {
     if (userId === dto.userId) throw new AppError(ErrorCode.VALIDATION);
     const target = await this.prisma.user.findUnique({ where: { id: dto.userId }, select: { id: true } });
     if (!target) throw new AppError(ErrorCode.NOT_FOUND);
-    const recent = await this.prisma.report.findFirst({ where: { reporterId: userId, reportedUserId: dto.userId, createdAt: { gt: new Date(Date.now() - 86_400_000) } } });
+    // A reported message must be one the reported person sent in a chat the reporter is part of;
+    // its text is snapshotted so moderators see it even if it is deleted later.
+    let details = dto.details;
+    if (dto.targetType === 'MESSAGE') {
+      if (!dto.targetId) throw new AppError(ErrorCode.VALIDATION, 'targetId (message id) is required');
+      const m = await this.prisma.message.findFirst({
+        where: { id: dto.targetId, senderId: dto.userId, conversation: { members: { some: { userId } } } },
+        select: { body: true, type: true, createdAt: true },
+      });
+      if (!m) throw new AppError(ErrorCode.NOT_FOUND);
+      details = [`[${m.type} · ${m.createdAt.toISOString()}] ${m.body}`.slice(0, 600), dto.details].filter(Boolean).join('\n— ').slice(0, 1000);
+    }
+    const recent = await this.prisma.report.findFirst({
+      where: { reporterId: userId, reportedUserId: dto.userId, targetType: dto.targetType ?? 'USER', targetId: dto.targetId ?? null, createdAt: { gt: new Date(Date.now() - 86_400_000) } },
+    });
     const report = recent ?? (await this.prisma.report.create({
-      data: { reporterId: userId, reportedUserId: dto.userId, reason: dto.reason, targetType: dto.targetType ?? 'USER', targetId: dto.targetId, details: dto.details, priority: PRIORITY[dto.reason] ?? 10 },
+      data: { reporterId: userId, reportedUserId: dto.userId, reason: dto.reason, targetType: dto.targetType ?? 'USER', targetId: dto.targetId, details, priority: PRIORITY[dto.reason] ?? 10 },
     }));
     if (dto.block ?? true) await this.block(userId, dto.userId);
     await this.audit.record({ actorType: 'USER', actorId: userId, action: 'report.create', entityType: 'user', entityId: dto.userId, after: { reason: dto.reason, reportId: report.id } });

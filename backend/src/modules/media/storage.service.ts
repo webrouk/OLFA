@@ -65,6 +65,12 @@ export class StorageService {
     );
   }
 
+  /** Deletes private objects (chat media clean-up). */
+  async deletePrivate(keys: string[]) {
+    if (keys.length === 0) return;
+    await this.s3.send(new DeleteObjectsCommand({ Bucket: this.env.S3_PRIVATE_BUCKET, Delete: { Objects: keys.map((Key) => ({ Key })) } }));
+  }
+
   async unpublish(publicKeys: string[]) {
     if (publicKeys.length === 0) return;
     await this.s3.send(new DeleteObjectsCommand({ Bucket: this.env.S3_PUBLIC_BUCKET, Delete: { Objects: publicKeys.map((Key) => ({ Key })) } }));

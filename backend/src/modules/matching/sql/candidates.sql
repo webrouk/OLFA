@@ -51,7 +51,7 @@ SELECT
   p.display_name, p.birth_date, p.gender, p.country_code, p.city, p.show_location,
   p.marital_status, p.education, p.occupation, p.marriage_timeline,
   p.has_children, p.wants_children, p.smoking, p.willing_to_relocate, p.bio, p.completeness, p.nationality,
-  pool.distance_km,
+  pool.distance_km, p.height_cm, p.weight_kg,
   pr.age_min, pr.age_max, pr.same_country_only, pr.country_codes, pr.cities,
   pr.marital_statuses, pr.education_levels, pr.occupations, pr.wants_children AS pref_wants_children,
   COALESCE((SELECT array_agg(i.key ORDER BY i.key) FROM user_interests ui JOIN interests i ON i.id = ui.interest_id WHERE ui.user_id = u.id), '{}') AS interests

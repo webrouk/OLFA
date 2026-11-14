@@ -3,6 +3,7 @@ import { Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../common/infra';
 import { NotificationsService } from '../notifications/notifications.module';
+import { StorageService } from '../media/storage.service';
 
 export const RETENTION_QUEUE = 'retention';
 
@@ -22,6 +23,7 @@ export class RetentionProcessor extends WorkerHost implements OnApplicationBoots
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly storage: StorageService,
     @InjectQueue(RETENTION_QUEUE) private readonly queue: Queue,
   ) {
     super();
@@ -41,9 +43,19 @@ export class RetentionProcessor extends WorkerHost implements OnApplicationBoots
     }
     // Incognito switches off when the plan no longer includes it.
     const [{ reset }] = await this.prisma.$queryRaw<{ reset: number }[]>`SELECT olfa_reset_lapsed_privacy() AS reset`;
+    // Uploads never attached to a message within a day are dropped; then their objects.
+    await this.prisma.messageAttachment.deleteMany({ where: { messageId: null, createdAt: { lt: new Date(Date.now() - 86_400_000) } } });
+    let removed = 0;
+    for (;;) {
+      const batch = await this.prisma.storageGarbage.findMany({ take: 500, orderBy: { createdAt: 'asc' } });
+      if (batch.length === 0) break;
+      await this.storage.deletePrivate(batch.map((b) => b.storageKey));
+      await this.prisma.storageGarbage.deleteMany({ where: { storageKey: { in: batch.map((b) => b.storageKey) } } });
+      removed += batch.length;
+    }
     const expired = await this.prisma.consultation.updateMany({ where: { status: 'AWAITING_PAYMENT', expiresAt: { lt: new Date() } }, data: { status: 'EXPIRED' } });
     const counts = rows.reduce<Record<string, number>>((a, r) => ((a[r.action] = (a[r.action] ?? 0) + 1), a), {});
-    this.log.log(`sweep: ${JSON.stringify(counts)} bookingsExpired=${expired.count} incognitoReset=${reset}`);
+    this.log.log(`sweep: ${JSON.stringify(counts)} bookingsExpired=${expired.count} incognitoReset=${reset} mediaRemoved=${removed}`);
     return { ...counts, bookingsExpired: expired.count, incognitoReset: reset };
   }
 }

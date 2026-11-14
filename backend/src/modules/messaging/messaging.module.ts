@@ -1,9 +1,16 @@
+import { Prisma } from '@prisma/client';
 import { Body, Controller, Get, HttpCode, Inject, Injectable, Logger, Module, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { ConnectedSocket, MessageBody, OnGatewayConnection, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Max, Min, validateOrReject } from 'class-validator';
+import { ArrayMaxSize, ArrayUnique, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Max, MaxLength, Min, validateOrReject } from 'class-validator';
+import { BullModule, InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { randomUUID } from 'node:crypto';
+import { containsPhoneNumber } from '../../domain/phone-detect';
+import { MEDIA_QUEUE, MediaModule } from '../media/media.module';
+import { StorageService } from '../media/storage.service';
 import { EventEmitter } from 'node:events';
 import type { Server, Socket } from 'socket.io';
 import { ENV, Env } from '../../config/env';
@@ -17,7 +24,26 @@ import { privacyOf, readReceiptsVisible } from '../../domain/privacy';
 
 export class SendMessageDto {
   @ApiProperty({ description: 'Client-generated UUID (idempotency key)' }) @IsUUID() clientMessageId: string;
-  @ApiProperty() @IsString() @Length(1, 2000) body: string;
+  /** Text, or the caption of photos (may be empty when attachments are sent). */
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) body?: string;
+  @ApiPropertyOptional({ description: 'Up to 3 photos, or one voice note, from POST :id/attachments', type: [String] })
+  @IsOptional() @IsArray() @ArrayMaxSize(3) @ArrayUnique() @IsUUID('all', { each: true }) attachmentIds?: string[];
+}
+
+/** Ask for an upload slot: photos ≤ 3 per message (compressed on the device), voice ≤ 60 s. */
+export class AttachmentDto {
+  @ApiProperty({ enum: ['IMAGE', 'VOICE'] }) @IsIn(['IMAGE', 'VOICE']) kind: 'IMAGE' | 'VOICE';
+  @ApiProperty({ enum: ['image/jpeg', 'image/webp', 'image/heic', 'audio/mp4', 'audio/aac', 'audio/mpeg'] })
+  @IsIn(['image/jpeg', 'image/webp', 'image/heic', 'audio/mp4', 'audio/aac', 'audio/mpeg']) mime: string;
+  @ApiProperty() @Type(() => Number) @IsInt() @Min(1) @Max(8_388_608) bytes: number;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(8000) width?: number;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(8000) height?: number;
+  @ApiPropertyOptional({ description: 'Voice only, ≤ 60000' }) @IsOptional() @Type(() => Number) @IsInt() @Min(300) @Max(60_000) durationMs?: number;
+  @ApiPropertyOptional({ description: '48 peaks 0–100 for the voice bubble' }) @IsOptional() @IsArray() @ArrayMaxSize(64) @IsInt({ each: true }) @Min(0, { each: true }) @Max(100, { each: true }) waveform?: number[];
+}
+
+class SearchQuery {
+  @ApiProperty({ minLength: 2 }) @IsString() @Length(2, 60) q: string;
 }
 
 class ListQuery {
@@ -34,6 +60,18 @@ class PageQuery {
 }
 
 /** In-process bus between REST/services and the WebSocket gateway. */
+const attachmentSelect = {
+  id: true,
+  kind: true,
+  mime: true,
+  width: true,
+  height: true,
+  durationMs: true,
+  waveform: true,
+  position: true,
+  storageKey: true,
+} as const;
+
 @Injectable()
 export class ChatEvents extends EventEmitter {}
 
@@ -46,6 +84,8 @@ export class MessagingService {
     private readonly settings: SettingsService,
     private readonly notifications: NotificationsService,
     private readonly events: ChatEvents,
+    private readonly storage: StorageService,
+    @InjectQueue(MEDIA_QUEUE) private readonly mediaQueue: Queue,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -200,7 +240,11 @@ export class MessagingService {
       where: { conversationId, deletedAt: null, ...(q.before ? { createdAt: { lt: new Date(q.before) } } : {}) },
       orderBy: { createdAt: 'desc' },
       take: q.limit + 1,
-      select: { id: true, clientMessageId: true, senderId: true, body: true, type: true, createdAt: true, receipts: { select: { userId: true, deliveredAt: true, readAt: true } } },
+      select: {
+        id: true, clientMessageId: true, senderId: true, body: true, type: true, createdAt: true, containsPhone: true,
+        receipts: { select: { userId: true, deliveredAt: true, readAt: true } },
+        attachments: { orderBy: { position: 'asc' }, select: attachmentSelect },
+      },
     });
     const hasMore = items.length > q.limit;
     // Read receipts are reciprocal: hide "read" on my messages unless both of us keep them on.
@@ -209,7 +253,16 @@ export class MessagingService {
     const mine = privacyOf(prefs.find((p) => p.userId === userId));
     const theirs = privacyOf(prefs.find((p) => p.userId === peerId));
     const showRead = readReceiptsVisible(mine, theirs);
-    const out = items.slice(0, q.limit).reverse().map((m) => (showRead ? m : { ...m, receipts: m.receipts.map((r) => ({ ...r, readAt: null })) }));
+    const out = await Promise.all(
+      items
+        .slice(0, q.limit)
+        .reverse()
+        .map(async (m) => ({
+          ...m,
+          attachments: await this.signAttachments(m.attachments),
+          receipts: showRead ? m.receipts : m.receipts.map((r) => ({ ...r, readAt: null })),
+        })),
+    );
     return { items: out, hasMore, readReceipts: showRead };
   }
 
@@ -226,8 +279,20 @@ export class MessagingService {
     });
     if (existing) return existing;
 
-    const body = dto.body.trim();
-    if (!body) throw new AppError(ErrorCode.VALIDATION, 'Empty message');
+    const body = (dto.body ?? '').trim();
+    const attachmentIds = dto.attachmentIds ?? [];
+    if (!body && attachmentIds.length === 0) throw new AppError(ErrorCode.VALIDATION, 'Empty message');
+    const atts = attachmentIds.length
+      ? await this.prisma.messageAttachment.findMany({ where: { id: { in: attachmentIds }, uploaderId: userId, conversationId, messageId: null } })
+      : [];
+    if (atts.length !== attachmentIds.length) throw new AppError(ErrorCode.VALIDATION, 'Unknown or already used attachment');
+    const kinds = new Set(atts.map((a) => a.kind));
+    if (kinds.size > 1) throw new AppError(ErrorCode.VALIDATION, 'Photos and a voice note go in separate messages');
+    const type = atts.length === 0 ? 'TEXT' : atts[0].kind === 'VOICE' ? 'VOICE' : 'IMAGE';
+    if (type === 'VOICE' && atts.length > 1) throw new AppError(ErrorCode.VALIDATION, 'One voice note per message');
+    // The upload must really be there (and within the signed size) before it is attached.
+    for (const a of atts) await this.storage.head(a.storageKey).catch(() => { throw new AppError(ErrorCode.VALIDATION, 'Upload not finished'); });
+    const containsPhone = containsPhoneNumber(body);
     const policy = await this.settings.get<string>('chat.messagesConsumeCredit', 'start_only');
     const contLimit = await this.settings.get('chat.continuationDailyLimit', 200);
 
@@ -241,7 +306,11 @@ export class MessagingService {
           const ent = await this.entitlements.forUser(userId);
           await this.quotas.consume(userId, 'messages', ent.dailyMessages, { type: 'message', id: conversationId }, tx);
         }
-        const m = await tx.message.create({ data: { conversationId, senderId: userId, clientMessageId: dto.clientMessageId, body } });
+        if (type === 'VOICE') await this.consumeVoice(tx, userId, conversationId, kind);
+        const m = await tx.message.create({ data: { conversationId, senderId: userId, clientMessageId: dto.clientMessageId, body, type, containsPhone } });
+        for (const [i, a] of atts.entries()) {
+          await tx.messageAttachment.update({ where: { id: a.id }, data: { messageId: m.id, position: i } });
+        }
         await tx.messageReceipt.create({ data: { messageId: m.id, userId: peerId } });
         await tx.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: m.createdAt } });
         return m;
@@ -255,9 +324,107 @@ export class MessagingService {
       throw err ?? e;
     }
 
-    this.events.emit('message', { conversationId, userIds: [userId, peerId], message: msg });
-    await this.notifications.push(peerId, 'push.new_message', { conversationId });
-    return msg;
+    // Photos are re-encoded in the worker: metadata (incl. GPS) stripped, ≤ 2048 px.
+    for (const a of atts.filter((x) => x.kind === 'IMAGE')) await this.mediaQueue.add('chat-image', { attachmentId: a.id }, { attempts: 3, backoff: { type: 'exponential', delay: 2000 } });
+    const full = await this.prisma.message.findUniqueOrThrow({
+      where: { id: msg.id },
+      select: { id: true, clientMessageId: true, senderId: true, body: true, type: true, createdAt: true, containsPhone: true, attachments: { orderBy: { position: 'asc' }, select: attachmentSelect } },
+    });
+    const out = { ...full, attachments: await this.signAttachments(full.attachments) };
+    this.events.emit('message', { conversationId, userIds: [userId, peerId], message: out });
+    await this.notifications.push(peerId, type === 'VOICE' ? 'push.new_voice' : type === 'IMAGE' ? 'push.new_photo' : 'push.new_message', { conversationId });
+    return out;
+  }
+
+  /** Voice notes per conversation: Free 10 · Plus 30 · Premium unlimited (consultation chats unlimited). */
+  private async consumeVoice(tx: Prisma.TransactionClient, userId: string, conversationId: string, kind: string) {
+    if (kind === 'CONSULTATION') return;
+    const ent = await this.entitlements.forUser(userId);
+    if (ent.voiceNotesPerConversation < 0) return;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'voice:' + conversationId + ':' + userId}, 0))`;
+    const used = await tx.message.count({ where: { conversationId, senderId: userId, type: 'VOICE' } });
+    if (used >= ent.voiceNotesPerConversation) {
+      throw new AppError(ErrorCode.QUOTA_EXCEEDED, 'Voice note limit for this conversation', { quota: 'voice', limit: ent.voiceNotesPerConversation });
+    }
+  }
+
+  /** Voice notes left in this conversation (null = unlimited). */
+  async voiceLeft(userId: string, conversationId: string) {
+    const { kind } = await this.assertCanChat(userId, conversationId);
+    const ent = await this.entitlements.forUser(userId);
+    if (kind === 'CONSULTATION' || ent.voiceNotesPerConversation < 0) return { limit: -1, used: null, remaining: null };
+    const used = await this.prisma.message.count({ where: { conversationId, senderId: userId, type: 'VOICE' } });
+    return { limit: ent.voiceNotesPerConversation, used, remaining: Math.max(0, ent.voiceNotesPerConversation - used) };
+  }
+
+  /** Upload slot in the private bucket (presigned POST; size and type are part of the signature). */
+  async createAttachment(userId: string, conversationId: string, dto: AttachmentDto) {
+    const { kind } = await this.assertCanChat(userId, conversationId, { forWrite: true });
+    const isVoice = dto.kind === 'VOICE';
+    if (isVoice !== dto.mime.startsWith('audio/')) throw new AppError(ErrorCode.VALIDATION, 'mime does not match kind');
+    if (isVoice && !dto.durationMs) throw new AppError(ErrorCode.VALIDATION, 'durationMs is required for voice notes');
+    if (isVoice) {
+      const left = await this.voiceLeft(userId, conversationId);
+      if (left.remaining === 0) throw new AppError(ErrorCode.QUOTA_EXCEEDED, 'Voice note limit for this conversation', { quota: 'voice', limit: left.limit });
+    }
+    void kind;
+    const pending = await this.prisma.messageAttachment.count({ where: { uploaderId: userId, messageId: null, createdAt: { gt: new Date(Date.now() - 3_600_000) } } });
+    if (pending >= 30) throw new AppError(ErrorCode.RATE_LIMITED, 'Too many pending uploads');
+    const key = `chat/${conversationId}/${randomUUID()}`;
+    const a = await this.prisma.messageAttachment.create({
+      data: {
+        uploaderId: userId,
+        conversationId,
+        kind: dto.kind,
+        storageKey: key,
+        mime: dto.mime,
+        bytes: dto.bytes,
+        width: dto.width ?? null,
+        height: dto.height ?? null,
+        durationMs: isVoice ? dto.durationMs : null,
+        waveform: isVoice ? (dto.waveform ?? []).slice(0, 64) : [],
+      },
+    });
+    return { id: a.id, upload: await this.storage.presignUpload(key, dto.mime, Math.min(dto.bytes + 1024, 8_388_608)) };
+  }
+
+  private async signAttachments<T extends { storageKey: string }>(list: T[]) {
+    return Promise.all(list.map(async ({ storageKey, ...rest }) => ({ ...rest, url: await this.storage.signedPrivateUrl(storageKey, 3600) })));
+  }
+
+  /**
+   * One field, two kinds of results: conversations whose name matches and
+   * messages whose text matches (trigram indexes). Only the user's own,
+   * unlocked conversations are searched.
+   */
+  async search(userId: string, q: string) {
+    const term = q.trim();
+    const like = `%${term.replace(/[\\%_]/g, (c) => '\\' + c)}%`;
+    const rows = await this.listRows(userId);
+    const allowed = rows.filter((r) => !r.locked).map((r) => r.conversation_id);
+    if (allowed.length === 0) return { conversations: [], messages: [] };
+    const [byName, byText] = await Promise.all([
+      this.prisma.$queryRaw<{ conversation_id: string }[]>`
+        SELECT DISTINCT cm.conversation_id
+        FROM conversation_members cm
+        JOIN conversations c ON c.id = cm.conversation_id
+        LEFT JOIN user_profiles p ON p.user_id = cm.user_id
+        LEFT JOIN consultations k ON k.id = c.consultation_id
+        LEFT JOIN counselor_profiles cp ON cp.user_id = k.counselor_id
+        WHERE cm.conversation_id = ANY(${allowed}::uuid[]) AND cm.user_id <> ${userId}::uuid
+          AND (p.display_name ILIKE ${like} OR cp.display_name ILIKE ${like})
+        LIMIT 20`,
+      this.prisma.$queryRaw<{ id: string; conversation_id: string; body: string; created_at: Date; sender_id: string }[]>`
+        SELECT m.id, m.conversation_id, m.body, m.created_at, m.sender_id
+        FROM messages m
+        WHERE m.conversation_id = ANY(${allowed}::uuid[]) AND m.deleted_at IS NULL AND m.type = 'TEXT' AND m.body ILIKE ${like}
+        ORDER BY m.created_at DESC
+        LIMIT 30`,
+    ]);
+    return {
+      conversations: byName.map((r) => r.conversation_id),
+      messages: byText.map((m) => ({ id: m.id, conversationId: m.conversation_id, body: m.body, createdAt: m.created_at, fromMe: m.sender_id === userId })),
+    };
   }
 
   async markRead(userId: string, conversationId: string) {
@@ -332,7 +499,7 @@ export class ChatGateway implements OnGatewayConnection {
     const u = this.user(socket);
     try {
       await this.limiter.hit(`ws:send:${u.id}`, 60, 60);
-      const dto = Object.assign(new SendMessageDto(), { clientMessageId: payload?.clientMessageId, body: payload?.body });
+      const dto = Object.assign(new SendMessageDto(), { clientMessageId: payload?.clientMessageId, body: payload?.body, attachmentIds: payload?.attachmentIds });
       await validateOrReject(dto);
       const msg = await this.messaging.send(u.id, payload.conversationId, dto);
       return { ok: true, message: msg };
@@ -404,6 +571,22 @@ export class MessagingController {
     return this.messaging.page(u.id, id, q);
   }
 
+  /** Instant search across names and message text (debounced by the app). */
+  @RateLimit(120, 60) @Get('search')
+  search(@CurrentUser() u: AuthUser, @Query() q: SearchQuery) {
+    return this.messaging.search(u.id, q.q);
+  }
+
+  @RateLimit(60, 60) @Post(':id/attachments')
+  attach(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AttachmentDto) {
+    return this.messaging.createAttachment(u.id, id, dto);
+  }
+
+  @Get(':id/voice-quota')
+  voice(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.messaging.voiceLeft(u.id, id);
+  }
+
   @RateLimit(120, 60) @Post(':id/messages')
   send(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SendMessageDto) {
     return this.messaging.send(u.id, id, dto);
@@ -416,7 +599,7 @@ export class MessagingController {
 }
 
 @Module({
-  imports: [JwtModule.register({})],
+  imports: [JwtModule.register({}), MediaModule, BullModule.registerQueue({ name: MEDIA_QUEUE })],
   controllers: [MessagingController],
   providers: [MessagingService, ChatGateway, ChatEvents],
 })

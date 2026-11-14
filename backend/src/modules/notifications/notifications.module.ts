@@ -12,6 +12,8 @@ const PUSH_TEXT: Record<string, { ar: [string, string]; en: [string, string] }> 
   'push.new_match': { ar: ['توافق جديد', 'أعجب كلٌّ منكما بالآخر — ابدأ المحادثة'], en: ["It's a match", 'You both liked each other — say hello'] },
   'push.new_like': { ar: ['إعجاب جديد', 'أعجب شخص بملفك'], en: ['New like', 'Someone liked your profile'] },
   'push.new_message': { ar: ['رسالة جديدة', 'لديك رسالة جديدة'], en: ['New message', 'You have a new message'] },
+  'push.new_photo': { ar: ['صورة جديدة', 'أرسل إليك صورة'], en: ['New photo', 'You received a photo'] },
+  'push.new_voice': { ar: ['رسالة صوتية', 'وصلتك رسالة صوتية'], en: ['Voice message', 'You received a voice message'] },
   'push.verification_approved': { ar: ['تم اعتماد ملفك', 'ملفك ظاهر الآن لمن يناسبك'], en: ['Profile approved', 'Your profile is now live'] },
   'push.verification_rejected': { ar: ['نحتاج بعض التعديلات', 'راجع سبب الرفض وأعد الإرسال'], en: ['Changes needed', 'See why and resubmit'] },
   'push.new_compliment': { ar: ['رسالة إطراء', 'وصلك إطراء مع إعجاب — اطّلع عليه'], en: ['A compliment for you', 'Someone liked you and left a compliment'] },

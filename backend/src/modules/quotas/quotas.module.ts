@@ -22,6 +22,8 @@ export interface Entitlements {
   visibleConversations: number;
   /** Compliments (a message sent with a like) per calendar month. */
   monthlyCompliments: number;
+  /** Voice notes a member may send in one conversation; -1 = unlimited. */
+  voiceNotesPerConversation: number;
 }
 
 /** Resolves the user's effective plan and its feature values from the DB. */
@@ -53,6 +55,7 @@ export class EntitlementsService {
       searchOutsideCountry: bool('search_outside_country'),
       visibleConversations: typeof v['visible_conversations'] === 'number' ? (v['visible_conversations'] as number) : 5,
       monthlyCompliments: num('monthly_compliments'),
+      voiceNotesPerConversation: typeof v['voice_notes_per_conversation'] === 'number' ? (v['voice_notes_per_conversation'] as number) : 10,
     };
   }
 
@@ -132,6 +135,8 @@ export class QuotaService {
         priorityVisibility: e.priorityVisibility,
         searchOutsideCountry: e.searchOutsideCountry,
         visibleConversations: e.visibleConversations,
+        voiceNotesPerConversation: e.voiceNotesPerConversation,
+        monthlyCompliments: e.monthlyCompliments,
       },
     };
   }

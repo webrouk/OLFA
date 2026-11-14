@@ -76,3 +76,9 @@ SELECT r.id, p.id FROM roles r JOIN permissions p ON
   OR (r.key = 'finance' AND p.key IN ('users.read','payments.read','payments.refund','plans.manage'))
   OR (r.key = 'viewer' AND p.key IN ('users.read','payments.read','audit.read'))
 ON CONFLICT DO NOTHING;
+
+-- Voice notes per conversation (-1 = unlimited).
+INSERT INTO feature_entitlements (plan_id, feature_key, value)
+SELECT p.id, v.k, v.val::jsonb FROM subscription_plans p
+JOIN (VALUES ('FREE','voice_notes_per_conversation','10'), ('PLUS','voice_notes_per_conversation','30'), ('PREMIUM','voice_notes_per_conversation','-1')) v(code, k, val) ON v.code = p.code::text
+ON CONFLICT (plan_id, feature_key) DO NOTHING;
