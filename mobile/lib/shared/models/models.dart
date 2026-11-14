@@ -88,7 +88,15 @@ class UserProfile {
     this.completeness = 0,
     this.showLocation = true,
     this.online = false,
+    this.nationality,
+    this.distanceKm,
   });
+
+  /// ISO code of the nationality (independent of the residence country).
+  final String? nationality;
+
+  /// Rounded distance from the viewer (≥1 km); null when hidden or unknown.
+  final int? distanceKm;
 
   final String id;
   final String name;
@@ -153,7 +161,15 @@ class Entitlements {
     required this.seeWhoLikedYou,
     required this.incognito,
     this.resetsAt,
+    this.searchOutsideCountry = false,
+    this.visibleConversations = 5,
   });
+
+  /// Discovery beyond the user's current country (Plus / Premium).
+  final bool searchOutsideCountry;
+
+  /// Inbox + archive conversations shown; -1 = unlimited.
+  final int visibleConversations;
 
   /// When today's quotas renew (server computes it in UTC; render in local time).
   final DateTime? resetsAt;
@@ -210,8 +226,14 @@ class PlanInfo {
   final String? localizedPrice; // from StoreKit / Play Billing, never hard-coded
 }
 
+/// Where discovery looks. Nearest first is always the order; outside the
+/// user's current country requires Plus or Premium (enforced by the server).
+enum DiscoveryScope { nearby, myCountry, otherCountry }
+
 class DiscoverFilters {
   const DiscoverFilters({
+    this.scope = DiscoveryScope.nearby,
+    this.nationality,
     this.ageMin = 22,
     this.ageMax = 38,
     this.countryIso,
@@ -225,16 +247,19 @@ class DiscoverFilters {
 
   final int ageMin;
   final int ageMax;
-  final String? countryIso; // null = any
+  final DiscoveryScope scope;
+  final String? countryIso; // set for myCountry / otherCountry
+  final String? nationality; // paid
   final String city;
   final Set<String> interests;
   final Set<MaritalStatus> maritalStatuses; // paid
   final Set<Education> educations; // paid
-  final String profession; // paid
+  final String profession; // paid · occupation key
   final int? minCompatibility; // paid
 
   bool get usesPaidFilters =>
       maritalStatuses.isNotEmpty ||
+      nationality != null ||
       educations.isNotEmpty ||
       profession.isNotEmpty ||
       minCompatibility != null ||
@@ -242,6 +267,8 @@ class DiscoverFilters {
       interests.any((k) => interestByKey(k)?.basic == false);
 
   DiscoverFilters copyWith({
+    DiscoveryScope? scope,
+    String? Function()? nationality,
     int? ageMin,
     int? ageMax,
     String? Function()? countryIso,
@@ -253,6 +280,8 @@ class DiscoverFilters {
     int? Function()? minCompatibility,
   }) =>
       DiscoverFilters(
+        scope: scope ?? this.scope,
+        nationality: nationality != null ? nationality() : this.nationality,
         ageMin: ageMin ?? this.ageMin,
         ageMax: ageMax ?? this.ageMax,
         countryIso: countryIso != null ? countryIso() : this.countryIso,
@@ -317,13 +346,212 @@ class ChatMessage {
       );
 }
 
+/// Where a conversation is listed. Inbox and archive share the plan's
+/// visible-conversation limit; unmatched and consultation chats do not.
+enum ConversationSection { inbox, archive, unmatched, consultation }
+
+enum RematchStatus { pending, accepted, declined }
+
+/// The single re-match request a conversation may ever carry.
+class RematchInfo {
+  const RematchInfo({required this.status, required this.byMe});
+  final RematchStatus status;
+  final bool byMe;
+}
+
+/// The counselor side of a consultation chat.
+class CounselorChatInfo {
+  const CounselorChatInfo({required this.consultationId, required this.name, this.status, this.scheduledAt});
+  final String consultationId;
+  final String name;
+  final ConsultationStatus? status;
+  final DateTime? scheduledAt;
+}
+
 class Conversation {
-  const Conversation({required this.id, required this.peer, this.lastMessage, this.lastAt, this.unread = 0});
+  const Conversation({
+    required this.id,
+    this.peer,
+    this.counselor,
+    this.section = ConversationSection.inbox,
+    this.lastMessage,
+    this.lastAt,
+    this.unread = 0,
+    this.expiresAt,
+    this.expiringSoon = false,
+    this.rematch,
+    this.unmatchedByMe,
+  });
   final String id;
-  final UserProfile peer;
+
+  /// Null for consultation chats (see [counselor]).
+  final UserProfile? peer;
+  final CounselorChatInfo? counselor;
+  final ConversationSection section;
   final String? lastMessage;
   final DateTime? lastAt;
   final int unread;
+
+  /// When the server will remove it from this section (null = never).
+  final DateTime? expiresAt;
+
+  /// Inside the warning window (inbox: after day 10 of 15; archive: last 7 of 30).
+  final bool expiringSoon;
+  final RematchInfo? rematch;
+  final bool? unmatchedByMe;
+
+  String get title => peer?.name ?? counselor?.name ?? '';
+  bool get isUnmatched => section == ConversationSection.unmatched;
+  bool get isConsultation => section == ConversationSection.consultation;
+
+  /// One request per conversation, ever.
+  bool get canRequestRematch => isUnmatched && rematch == null;
+  bool get canAnswerRematch => isUnmatched && rematch?.status == RematchStatus.pending && rematch?.byMe == false;
+  bool get canWrite => !isUnmatched;
+}
+
+/// A row past the plan's visible-conversation limit: the server sends no
+/// identity or preview for it.
+class LockedConversation {
+  const LockedConversation({required this.id, required this.section});
+  final String id;
+  final ConversationSection section;
+}
+
+/// Everything the Messages tab needs in one call.
+class ConversationIndex {
+  const ConversationIndex({required this.visible, required this.locked, required this.visibleLimit});
+  final List<Conversation> visible;
+  final List<LockedConversation> locked;
+
+  /// -1 = unlimited.
+  final int visibleLimit;
+
+  List<Conversation> section(ConversationSection s) => visible.where((c) => c.section == s).toList();
+  List<LockedConversation> lockedIn(ConversationSection s) => locked.where((c) => c.section == s).toList();
+  int count(ConversationSection s) => section(s).length + lockedIn(s).length;
+}
+
+// ───────────── consultations ─────────────
+
+enum CounselorKind { psychologist, familyCounselor }
+
+enum ConsultationService { premarital, marital, family, parenting, individual, divorceRecovery }
+
+enum ConsultationStatus { awaitingPayment, paid, confirmed, completed, declined, cancelled, refunded, expired }
+
+enum CounselorStatus { pending, approved, rejected, suspended }
+
+/// One bookable combination: service × language × duration, with its own price.
+class CounselorOffering {
+  const CounselorOffering({required this.id, required this.service, required this.language, required this.durationMinutes, required this.priceMinor, required this.currency, this.active = true});
+  final String id;
+  final ConsultationService service;
+  final String language; // ISO 639-1
+  final int durationMinutes;
+  final int priceMinor; // integer minor units
+  final String currency; // ISO 4217
+  final bool active;
+}
+
+class CounselorReview {
+  const CounselorReview({required this.rating, required this.createdAt, this.comment, this.by});
+  final int rating;
+  final String? comment;
+  final String? by; // first name only
+  final DateTime createdAt;
+}
+
+class Counselor {
+  const Counselor({
+    required this.id,
+    required this.kind,
+    required this.name,
+    required this.headline,
+    required this.bio,
+    required this.yearsExperience,
+    required this.licenseAuthority,
+    required this.licenseCountry,
+    required this.languages,
+    required this.services,
+    required this.offerings,
+    this.ratingAvg = 0,
+    this.ratingCount = 0,
+    this.reviews = const [],
+    this.status,
+    this.rejectReason,
+  });
+  final String id;
+  final CounselorKind kind;
+  final String name;
+  final String headline;
+  final String bio;
+  final int yearsExperience;
+  final String licenseAuthority;
+  final String licenseCountry;
+  final List<String> languages;
+  final List<ConsultationService> services;
+  final List<CounselorOffering> offerings;
+  final double ratingAvg;
+  final int ratingCount;
+  final List<CounselorReview> reviews;
+
+  /// Only present on the counselor's own profile.
+  final CounselorStatus? status;
+  final String? rejectReason;
+}
+
+class Consultation {
+  const Consultation({
+    required this.id,
+    required this.counselorId,
+    required this.counselorName,
+    required this.service,
+    required this.language,
+    required this.durationMinutes,
+    required this.priceMinor,
+    required this.currency,
+    required this.status,
+    required this.createdAt,
+    this.clientName,
+    this.note,
+    this.scheduledAt,
+    this.expiresAt,
+    this.conversationId,
+    this.myRating,
+    this.declineReason,
+  });
+  final String id;
+  final String counselorId;
+  final String counselorName;
+  final String? clientName; // counselor desk only
+  final ConsultationService service;
+  final String language;
+  final int durationMinutes;
+  final int priceMinor;
+  final String currency;
+  final ConsultationStatus status;
+  final DateTime createdAt;
+  final String? note;
+  final DateTime? scheduledAt;
+  final DateTime? expiresAt; // payment window
+  final String? conversationId;
+  final int? myRating;
+  final String? declineReason;
+
+  bool get canRate => status == ConsultationStatus.completed && myRating == null;
+  bool get canCancel => status == ConsultationStatus.awaitingPayment || status == ConsultationStatus.paid;
+}
+
+/// Result of creating a booking: what the payment sheet needs.
+class BookingIntent {
+  const BookingIntent({required this.consultationId, required this.amountMinor, required this.currency, required this.expiresAt, required this.provider, this.clientSecret});
+  final String consultationId;
+  final int amountMinor;
+  final String currency;
+  final DateTime expiresAt;
+  final String provider; // stripe | test
+  final String? clientSecret;
 }
 
 enum NotificationKind { match, like, verification, message, reminder }
@@ -390,13 +618,17 @@ class PrivacySettings {
 
 /// Realtime chat event (WebSocket in production).
 class ChatEvent {
-  const ChatEvent._(this.conversationId, {this.message, this.typing, this.readClientId});
+  const ChatEvent._(this.conversationId, {this.message, this.typing, this.readClientId, this.movedTo});
   factory ChatEvent.newMessage(ChatMessage m) => ChatEvent._(m.conversationId, message: m);
   factory ChatEvent.typingChanged(String convId, bool on) => ChatEvent._(convId, typing: on);
   factory ChatEvent.readReceipt(String convId, String clientId) => ChatEvent._(convId, readClientId: clientId);
+
+  /// Unmatch / re-match / archive moved the conversation to another section.
+  factory ChatEvent.moved(String convId, ConversationSection to) => ChatEvent._(convId, movedTo: to);
 
   final String conversationId;
   final ChatMessage? message;
   final bool? typing;
   final String? readClientId;
+  final ConversationSection? movedTo;
 }

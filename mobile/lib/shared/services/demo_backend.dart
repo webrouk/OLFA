@@ -37,6 +37,7 @@ class DemoBackend {
   final _likesMe = <String>{'d1', 'd3', 'd5', 'd7'};
   final _matches = <String, MatchItem>{};
   final _messages = <String, List<ChatMessage>>{};
+  final _conv = <String, _DemoConv>{};
   final _sentClientIds = <String>{};
   final _events = StreamController<ChatEvent>.broadcast();
   final _payments = <PaymentRecord>[];
@@ -45,6 +46,7 @@ class DemoBackend {
   VerificationStatus verification = VerificationStatus.pending;
   PrivacySettings privacy = const PrivacySettings();
   bool deletionScheduled = false;
+  String? locationCountry; // set by the location step
 
   Stream<ChatEvent> get events => _events.stream;
 
@@ -98,6 +100,8 @@ class DemoBackend {
       advancedFilters: p.advancedFilters,
       seeWhoLikedYou: p.seeWhoLikedYou,
       incognito: plan == PlanCode.premium,
+      searchOutsideCountry: plan != PlanCode.free,
+      visibleConversations: visibleLimit,
       resetsAt: DateTime.now().toUtc().add(const Duration(days: 1)).copyWith(hour: 0, minute: 0, second: 0, millisecond: 0, microsecond: 0).toLocal(),
     );
   }
@@ -121,15 +125,26 @@ class DemoBackend {
         if (f.usesPaidFilters && !plans[plan]!.advancedFilters) {
           throw const EntitlementRequiredFailure('advancedFilters');
         }
+        // Same rule as the server: outside the current country needs Plus/Premium.
+        final home = locationCountry ?? _me().countryIso;
+        if (f.countryIso != null && f.countryIso != home && plan == PlanCode.free) {
+          throw const EntitlementRequiredFailure('searchOutsideCountry');
+        }
+        final onlyHome = f.countryIso == null && plan == PlanCode.free;
         return _all()
             .where((p) => p.gender != myGender) // mutual base preference
+            .where((p) => !onlyHome || p.countryIso == home)
+            .where((p) => f.nationality == null || p.nationality == f.nationality)
+            .where((p) => f.profession.isEmpty || p.occupation == f.profession)
             .where((p) => !_liked.contains(p.id) && !_passed.contains(p.id) && !_blocked.contains(p.id))
             .where((p) => p.age >= f.ageMin && p.age <= f.ageMax)
             .where((p) => f.countryIso == null || p.countryIso == f.countryIso)
             .where((p) => f.maritalStatuses.isEmpty || f.maritalStatuses.contains(p.maritalStatus))
             .where((p) => f.educations.isEmpty || f.educations.contains(p.education))
             .where((p) => f.minCompatibility == null || p.compatibility >= f.minCompatibility!)
-            .toList();
+            .toList()
+          // nearest first, unknown distance last
+          ..sort((a, b) => (a.distanceKm ?? 1 << 30).compareTo(b.distanceKm ?? 1 << 30));
       }, ms: 650);
 
   Future<UserProfile> profile(String id) => _call(() {
@@ -173,7 +188,10 @@ class DemoBackend {
   // ───────────── matches & chat ─────────────
   Future<List<MatchItem>> matches() => _call(() {
         _seedMatches();
-        return _matches.values.where((m) => !_blocked.contains(m.peer.id)).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return _matches.values
+            .where((m) => !_blocked.contains(m.peer.id) && _conv[m.conversationId]?.section != ConversationSection.unmatched)
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       });
 
   Future<String> startConversation(String matchId) => _call(() {
@@ -184,31 +202,136 @@ class DemoBackend {
         final convId = 'c-${m.peer.id}';
         _matches[matchId] = MatchItem(id: m.id, peer: m.peer, createdAt: m.createdAt, conversationId: convId);
         _messages.putIfAbsent(convId, () => []);
+        _conv.putIfAbsent(convId, _DemoConv.new);
         return convId;
       });
 
-  Future<List<Conversation>> conversations() => _call(() {
-        _seedMatches();
-        final out = <Conversation>[];
-        for (final m in _matches.values) {
-          final id = m.conversationId;
-          if (id == null || _blocked.contains(m.peer.id)) continue;
-          final msgs = _messages[id] ?? const [];
-          out.add(Conversation(
-            id: id,
-            peer: m.peer,
-            lastMessage: msgs.isEmpty ? null : msgs.last.body,
-            lastAt: msgs.isEmpty ? m.createdAt : msgs.last.sentAt,
-            unread: msgs.where((x) => !x.fromMe && x.status != MessageStatus.read).length,
-          ));
-        }
-        out.sort((a, b) => b.lastAt!.compareTo(a.lastAt!));
-        return out;
+  // ───────────── conversations (same rules as olfa_conversation_list) ─────────────
+  static const inboxDays = 15, inboxWarnAfter = 10, archiveDays = 30, archiveWarnBefore = 7, unmatchedDays = 30;
+
+  int get visibleLimit => switch (plan) { PlanCode.free => 5, PlanCode.plus => 10, PlanCode.premium => -1 };
+
+  Conversation _row(MatchItem m, _DemoConv st) {
+    final msgs = _messages[m.conversationId] ?? const <ChatMessage>[];
+    final now = DateTime.now();
+    final (DateTime? exp, bool warn) = switch (st.section) {
+      ConversationSection.inbox => (st.anchor.add(const Duration(days: inboxDays)), now.isAfter(st.anchor.add(const Duration(days: inboxWarnAfter)))),
+      ConversationSection.archive => (
+          st.anchor.add(const Duration(days: archiveDays)),
+          now.isAfter(st.anchor.add(const Duration(days: archiveDays - archiveWarnBefore))),
+        ),
+      ConversationSection.unmatched => (st.unmatchedAt!.add(const Duration(days: unmatchedDays)), false),
+      ConversationSection.consultation => (null, false),
+    };
+    return Conversation(
+      id: m.conversationId!,
+      peer: m.peer,
+      section: st.section,
+      lastMessage: msgs.isEmpty ? null : msgs.last.body,
+      lastAt: msgs.isEmpty ? m.createdAt : msgs.last.sentAt,
+      unread: msgs.where((x) => !x.fromMe && x.status != MessageStatus.read).length,
+      expiresAt: exp,
+      expiringSoon: warn,
+      rematch: st.rematch,
+      unmatchedByMe: st.section == ConversationSection.unmatched ? st.unmatchedByMe : null,
+    );
+  }
+
+  ConversationIndex _index() {
+    _seedMatches();
+    final rows = <Conversation>[];
+    for (final m in _matches.values) {
+      final id = m.conversationId;
+      if (id == null || _blocked.contains(m.peer.id)) continue;
+      rows.add(_row(m, _conv.putIfAbsent(id, _DemoConv.new)));
+    }
+    _seedConsultations();
+    // client side shows the counselor's name; the counselor desk shows the client's
+    for (final k in [..._bookings, ..._desk].where((k) => k.conversationId != null)) {
+      final msgs = _messages[k.conversationId] ?? const <ChatMessage>[];
+      rows.add(Conversation(
+        id: k.conversationId!,
+        section: ConversationSection.consultation,
+        counselor: CounselorChatInfo(consultationId: k.id, name: k.clientName ?? k.counselorName, status: k.status, scheduledAt: k.scheduledAt),
+        lastMessage: msgs.isEmpty ? null : msgs.last.body,
+        lastAt: msgs.isEmpty ? k.createdAt : msgs.last.sentAt,
+        unread: msgs.where((x) => !x.fromMe && x.status != MessageStatus.read).length,
+      ));
+    }
+    rows.sort((a, b) => b.lastAt!.compareTo(a.lastAt!));
+    final visible = <Conversation>[], locked = <LockedConversation>[];
+    var pos = 0;
+    for (final c in rows) {
+      final counted = c.section == ConversationSection.inbox || c.section == ConversationSection.archive;
+      if (counted && visibleLimit >= 0 && pos++ >= visibleLimit) {
+        locked.add(LockedConversation(id: c.id, section: c.section));
+      } else {
+        visible.add(c);
+      }
+    }
+    return ConversationIndex(visible: visible, locked: locked, visibleLimit: visibleLimit);
+  }
+
+  Future<ConversationIndex> conversationIndex() => _call(_index);
+
+  Future<Conversation> conversation(String id) => _call(() {
+        final ix = _index();
+        if (ix.locked.any((c) => c.id == id)) throw const EntitlementRequiredFailure('visibleConversations');
+        return ix.visible.firstWhere((c) => c.id == id, orElse: () => throw const ServerFailure('not_found'));
+      }, ms: 150);
+
+  _DemoConv _state(String id) => _conv[id] ?? (throw const ServerFailure('not_found'));
+
+  Future<void> setFolder(String id, ConversationSection folder) => _call(() {
+        final st = _state(id);
+        if (st.section == ConversationSection.unmatched) throw const ServerFailure('conversation_closed');
+        st
+          ..section = folder
+          ..anchor = DateTime.now();
+        _events.add(ChatEvent.moved(id, folder));
+      }, ms: 200);
+
+  Future<void> unmatch(String id) => _call(() {
+        final st = _state(id);
+        if (st.section == ConversationSection.unmatched) throw const ServerFailure('invalid_state');
+        st
+          ..section = ConversationSection.unmatched
+          ..unmatchedAt = DateTime.now()
+          ..unmatchedByMe = true;
+        _events.add(ChatEvent.moved(id, ConversationSection.unmatched));
       });
 
-  Future<Conversation> conversation(String id) async {
-    final all = await conversations();
-    return all.firstWhere((c) => c.id == id, orElse: () => throw const ServerFailure('not_found'));
+  /// One request per conversation, ever. In the demo the other person accepts after a moment.
+  Future<void> requestRematch(String id) => _call(() {
+        final st = _state(id);
+        if (st.section != ConversationSection.unmatched) throw const ServerFailure('invalid_state');
+        if (st.rematch != null) throw const ServerFailure('rematch_used');
+        st.rematch = const RematchInfo(status: RematchStatus.pending, byMe: true);
+        _events.add(ChatEvent.moved(id, ConversationSection.unmatched));
+        Timer(const Duration(seconds: 4), () {
+          if (st.rematch?.status != RematchStatus.pending) return;
+          _acceptRematch(id, st, byMe: true);
+        });
+      });
+
+  Future<void> respondRematch(String id, bool accept) => _call(() {
+        final st = _state(id);
+        if (st.rematch?.status != RematchStatus.pending || st.rematch!.byMe) throw const ServerFailure('invalid_state');
+        if (accept) {
+          _acceptRematch(id, st, byMe: false);
+        } else {
+          st.rematch = const RematchInfo(status: RematchStatus.declined, byMe: false);
+          _events.add(ChatEvent.moved(id, ConversationSection.unmatched));
+        }
+      });
+
+  void _acceptRematch(String id, _DemoConv st, {required bool byMe}) {
+    st
+      ..rematch = RematchInfo(status: RematchStatus.accepted, byMe: byMe)
+      ..section = ConversationSection.inbox
+      ..anchor = DateTime.now()
+      ..unmatchedAt = null;
+    _events.add(ChatEvent.moved(id, ConversationSection.inbox));
   }
 
   /// Cursor pagination: newest first page, [before] loads older.
@@ -226,6 +349,12 @@ class DemoBackend {
         }
         final peerId = convId.substring(2);
         if (_blocked.contains(peerId)) throw const ServerFailure('blocked');
+        final k = _bookings.where((b) => b.conversationId == convId).firstOrNull;
+        if (k != null && k.status != ConsultationStatus.confirmed && k.status != ConsultationStatus.completed) throw const ServerFailure('conversation_closed');
+        final st = _conv[convId];
+        if (st?.section == ConversationSection.unmatched) throw const ServerFailure('conversation_closed');
+        if (_index().locked.any((c) => c.id == convId)) throw const EntitlementRequiredFailure('visibleConversations');
+        st?.anchor = DateTime.now(); // a message keeps the chat (inbox and archive)
         _sentClientIds.add(clientId);
         final msg = ChatMessage(id: 'srv-$clientId', clientId: clientId, conversationId: convId, fromMe: true, body: body.trim(), sentAt: DateTime.now(), status: MessageStatus.sent);
         list.add(msg);
@@ -253,6 +382,245 @@ class DemoBackend {
       _events.add(ChatEvent.newMessage(reply));
     });
   }
+
+  // ───────────── consultations (demo data — sample counselors, clearly not real) ─────────────
+  final _bookings = <Consultation>[];
+  final _desk = <Consultation>[];
+  Counselor? _myCounselor;
+  int _bookingSeq = 0;
+
+  CounselorOffering _o(String id, ConsultationService s, String lang, int d, int price) =>
+      CounselorOffering(id: id, service: s, language: lang, durationMinutes: d, priceMinor: price, currency: 'AED');
+
+  List<Counselor> _counselorsAll() {
+    final ar = lang == 'ar';
+    const s = ConsultationService.values;
+    return [
+      Counselor(
+        id: 'k1',
+        kind: CounselorKind.familyCounselor,
+        name: ar ? 'د. هدى المنصوري (نموذج)' : 'Dr. Huda Al Mansoori (sample)',
+        headline: ar ? 'مستشارة أسرية وزوجية' : 'Marriage & family counselor',
+        bio: ar ? 'خبرة في الإرشاد قبل الزواج وتحسين الحوار بين الزوجين وحل الخلافات الأسرية بأسلوب عملي.' : 'Experienced in premarital guidance, couple communication and resolving family conflict with practical tools.',
+        yearsExperience: 12,
+        licenseAuthority: ar ? 'هيئة تنمية المجتمع' : 'Community Development Authority',
+        licenseCountry: 'AE',
+        languages: const ['ar', 'en'],
+        services: [s[0], s[1], s[2]],
+        offerings: [
+          _o('o11', ConsultationService.premarital, 'ar', 45, 25000),
+          _o('o12', ConsultationService.marital, 'ar', 60, 30000),
+          _o('o13', ConsultationService.marital, 'en', 60, 30000),
+          _o('o14', ConsultationService.family, 'ar', 90, 42000),
+        ],
+        ratingAvg: 4.9,
+        ratingCount: 128,
+      ),
+      Counselor(
+        id: 'k2',
+        kind: CounselorKind.psychologist,
+        name: ar ? 'د. عمر الخطيب (نموذج)' : 'Dr. Omar Al Khatib (sample)',
+        headline: ar ? 'أخصائي نفسي إكلينيكي' : 'Clinical psychologist',
+        bio: ar ? 'يساعد الأفراد والأزواج على التعامل مع القلق والضغوط والتعافي بعد الانفصال.' : 'Helps individuals and couples with anxiety, stress and recovery after separation.',
+        yearsExperience: 9,
+        licenseAuthority: ar ? 'هيئة الصحة بدبي' : 'Dubai Health Authority',
+        licenseCountry: 'AE',
+        languages: const ['ar', 'en', 'fr'],
+        services: [s[4], s[5], s[1]],
+        offerings: [
+          _o('o21', ConsultationService.individual, 'ar', 45, 28000),
+          _o('o22', ConsultationService.divorceRecovery, 'en', 60, 35000),
+          _o('o23', ConsultationService.marital, 'fr', 60, 35000),
+        ],
+        ratingAvg: 4.8,
+        ratingCount: 86,
+      ),
+      Counselor(
+        id: 'k3',
+        kind: CounselorKind.familyCounselor,
+        name: ar ? 'أ. ريم السيد (نموذج)' : 'Reem Elsayed (sample)',
+        headline: ar ? 'مستشارة تربوية وأسرية' : 'Parenting & family counselor',
+        bio: ar ? 'تركّز على التربية الإيجابية والتوازن بين الحياة الزوجية والأبناء.' : 'Focused on positive parenting and balancing married life with children.',
+        yearsExperience: 7,
+        licenseAuthority: ar ? 'وزارة التضامن الاجتماعي' : 'Ministry of Social Solidarity',
+        licenseCountry: 'EG',
+        languages: const ['ar'],
+        services: [s[3], s[2]],
+        offerings: [_o('o31', ConsultationService.parenting, 'ar', 30, 15000), _o('o32', ConsultationService.family, 'ar', 60, 24000)],
+        ratingAvg: 4.7,
+        ratingCount: 41,
+      ),
+    ];
+  }
+
+  void _seedConsultations() {
+    if (_bookingSeq > 0) return;
+    _bookingSeq = 2;
+    final c = _counselorsAll();
+    final now = DateTime.now();
+    Consultation mk(String id, Counselor k, CounselorOffering o, ConsultationStatus st, {String? conv, DateTime? at, int? rating}) => Consultation(
+          id: id,
+          counselorId: k.id,
+          counselorName: k.name,
+          service: o.service,
+          language: o.language,
+          durationMinutes: o.durationMinutes,
+          priceMinor: o.priceMinor,
+          currency: o.currency,
+          status: st,
+          createdAt: now.subtract(const Duration(days: 2)),
+          scheduledAt: at,
+          conversationId: conv,
+          myRating: rating,
+        );
+    _bookings
+      ..add(mk('b1', c[0], c[0].offerings[1], ConsultationStatus.confirmed, conv: 'k-b1', at: now.add(const Duration(days: 1, hours: 3))))
+      ..add(mk('b2', c[1], c[1].offerings[0], ConsultationStatus.completed, conv: 'k-b2', at: now.subtract(const Duration(days: 3))));
+    final ar = lang == 'ar';
+    _messages['k-b1'] = [
+      ChatMessage(
+        id: 'kb1', clientId: 'kb1', conversationId: 'k-b1', fromMe: false, status: MessageStatus.delivered, sentAt: now.subtract(const Duration(hours: 5)),
+        body: ar ? 'أهلًا بك، أنا د. هدى. يسعدني مساعدتك. هل تود أن تخبرني باختصار عن موضوع الجلسة؟' : "Welcome, I'm Dr. Huda. Happy to help — could you tell me briefly what you'd like to focus on?",
+      ),
+    ];
+    _messages['k-b2'] = [
+      ChatMessage(id: 'kb2', clientId: 'kb2', conversationId: 'k-b2', fromMe: false, status: MessageStatus.read, sentAt: now.subtract(const Duration(days: 3)), body: ar ? 'شكرًا لك على الجلسة، أتمنى لك التوفيق.' : 'Thank you for the session — wishing you all the best.'),
+    ];
+  }
+
+  Future<List<Counselor>> counselors(CounselorKind? kind, ConsultationService? svc, String? language, int? duration) => _call(() {
+        return _counselorsAll()
+            .where((c) => kind == null || c.kind == kind)
+            .where((c) => c.offerings.any((o) => (svc == null || o.service == svc) && (language == null || o.language == language) && (duration == null || o.durationMinutes == duration)))
+            .toList();
+      });
+
+  Future<Counselor> counselor(String id) => _call(() {
+        final c = _counselorsAll().firstWhere((x) => x.id == id, orElse: () => throw const ServerFailure('not_found'));
+        final ar = lang == 'ar';
+        return Counselor(
+          id: c.id, kind: c.kind, name: c.name, headline: c.headline, bio: c.bio, yearsExperience: c.yearsExperience, licenseAuthority: c.licenseAuthority,
+          licenseCountry: c.licenseCountry, languages: c.languages, services: c.services, offerings: c.offerings, ratingAvg: c.ratingAvg, ratingCount: c.ratingCount,
+          reviews: [
+            CounselorReview(rating: 5, by: ar ? 'مريم' : 'Mariam', comment: ar ? 'نصائح عملية غيّرت طريقة حوارنا.' : 'Practical advice that changed how we talk.', createdAt: DateTime.now().subtract(const Duration(days: 4))),
+            CounselorReview(rating: 5, by: ar ? 'خالد' : 'Khaled', comment: ar ? 'مستمع رائع ومتفهم.' : 'A wonderful, understanding listener.', createdAt: DateTime.now().subtract(const Duration(days: 11))),
+            CounselorReview(rating: 4, by: ar ? 'نور' : 'Nour', comment: ar ? 'جلسة مفيدة جدًا.' : 'A very helpful session.', createdAt: DateTime.now().subtract(const Duration(days: 20))),
+          ],
+        );
+      });
+
+  Future<BookingIntent> book(String offeringId, String? note) => _call(() {
+        _seedConsultations();
+        final k = _counselorsAll().firstWhere((c) => c.offerings.any((o) => o.id == offeringId), orElse: () => throw const ServerFailure('not_found'));
+        if (_bookings.any((b) => b.counselorId == k.id && (b.status == ConsultationStatus.awaitingPayment || b.status == ConsultationStatus.paid || b.status == ConsultationStatus.confirmed))) {
+          throw const ServerFailure('conflict');
+        }
+        final o = k.offerings.firstWhere((x) => x.id == offeringId);
+        final id = 'b${++_bookingSeq}';
+        final exp = DateTime.now().add(const Duration(minutes: 30));
+        _bookings.insert(0, Consultation(
+          id: id, counselorId: k.id, counselorName: k.name, service: o.service, language: o.language, durationMinutes: o.durationMinutes,
+          priceMinor: o.priceMinor, currency: o.currency, status: ConsultationStatus.awaitingPayment, createdAt: DateTime.now(), expiresAt: exp, note: note,
+        ));
+        return BookingIntent(consultationId: id, amountMinor: o.priceMinor, currency: o.currency, expiresAt: exp, provider: 'test');
+      });
+
+  void _setBooking(String id, Consultation Function(Consultation k) f) {
+    final i = _bookings.indexWhere((b) => b.id == id);
+    if (i < 0) throw const ServerFailure('not_found');
+    _bookings[i] = f(_bookings[i]);
+  }
+
+  Consultation _with(Consultation k, {ConsultationStatus? status, String? conversationId, DateTime? scheduledAt, int? myRating}) => Consultation(
+        id: k.id, counselorId: k.counselorId, counselorName: k.counselorName, clientName: k.clientName, service: k.service, language: k.language,
+        durationMinutes: k.durationMinutes, priceMinor: k.priceMinor, currency: k.currency, status: status ?? k.status, createdAt: k.createdAt,
+        note: k.note, scheduledAt: scheduledAt ?? k.scheduledAt, expiresAt: k.expiresAt, conversationId: conversationId ?? k.conversationId, myRating: myRating ?? k.myRating,
+      );
+
+  /// Demo payment: succeeds immediately; then the (sample) counselor confirms and writes first.
+  Future<void> payBooking(String id) => _call(() {
+        _setBooking(id, (k) {
+          if (k.status != ConsultationStatus.awaitingPayment) throw const ServerFailure('invalid_state');
+          return _with(k, status: ConsultationStatus.paid);
+        });
+        Timer(const Duration(seconds: 3), () {
+          final k = _bookings.where((b) => b.id == id && b.status == ConsultationStatus.paid).firstOrNull;
+          if (k == null) return;
+          final conv = 'k-$id';
+          _setBooking(id, (k) => _with(k, status: ConsultationStatus.confirmed, conversationId: conv, scheduledAt: DateTime.now().add(const Duration(days: 1))));
+          _messages[conv] = [
+            ChatMessage(id: 'k$id', clientId: 'k$id', conversationId: conv, fromMe: false, status: MessageStatus.delivered, sentAt: DateTime.now(),
+                body: lang == 'ar' ? 'مرحبًا، تم تأكيد موعدك. أخبرني بما تود التركيز عليه في الجلسة.' : 'Hello, your session is confirmed. Tell me what you would like to focus on.'),
+          ];
+          _events.add(ChatEvent.moved(conv, ConversationSection.consultation));
+        });
+      }, ms: 1200);
+
+  Future<List<Consultation>> myConsultations() => _call(() {
+        _seedConsultations();
+        return List.unmodifiable(_bookings);
+      });
+
+  Future<void> cancelConsultation(String id) => _call(() => _setBooking(id, (k) {
+        if (!k.canCancel) throw const ServerFailure('invalid_state');
+        return _with(k, status: k.status == ConsultationStatus.paid ? ConsultationStatus.refunded : ConsultationStatus.cancelled);
+      }));
+
+  Future<void> reviewConsultation(String id, int rating) => _call(() => _setBooking(id, (k) {
+        if (k.status != ConsultationStatus.completed) throw const ServerFailure('invalid_state');
+        if (k.myRating != null) throw const ServerFailure('conflict');
+        return _with(k, myRating: rating);
+      }));
+
+  // counselor side (demo: moderation approves after a few seconds)
+  Future<Counselor?> myCounselor() => _call(() => _myCounselor, ms: 200);
+
+  Future<Counselor> applyCounselor(CounselorKind kind, String name, String headline, String bio, int years, String authority, String country, List<String> langs, List<ConsultationService> svcs) => _call(() {
+        final c = Counselor(id: 'me', kind: kind, name: name, headline: headline, bio: bio, yearsExperience: years, licenseAuthority: authority, licenseCountry: country, languages: langs, services: svcs, offerings: _myCounselor?.offerings ?? const [], status: CounselorStatus.pending);
+        _myCounselor = c;
+        Timer(const Duration(seconds: 5), () => _myCounselor = _counselorWith(status: CounselorStatus.approved));
+        return c;
+      }, ms: 900);
+
+  Counselor _counselorWith({CounselorStatus? status, List<CounselorOffering>? offerings}) {
+    final c = _myCounselor!;
+    return Counselor(id: c.id, kind: c.kind, name: c.name, headline: c.headline, bio: c.bio, yearsExperience: c.yearsExperience, licenseAuthority: c.licenseAuthority, licenseCountry: c.licenseCountry, languages: c.languages, services: c.services, offerings: offerings ?? c.offerings, status: status ?? c.status);
+  }
+
+  Future<void> saveOffering(ConsultationService svc, String language, int duration, int price, String currency) => _call(() {
+        final c = _myCounselor;
+        if (c?.status != CounselorStatus.approved) throw const ServerFailure('invalid_state');
+        final rest = c!.offerings.where((o) => !(o.service == svc && o.language == language && o.durationMinutes == duration));
+        _myCounselor = _counselorWith(offerings: [...rest, CounselorOffering(id: 'mo${DateTime.now().microsecondsSinceEpoch}', service: svc, language: language, durationMinutes: duration, priceMinor: price, currency: currency)]);
+      });
+
+  Future<List<Consultation>> desk() => _call(() {
+        if (_myCounselor?.status != CounselorStatus.approved) throw const ServerFailure('invalid_state');
+        if (_desk.isEmpty) {
+          final ar = lang == 'ar';
+          Consultation d(String id, String client, ConsultationService s, int dur, int price) => Consultation(
+              id: id, counselorId: 'me', counselorName: _myCounselor!.name, clientName: client, service: s, language: 'ar', durationMinutes: dur,
+              priceMinor: price, currency: 'AED', status: ConsultationStatus.paid, createdAt: DateTime.now().subtract(const Duration(hours: 2)),
+              note: ar ? 'نرغب في تحسين أسلوب الحوار بيننا.' : 'We would like to improve how we communicate.');
+          _desk.addAll([d('dk1', ar ? 'عميل نموذجي ١' : 'Sample client 1', ConsultationService.marital, 60, 30000), d('dk2', ar ? 'عميل نموذجي ٢' : 'Sample client 2', ConsultationService.premarital, 45, 25000)]);
+        }
+        return List.unmodifiable(_desk);
+      });
+
+  void _setDesk(String id, ConsultationStatus st, {String? conv, DateTime? at}) {
+    final i = _desk.indexWhere((x) => x.id == id);
+    if (i < 0) throw const ServerFailure('not_found');
+    _desk[i] = _with(_desk[i], status: st, conversationId: conv, scheduledAt: at);
+  }
+
+  Future<String> confirmBooking(String id, DateTime at) => _call(() {
+        final conv = 'k-$id';
+        _setDesk(id, ConsultationStatus.confirmed, conv: conv, at: at);
+        _messages.putIfAbsent(conv, () => []);
+        return conv;
+      });
+  Future<void> declineBooking(String id) => _call(() => _setDesk(id, ConsultationStatus.refunded));
+  Future<void> completeBooking(String id) => _call(() => _setDesk(id, ConsultationStatus.completed));
 
   // ───────────── safety ─────────────
   Future<void> report(String userId, String reason, {bool block = false}) => _call(() {
@@ -305,19 +673,28 @@ class DemoBackend {
   // ───────────── demo data ─────────────
   void _seedMatches() {
     if (_matches.isNotEmpty) return;
-    final peers = _all().where((p) => p.gender != myGender).take(4).toList();
+    final peers = _all().where((p) => p.gender != myGender).take(5).toList();
+    final now = DateTime.now();
+    // Demo spread: 0 inbox · 1 inbox, quiet for 11 days (warning) · 2 archived 24 days ago (warning)
+    // · 3 unmatched by the other person · 4 new match without a chat.
+    final ages = [const Duration(hours: 1), const Duration(days: 11), const Duration(days: 24), const Duration(days: 3), const Duration(hours: 16)];
     for (var i = 0; i < peers.length; i++) {
       final p = peers[i];
-      final convId = i < 2 ? 'c-${p.id}' : null;
-      _matches['m-${p.id}'] = MatchItem(id: 'm-${p.id}', peer: p, createdAt: DateTime.now().subtract(Duration(hours: i * 5 + 1)), conversationId: convId, isNew: i >= 2);
+      final convId = i < 4 ? 'c-${p.id}' : null;
+      final t0 = now.subtract(ages[i]);
+      _matches['m-${p.id}'] = MatchItem(id: 'm-${p.id}', peer: p, createdAt: t0.subtract(const Duration(hours: 2)), conversationId: convId, isNew: i == 4);
       if (convId != null) {
-        final t0 = DateTime.now().subtract(Duration(hours: i * 5 + 1));
+        _conv[convId] = _DemoConv()
+          ..anchor = t0
+          ..section = switch (i) { 2 => ConversationSection.archive, 3 => ConversationSection.unmatched, _ => ConversationSection.inbox }
+          ..unmatchedAt = i == 3 ? t0 : null
+          ..unmatchedByMe = false;
         _messages[convId] = List.generate(i == 0 ? 26 : 3, (k) {
           final mine = k.isOdd;
           final body = lang == 'ar'
               ? (mine ? 'سعدت بالحديث معك، ما الذي تبحث عنه في شريك الحياة؟' : 'السلام عليكم، سعيدة بالتوافق')
               : (mine ? 'Great talking to you — what matters most to you in a partner?' : 'Hello! Glad we matched');
-          return ChatMessage(id: 's$i$k', clientId: 's$i$k', conversationId: convId, fromMe: mine, body: body, sentAt: t0.add(Duration(minutes: k * 3)), status: MessageStatus.read);
+          return ChatMessage(id: 's$i$k', clientId: 's$i$k', conversationId: convId, fromMe: mine, body: body, sentAt: t0.subtract(Duration(minutes: (i == 0 ? 26 : 3) * 3 - k * 3)), status: MessageStatus.read);
         });
       }
     }
@@ -348,7 +725,11 @@ class DemoBackend {
       city: ar ? cAr : cEn,
       maritalStatus: m,
       education: e,
-      occupation: ar ? jAr : jEn,
+      // stored as a reference key, like the server (labels come from reference_data)
+      occupation: occupationByKey(jEn.toLowerCase().replaceAll(' ', '_'))?.key ?? (ar ? jAr : jEn),
+      nationality: countryOrNull(iso)?.nationality,
+      // demo distances from Dubai, rounded like the server (≥1 km)
+      distanceKm: const {'AE': 12, 'SA': 870, 'EG': 2420, 'JO': 2050, 'KW': 850, 'QA': 380, 'OM': 340, 'BH': 480}[iso] ?? (id.hashCode % 40 + 3),
       timeline: t,
       bio: ar ? bAr : bEn,
       interests: ints,
@@ -368,3 +749,12 @@ final demoBackendProvider = Provider<DemoBackend>((ref) {
   ref.listen(localeProvider, (_, next) => b.lang = next.languageCode, fireImmediately: true);
   return b;
 });
+
+/// Per-conversation lifecycle state kept by the demo server.
+class _DemoConv {
+  ConversationSection section = ConversationSection.inbox;
+  DateTime anchor = DateTime.now();
+  DateTime? unmatchedAt;
+  bool unmatchedByMe = false;
+  RematchInfo? rematch;
+}

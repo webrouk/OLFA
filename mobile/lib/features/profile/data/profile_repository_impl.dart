@@ -42,10 +42,11 @@ class ApiProfileRepository implements ProfileRepository, PhotoRepository {
         if (create) 'birthDate': d.birthDate!.toIso8601String().substring(0, 10),
         if (create) 'gender': toApiEnum(d.gender!),
         'countryCode': d.countryIso,
+        if (d.nationality != null) 'nationality': d.nationality,
         'city': d.city.trim(),
         'maritalStatus': toApiEnum(d.maritalStatus!),
         'education': toApiEnum(d.education!),
-        'occupation': d.occupation.trim(),
+        'occupation': d.occupation, // reference key
         'marriageTimeline': toApiEnum(d.timeline!),
         'bio': d.bio.trim(),
         'interests': d.interests.toList(),

@@ -28,6 +28,9 @@ dependencies:
   image_picker: ^1.1.2
   socket_io_client: ^3.0.2
   flutter_timezone: ^3.0.1
+  geolocator: ^13.0.2 # approximate location for "nearest first" (rounded to ~1 km)
+  geocoding: ^3.0.0 # device-side country/city lookup
+  flutter_stripe: ^11.4.0 # consultation payments (person-to-person service, web payment)
   # Phase 3 (needs Firebase project config files first):
   # firebase_core, firebase_messaging, in_app_purchase
 

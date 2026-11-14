@@ -27,6 +27,8 @@ class ApiDiscoveryRepository implements DiscoveryRepository {
           if (f.maritalStatuses.isNotEmpty) 'maritalStatuses': f.maritalStatuses.map(toApiEnum).join(','),
           if (f.educations.isNotEmpty) 'educations': f.educations.map(toApiEnum).join(','),
           if (f.profession.isNotEmpty) 'occupation': f.profession,
+          if (f.nationality != null) 'nationality': f.nationality,
+          'sort': 'nearest',
           if (f.minCompatibility != null) 'minCompatibility': f.minCompatibility,
         };
         final r = await _api.dio.get<Map<String, dynamic>>('/discovery', queryParameters: q);

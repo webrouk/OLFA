@@ -7,7 +7,10 @@ import '../../../core/routing/routes.dart';
 import '../../../core/theme/olfa_typography.dart';
 import '../../../core/widgets/olfa_widgets.dart';
 import '../../../shared/components/labels.dart';
+import '../../../shared/components/reference_pickers.dart';
 import '../../../shared/models/models.dart';
+import '../../location/data/location_service.dart';
+import '../../profile/application/profile_controllers.dart';
 import '../../subscriptions/application/entitlements_controller.dart';
 import '../application/discover_controller.dart';
 
@@ -23,19 +26,17 @@ class SearchFiltersScreen extends ConsumerStatefulWidget {
 class _SearchFiltersScreenState extends ConsumerState<SearchFiltersScreen> {
   late DiscoverFilters _f = ref.read(filtersProvider);
   late final _city = TextEditingController(text: _f.city);
-  late final _profession = TextEditingController(text: _f.profession);
 
   @override
   void dispose() {
     _city.dispose();
-    _profession.dispose();
     super.dispose();
   }
 
   void _upsell() => context.push(Routes.plans);
 
   void _apply() {
-    ref.read(filtersProvider.notifier).set(_f.copyWith(city: _city.text.trim(), profession: _profession.text.trim()));
+    ref.read(filtersProvider.notifier).set(_f.copyWith(city: _city.text.trim()));
     context.pop();
   }
 
@@ -45,6 +46,9 @@ class _SearchFiltersScreenState extends ConsumerState<SearchFiltersScreen> {
     final ent = ref.watch(entitlementsProvider).valueOrNull;
     final paid = ent?.advancedFilters ?? false;
     final lang = langOf(context);
+    final outside = ent?.searchOutsideCountry ?? false;
+    final me = ref.watch(myProfileProvider).valueOrNull;
+    final home = ref.watch(detectedLocationProvider)?.countryIso ?? me?.countryIso;
 
     Set<T> toggle<T>(Set<T> s, T v) => s.contains(v) ? ({...s}..remove(v)) : {...s, v};
 
@@ -55,7 +59,6 @@ class _SearchFiltersScreenState extends ConsumerState<SearchFiltersScreen> {
           onPressed: () => setState(() {
             _f = const DiscoverFilters();
             _city.clear();
-            _profession.clear();
           }),
           child: Text(l.reset),
         ),
@@ -73,15 +76,34 @@ class _SearchFiltersScreenState extends ConsumerState<SearchFiltersScreen> {
           ],
         ),
         const SizedBox(height: 18),
-        Text(l.country, style: context.type.inputLabel),
+        Text(l.searchWhere, style: context.type.inputLabel),
         const SizedBox(height: 8),
-        ChoiceWrap<String?>(
-          options: const [null, 'AE', 'SA', 'EG', 'KW', 'QA', 'JO'],
-          label: (iso) => iso == null ? l.anyCountry : countryByIso(iso).label(lang),
-          isSelected: (iso) => _f.countryIso == iso,
-          onTap: (iso) => setState(() => _f = _f.copyWith(countryIso: () => iso)),
+        ChoiceWrap<DiscoveryScope>(
+          options: DiscoveryScope.values,
+          locked: false,
+          label: (s) => switch (s) {
+            DiscoveryScope.nearby => l.scopeNearby,
+            DiscoveryScope.myCountry => home == null ? l.scopeMyCountry : '${l.scopeMyCountry} · ${countryByIso(home).label(lang)}',
+            DiscoveryScope.otherCountry => outside ? l.scopeOtherCountry : '${l.scopeOtherCountry} 🔒',
+          },
+          isSelected: (s) => _f.scope == s,
+          onTap: (s) {
+            if (s == DiscoveryScope.otherCountry && !outside) return _upsell();
+            setState(() => _f = _f.copyWith(
+                  scope: s,
+                  countryIso: () => switch (s) {
+                    DiscoveryScope.nearby => null,
+                    DiscoveryScope.myCountry => home,
+                    DiscoveryScope.otherCountry => _f.countryIso != home ? _f.countryIso : null,
+                  },
+                ));
+          },
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 6),
+        Text(outside ? l.scopeNoteOutside : l.scopeNoteFree, style: context.type.caption),
+        const SizedBox(height: 14),
+        if (_f.scope == DiscoveryScope.otherCountry)
+          CountryField(label: l.country, value: _f.countryIso, onChanged: (v) => setState(() => _f = _f.copyWith(countryIso: () => v))),
         OlfaTextField(label: l.city, hint: l.allCities, controller: _city),
         Text(l.interests, style: context.type.inputLabel),
         const SizedBox(height: 4),
@@ -133,14 +155,22 @@ class _SearchFiltersScreenState extends ConsumerState<SearchFiltersScreen> {
           onTap: (e) => paid ? setState(() => _f = _f.copyWith(educations: toggle(_f.educations, e))) : _upsell(),
         ),
         const SizedBox(height: 18),
-        if (paid)
-          OlfaTextField(label: l.occupation, hint: l.occupationHint, controller: _profession)
-        else ...[
-          Text(l.occupation, style: context.type.inputLabel),
-          const SizedBox(height: 8),
-          OlfaChoice(label: l.occupationHint, selected: false, locked: true, onTap: _upsell),
-          const SizedBox(height: 18),
-        ],
+        OccupationField(
+          label: l.occupation,
+          value: _f.profession.isEmpty ? null : _f.profession,
+          allowAny: true,
+          locked: !paid,
+          onLockedTap: _upsell,
+          onChanged: (v) => setState(() => _f = _f.copyWith(profession: v ?? '')),
+        ),
+        NationalityField(
+          label: l.nationality,
+          value: _f.nationality,
+          allowAny: true,
+          locked: !paid,
+          onLockedTap: _upsell,
+          onChanged: (v) => setState(() => _f = _f.copyWith(nationality: () => v)),
+        ),
         Text(l.minCompatibility, style: context.type.inputLabel),
         const SizedBox(height: 8),
         ChoiceWrap<int?>(

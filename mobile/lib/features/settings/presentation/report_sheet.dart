@@ -42,7 +42,7 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
       if (_block) {
         ref.invalidate(discoverControllerProvider);
         ref.invalidate(matchesProvider);
-        ref.invalidate(conversationsProvider);
+        ref.invalidate(conversationIndexProvider);
         ref.invalidate(blockedCountProvider);
       }
       if (!mounted) return;

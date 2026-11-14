@@ -7,6 +7,7 @@ import '../../core/theme/olfa_typography.dart';
 import '../../core/widgets/olfa_widgets.dart';
 import '../models/models.dart';
 import 'labels.dart';
+import 'reference_pickers.dart';
 
 /// Discovery card: main photo (card-size variant, never the original),
 /// name, age, location, verification, short bio, interests and completeness.
@@ -120,7 +121,7 @@ class _ProfileCardState extends State<ProfileCard> {
                           Icon(Icons.place_outlined, size: 14, color: OlfaColors.textMuted),
                           const SizedBox(width: 3),
                           Flexible(
-                            child: Text('${p.city} · ${p.occupation}', style: t.caption, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            child: Text('${p.city} · ${occupationLabel(context, p.occupation)}${p.distanceKm != null ? ' · ${p.distanceKm} km' : ''}', style: t.caption, maxLines: 1, overflow: TextOverflow.ellipsis),
                           ),
                         ],
                       ),

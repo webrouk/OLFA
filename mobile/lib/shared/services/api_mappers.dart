@@ -42,6 +42,8 @@ abstract final class ApiMappers {
         compatibility: (j['compatibility'] as num?)?.toInt() ?? 0,
         completeness: (j['completeness'] as num?)?.toInt() ?? 0,
         showLocation: j['showLocation'] as bool? ?? true,
+        nationality: j['nationality'] as String?,
+        distanceKm: (j['distanceKm'] as num?)?.round(),
       );
 
   /// GET /me/entitlements
@@ -61,6 +63,8 @@ abstract final class ApiMappers {
       seeWhoLikedYou: f['seeWhoLikedYou'] == true,
       incognito: f['incognito'] == true,
       resetsAt: j['resetsAt'] is String ? DateTime.tryParse(j['resetsAt'] as String)?.toLocal() : null,
+      searchOutsideCountry: f['searchOutsideCountry'] == true,
+      visibleConversations: (f['visibleConversations'] as num?)?.toInt() ?? 5,
     );
   }
 
@@ -104,4 +108,91 @@ abstract final class ApiMappers {
         'VERIFICATION_APPROVED' || 'VERIFICATION_REJECTED' => NotificationKind.verification,
         _ => NotificationKind.reminder,
       };
+
+  static DateTime? _date(Object? v) => v is String ? DateTime.tryParse(v)?.toLocal() : null;
+
+  /// One row of GET /conversations (unlocked).
+  static Conversation conversation(Map<String, dynamic> j) {
+    final last = j['lastMessage'] as Map?;
+    final rm = j['rematch'] as Map?;
+    final k = j['consultation'] as Map?;
+    final c = k?['counselor'] as Map?;
+    return Conversation(
+      id: j['id'] as String,
+      section: fromApiEnum(ConversationSection.values, j['section'], ConversationSection.inbox),
+      peer: j['peer'] is Map ? profile(Map<String, dynamic>.from(j['peer'] as Map)) : null,
+      counselor: k == null
+          ? null
+          : CounselorChatInfo(
+              consultationId: k['id'] as String,
+              name: c?['displayName'] as String? ?? '',
+              status: fromApiEnum(ConsultationStatus.values, k['status'], ConsultationStatus.confirmed),
+              scheduledAt: _date(k['scheduledAt']),
+            ),
+      lastMessage: last?['body'] as String?,
+      lastAt: _date(j['lastMessageAt']),
+      unread: (j['unread'] as num?)?.toInt() ?? 0,
+      expiresAt: _date(j['expiresAt']),
+      expiringSoon: j['expiringSoon'] == true,
+      unmatchedByMe: j['unmatchedByMe'] as bool?,
+      rematch: rm == null ? null : RematchInfo(status: fromApiEnum(RematchStatus.values, rm['status'], RematchStatus.pending), byMe: rm['byMe'] == true),
+    );
+  }
+
+  static CounselorOffering offering(Map<String, dynamic> j) => CounselorOffering(
+        id: j['id'] as String,
+        service: fromApiEnum(ConsultationService.values, j['service'], ConsultationService.marital),
+        language: j['language'] as String,
+        durationMinutes: (j['durationMinutes'] as num).toInt(),
+        priceMinor: (j['priceMinor'] as num).toInt(),
+        currency: j['currency'] as String,
+        active: j['active'] as bool? ?? true,
+      );
+
+  static Counselor counselor(Map<String, dynamic> j) => Counselor(
+        id: j['userId'] as String,
+        kind: fromApiEnum(CounselorKind.values, j['kind'], CounselorKind.familyCounselor),
+        name: j['displayName'] as String? ?? '',
+        headline: j['headline'] as String? ?? '',
+        bio: j['bio'] as String? ?? '',
+        yearsExperience: (j['yearsExperience'] as num?)?.toInt() ?? 0,
+        licenseAuthority: j['licenseAuthority'] as String? ?? '',
+        licenseCountry: j['licenseCountry'] as String? ?? '',
+        languages: (j['languages'] as List? ?? const []).cast<String>(),
+        services: (j['services'] as List? ?? const []).map((x) => fromApiEnum(ConsultationService.values, x, ConsultationService.marital)).toList(),
+        offerings: (j['offerings'] as List? ?? const []).map((x) => offering(Map<String, dynamic>.from(x as Map))).toList(),
+        // Prisma Decimal arrives as a string
+        ratingAvg: double.tryParse('${j['ratingAvg'] ?? 0}') ?? 0,
+        ratingCount: (j['ratingCount'] as num?)?.toInt() ?? 0,
+        reviews: (j['reviews'] as List? ?? const [])
+            .map((x) => Map<String, dynamic>.from(x as Map))
+            .map((r) => CounselorReview(rating: (r['rating'] as num).toInt(), comment: r['comment'] as String?, by: r['by'] as String?, createdAt: _date(r['createdAt']) ?? DateTime.now()))
+            .toList(),
+        status: j['status'] == null ? null : fromApiEnum(CounselorStatus.values, j['status'], CounselorStatus.pending),
+        rejectReason: j['rejectReason'] as String?,
+      );
+
+  static Consultation consultation(Map<String, dynamic> j) {
+    final c = j['counselor'] as Map?;
+    final client = j['client'] as Map?;
+    return Consultation(
+      id: j['id'] as String,
+      counselorId: (c?['userId'] ?? j['counselorId'] ?? '') as String,
+      counselorName: c?['displayName'] as String? ?? '',
+      clientName: (client?['profile'] as Map?)?['displayName'] as String?,
+      service: fromApiEnum(ConsultationService.values, j['service'], ConsultationService.marital),
+      language: j['language'] as String,
+      durationMinutes: (j['durationMinutes'] as num).toInt(),
+      priceMinor: (j['priceMinor'] as num).toInt(),
+      currency: j['currency'] as String,
+      status: fromApiEnum(ConsultationStatus.values, j['status'], ConsultationStatus.awaitingPayment),
+      createdAt: _date(j['createdAt']) ?? DateTime.now(),
+      note: j['clientNote'] as String?,
+      scheduledAt: _date(j['scheduledAt']),
+      expiresAt: _date(j['expiresAt']),
+      conversationId: (j['conversation'] as Map?)?['id'] as String?,
+      myRating: ((j['review'] as Map?)?['rating'] as num?)?.toInt(),
+      declineReason: j['declineReason'] as String?,
+    );
+  }
 }

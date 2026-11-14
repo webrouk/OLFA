@@ -13,6 +13,7 @@ import '../../../shared/models/models.dart';
 import '../../subscriptions/application/entitlements_controller.dart';
 import '../application/profile_controllers.dart';
 import '../domain/profile_draft.dart';
+import '../../consultations/application/consultation_providers.dart';
 
 /// 17 — My profile (hub for account & services)
 class MyProfileScreen extends ConsumerWidget {
@@ -86,6 +87,18 @@ class MyProfileScreen extends ConsumerWidget {
                 OlfaListTile(icon: Icons.people_alt_outlined, title: l.prefsTitleShort, onTap: () => _editPrefs(context, ref, me)),
                 OlfaListTile(icon: Icons.workspace_premium_outlined, title: l.screenPlans, onTap: () => context.push(Routes.plans)),
                 OlfaListTile(icon: Icons.receipt_long_outlined, title: l.screenPayments, onTap: () => context.push(Routes.payments)),
+              ]),
+              const SizedBox(height: 12),
+              // Family & marital consultations — booking, and the counselor side.
+              TileGroup(children: [
+                OlfaListTile(icon: Icons.support_agent_rounded, title: l.screenConsultations, subtitle: l.consultTileSub, accent: true, onTap: () => context.push(Routes.consultations)),
+                OlfaListTile(icon: Icons.event_note_outlined, title: l.screenMyConsultations, onTap: () => context.push(Routes.myConsultations)),
+                Consumer(builder: (context, ref, _) {
+                  final c = ref.watch(myCounselorProvider).valueOrNull;
+                  return c?.status == CounselorStatus.approved
+                      ? OlfaListTile(icon: Icons.dashboard_customize_outlined, title: l.screenCounselorDesk, onTap: () => context.push(Routes.counselorDesk))
+                      : OlfaListTile(icon: Icons.badge_outlined, title: l.becomeCounselor, subtitle: c?.status == CounselorStatus.pending ? l.counselorPending : null, onTap: () => context.push(Routes.counselorApply));
+                }),
               ]),
               const SizedBox(height: 12),
               TileGroup(children: [

@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/authentication/presentation/auth_screens.dart';
+import '../../features/consultations/presentation/consultation_screens.dart';
 import '../../features/discovery/presentation/discover_screen.dart';
 import '../../features/discovery/presentation/search_filters_screen.dart';
 import '../../features/likes/presentation/likes_screen.dart';
+import '../../features/location/presentation/location_screen.dart';
 import '../../features/matching/presentation/matches_screen.dart';
 import '../../features/messaging/presentation/chat_screen.dart';
 import '../../features/messaging/presentation/conversations_screen.dart';
@@ -46,11 +48,21 @@ final routerProvider = Provider<GoRouter>((ref) {
       _root(Routes.profileInfo, (_) => const ProfileInfoScreen()),
       _root(Routes.preferences, (_) => const PreferencesScreen()),
       _root(Routes.photos, (_) => const PhotosScreen()),
+      _root(Routes.location, (_) => const LocationScreen()),
       _root(Routes.verification, (_) => const VerificationScreen()),
       // Full-screen pages pushed above the tab shell
       _root(Routes.profileDetails, (s) => ProfileDetailsScreen(userId: s.pathParameters['id']!)),
       _root(Routes.search, (_) => const SearchFiltersScreen()),
+      _root(Routes.archive, (_) => const ArchiveScreen()),
+      _root(Routes.unmatched, (_) => const UnmatchedScreen()),
       _root(Routes.chat, (s) => ChatScreen(conversationId: s.pathParameters['conversationId']!)),
+      // F — Consultations (fixed paths before parameterised ones)
+      _root(Routes.consultations, (_) => const ConsultationsScreen()),
+      _root(Routes.myConsultations, (_) => const MyConsultationsScreen()),
+      _root(Routes.book, (s) => BookConsultationScreen(counselorId: s.pathParameters['id']!)),
+      _root(Routes.counselor, (s) => CounselorDetailsScreen(counselorId: s.pathParameters['id']!)),
+      _root(Routes.counselorApply, (_) => const CounselorApplyScreen()),
+      _root(Routes.counselorDesk, (_) => const CounselorDeskScreen()),
       _root(Routes.notifications, (_) => const NotificationsScreen()),
       _root(Routes.editProfile, (_) => const EditProfileScreen()),
       _root(Routes.plans, (_) => const PlansScreen()),

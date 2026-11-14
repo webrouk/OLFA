@@ -7,6 +7,8 @@ class ProfileDraft {
     this.name = '',
     this.birthDate,
     this.countryIso = 'AE',
+    this.nationality = 'AE',
+    this.nationalityEdited = false,
     this.city = '',
     this.maritalStatus,
     this.education,
@@ -33,6 +35,10 @@ class ProfileDraft {
   final String name;
   final DateTime? birthDate;
   final String countryIso;
+
+  /// Independent of the residence country; follows it until the user picks one.
+  final String? nationality;
+  final bool nationalityEdited;
   final String city;
   final MaritalStatus? maritalStatus;
   final Education? education;
@@ -50,6 +56,9 @@ class ProfileDraft {
   final bool photoRightsConfirmed;
   final bool policyAccepted;
 
+  /// Selecting a residence country picks its nationality — unless the user changed it.
+  ProfileDraft withCountry(String iso) => copyWith(countryIso: iso, nationality: nationalityEdited ? nationality : countryOrNull(iso)?.nationality);
+
   int get photoCount => photoSlots.where((x) => x).length;
   bool get photosReady => photoCount >= minPhotos && photoRightsConfirmed && policyAccepted;
 
@@ -58,6 +67,8 @@ class ProfileDraft {
     String? name,
     DateTime? birthDate,
     String? countryIso,
+    String? nationality,
+    bool? nationalityEdited,
     String? city,
     MaritalStatus? maritalStatus,
     Education? education,
@@ -80,6 +91,8 @@ class ProfileDraft {
         name: name ?? this.name,
         birthDate: birthDate ?? this.birthDate,
         countryIso: countryIso ?? this.countryIso,
+        nationality: nationality ?? this.nationality,
+        nationalityEdited: nationalityEdited ?? this.nationalityEdited,
         city: city ?? this.city,
         maritalStatus: maritalStatus ?? this.maritalStatus,
         education: education ?? this.education,
@@ -102,6 +115,8 @@ class ProfileDraft {
         gender: p.gender,
         name: p.name,
         countryIso: p.countryIso,
+        nationality: p.nationality ?? countryOrNull(p.countryIso)?.nationality,
+        nationalityEdited: p.nationality != null && p.nationality != countryOrNull(p.countryIso)?.nationality,
         city: p.city,
         maritalStatus: p.maritalStatus,
         education: p.education,

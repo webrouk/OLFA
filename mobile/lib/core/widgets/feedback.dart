@@ -136,11 +136,20 @@ String failureMessage(BuildContext context, Object error) {
         'messages' => l.quotaMessages,
         _ => l.quotaUndos,
       },
-    EntitlementRequiredFailure() => l.errorEntitlement,
+    EntitlementRequiredFailure(:final feature) => switch (feature) {
+        'visibleConversations' => l.lockedConversationsBody,
+        'searchOutsideCountry' => l.outsideCountryLocked,
+        _ => l.errorEntitlement,
+      },
     AlreadyActedFailure() => l.errorDuplicate,
     ValidationFailure() => l.errorValidation,
     UnauthorizedFailure() => l.errorUnauthorized,
-    ServerFailure() => l.errorGeneric,
+    ServerFailure(:final code) => switch (code) {
+        'conversation_closed' => l.chatClosedUnmatched,
+        'rematch_used' => l.rematchAlreadyUsed,
+        'not_paid' => l.consultPayFirst,
+        _ => l.errorGeneric,
+      },
   };
 }
 

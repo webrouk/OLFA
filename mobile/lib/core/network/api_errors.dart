@@ -34,6 +34,12 @@ Failure toFailure(Object e, {String quota = 'likes'}) {
     'BLOCKED' => const ServerFailure('blocked'),
     'ACCOUNT_NOT_ACTIVE' => const ServerFailure('account_not_active'),
     'NOT_FOUND' => const ServerFailure('not_found'),
+    'CONVERSATION_CLOSED' => const ServerFailure('conversation_closed'),
+    'CONVERSATION_LOCKED' => const EntitlementRequiredFailure('visibleConversations'),
+    'REMATCH_USED' => const ServerFailure('rematch_used'),
+    'INVALID_STATE' => const ServerFailure('invalid_state'),
+    'NOT_PAID' => const ServerFailure('not_paid'),
+    'CONFLICT' => const ServerFailure('conflict'),
     _ => const ServerFailure(),
   };
 }

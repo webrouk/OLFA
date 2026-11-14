@@ -13,7 +13,8 @@ import '../../../shared/models/models.dart';
 import '../../settings/presentation/report_sheet.dart';
 import '../application/chat_controller.dart';
 import '../data/messaging_repository_impl.dart';
-import 'conversations_screen.dart' show OfflineBar;
+import '../../../core/errors/failure.dart';
+import 'conversations_screen.dart' show OfflineBar, showConversationMenu;
 
 /// 19 — Private chat: realtime, paginated, optimistic, keyboard-aware.
 class ChatScreen extends ConsumerStatefulWidget {
@@ -80,18 +81,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         title: conv == null
             ? const OlfaSkeleton(width: 120, height: 14)
             : InkWell(
-                onTap: () => context.push(Routes.profile(conv.peer.id)),
+                onTap: conv.peer == null ? null : () => context.push(Routes.profile(conv.peer!.id)),
                 child: Row(children: [
-                  OlfaAvatar(size: 40, url: conv.peer.mainPhoto?.thumbUrl, online: conv.peer.online),
+                  if (conv.peer != null)
+                    OlfaAvatar(size: 40, url: conv.peer!.mainPhoto?.thumbUrl, online: conv.peer!.online && conv.canWrite)
+                  else
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(color: OlfaColors.primaryTint(), shape: BoxShape.circle),
+                      child: const Icon(Icons.support_agent_rounded, color: OlfaColors.primary, size: 20),
+                    ),
                   const SizedBox(width: 10),
                   Flexible(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                       Row(mainAxisSize: MainAxisSize.min, children: [
-                        Flexible(child: Text(conv.peer.name, overflow: TextOverflow.ellipsis, style: t.bodyLarge.copyWith(fontWeight: FontWeight.w700))),
-                        if (conv.peer.photosReviewed) ...[const SizedBox(width: 6), VerifiedBadge(size: 16, semanticLabel: l.photosReviewed)],
+                        Flexible(child: Text(conv.title, overflow: TextOverflow.ellipsis, style: t.bodyLarge.copyWith(fontWeight: FontWeight.w700))),
+                        if (conv.peer?.photosReviewed ?? false) ...[const SizedBox(width: 6), VerifiedBadge(size: 16, semanticLabel: l.photosReviewed)],
                       ]),
                       Text(
-                        typing ? l.typing : (conv.peer.online ? l.onlineNow : l.matchedRecently),
+                        conv.isUnmatched
+                            ? l.screenUnmatched
+                            : typing
+                                ? l.typing
+                                : conv.isConsultation
+                                    ? l.consultationTag
+                                    : ((conv.peer?.online ?? false) ? l.onlineNow : l.matchedRecently),
                         style: t.caption.copyWith(color: typing ? OlfaColors.primary : null),
                       ),
                     ]),
@@ -99,13 +114,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ]),
               ),
         actions: [
-          if (conv != null) OlfaIconButton(icon: Icons.more_horiz_rounded, tooltip: l.reportOrBlock, onPressed: () => showReportSheet(context, ref, conv.peer)),
+          if (conv != null && conv.isConsultation && conv.peer != null)
+            OlfaIconButton(icon: Icons.more_horiz_rounded, tooltip: l.reportOrBlock, onPressed: () => showReportSheet(context, ref, conv.peer!)),
+          if (conv != null && !conv.isConsultation)
+            OlfaIconButton(icon: Icons.more_horiz_rounded, tooltip: l.conversationMenu, onPressed: () => showConversationMenu(context, ref, conv)),
           const SizedBox(width: 6),
         ],
       ),
       body: Column(
         children: [
           if (!online) OfflineBar(text: l.offlineChat),
+          if (conv != null && conv.expiringSoon && conv.expiresAt != null)
+            _ExpiryBanner(days: conv.expiresAt!.difference(DateTime.now()).inDays.clamp(0, 99).toInt()),
           Expanded(
             child: Stack(
               children: [
@@ -127,7 +147,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         if (idx == items.length) {
                           return s.loadingMore
                               ? const Padding(padding: EdgeInsets.all(12), child: Center(child: SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2, color: OlfaColors.primary))))
-                              : (s.hasMore ? const SizedBox(height: 24) : _SystemPill(text: l.matchedSayHello));
+                              : (s.hasMore ? const SizedBox(height: 24) : _SystemPill(text: (conv?.isConsultation ?? false) ? l.consultationChatNote : l.matchedSayHello));
                         }
                         final m = items[idx];
                         final older = idx + 1 < items.length ? items[idx + 1] : null;
@@ -154,8 +174,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ],
             ),
           ),
-          // Composer
-          DecoratedBox(
+          // Unmatched: messaging stops; one re-match request per conversation.
+          if (conv != null && conv.isUnmatched) _UnmatchedPanel(conversation: conv) else _composer(context, l),
+        ],
+      ),
+    );
+  }
+
+  Widget _composer(BuildContext context, AppLocalizations l) {
+    return DecoratedBox(
             decoration: const BoxDecoration(color: OlfaColors.white, border: Border(top: BorderSide(color: OlfaColors.gray))),
             child: SafeArea(
               top: false,
@@ -193,10 +220,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ]),
               ),
             ),
-          ),
-        ],
-      ),
-    );
+          );
   }
 }
 
@@ -317,6 +341,88 @@ class _TypingBubbleState extends State<_TypingBubble> with SingleTickerProviderS
               );
             }),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ExpiryBanner extends StatelessWidget {
+  const _ExpiryBanner({required this.days});
+  final int days;
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        color: OlfaColors.primaryTint(),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        child: Row(children: [
+          const Icon(Icons.schedule_rounded, size: 17, color: OlfaColors.primary),
+          const SizedBox(width: 8),
+          Expanded(child: Text(AppLocalizations.of(context).expiresInDays(days), style: context.type.bodySmall)),
+        ]),
+      );
+}
+
+/// Replaces the composer after an unmatch.
+class _UnmatchedPanel extends ConsumerStatefulWidget {
+  const _UnmatchedPanel({required this.conversation});
+  final Conversation conversation;
+  @override
+  ConsumerState<_UnmatchedPanel> createState() => _UnmatchedPanelState();
+}
+
+class _UnmatchedPanelState extends ConsumerState<_UnmatchedPanel> {
+  bool _busy = false;
+
+  Future<void> _do(Future<void> Function() op, String done) async {
+    setState(() => _busy = true);
+    try {
+      await op();
+      if (mounted) showToast(context, done);
+    } on Failure catch (e) {
+      if (mounted) showToast(context, failureMessage(context, e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final c = widget.conversation;
+    final actions = ref.read(conversationActionsProvider);
+    final rm = c.rematch;
+    final text = switch (rm?.status) {
+      RematchStatus.pending => rm!.byMe ? l.rematchWaiting(c.title) : l.rematchIncoming(c.title),
+      RematchStatus.declined || RematchStatus.accepted => rm!.status == RematchStatus.declined ? l.rematchDeclined : l.rematchAlreadyUsed,
+      null => l.chatClosedUnmatched,
+    };
+    return DecoratedBox(
+      decoration: const BoxDecoration(color: OlfaColors.white, border: Border(top: BorderSide(color: OlfaColors.gray))),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.link_off_rounded, size: 19, color: OlfaColors.primary),
+              const SizedBox(width: 10),
+              Expanded(child: Text(text, style: context.type.bodySmall)),
+            ]),
+            const SizedBox(height: 10),
+            if (c.canRequestRematch) ...[
+              PrimaryButton(label: l.rematchRequest, loading: _busy, onPressed: _busy ? null : () => _do(() => actions.requestRematch(c.id), l.rematchSent)),
+              const SizedBox(height: 4),
+              Text(l.rematchRequestBody, textAlign: TextAlign.center, style: context.type.caption),
+            ] else if (c.canAnswerRematch)
+              Row(children: [
+                Expanded(child: SecondaryButton(label: l.rematchDecline, onPressed: _busy ? null : () => _do(() => actions.respondRematch(c.id, accept: false), l.rematchDeclined))),
+                const SizedBox(width: 10),
+                Expanded(child: PrimaryButton(label: l.rematchAccept, loading: _busy, onPressed: _busy ? null : () => _do(() => actions.respondRematch(c.id, accept: true), l.rematchAccepted))),
+              ])
+            else
+              Center(child: OlfaTag(rm?.status == RematchStatus.pending ? l.rematchPendingTag : l.rematchUsedTag, icon: Icons.hourglass_empty_rounded)),
+          ]),
         ),
       ),
     );
