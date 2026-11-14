@@ -8,13 +8,17 @@ import { MediaProcessor } from './modules/media/media.processor';
 import { MEDIA_QUEUE } from './modules/media/media.module';
 import { ManualOnlyModerationProvider, MODERATION_PROVIDER, RekognitionModerationProvider } from './modules/media/moderation.provider';
 import { StorageService } from './modules/media/storage.service';
+import { NotificationsService } from './modules/notifications/notifications.module';
+import { RETENTION_QUEUE, RetentionProcessor } from './modules/retention/retention.processor';
 
-/** Background worker process: image processing / moderation scans. */
+/** Background worker process: image processing / moderation scans, retention sweep. */
 @Module({
-  imports: [InfraModule, BullModule.forRootAsync(bullConnection), BullModule.registerQueue({ name: MEDIA_QUEUE })],
+  imports: [InfraModule, BullModule.forRootAsync(bullConnection), BullModule.registerQueue({ name: MEDIA_QUEUE }, { name: RETENTION_QUEUE })],
   providers: [
     StorageService,
     MediaProcessor,
+    NotificationsService,
+    RetentionProcessor,
     RekognitionModerationProvider,
     ManualOnlyModerationProvider,
     {

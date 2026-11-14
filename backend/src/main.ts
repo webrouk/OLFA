@@ -24,7 +24,7 @@ class RedisIoAdapter extends IoAdapter {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true, rawBody: true /* payment webhook signatures */ });
   const env = app.get<Env>(ENV);
 
   app.set('trust proxy', 1); // behind the load balancer: real client IP for rate limits

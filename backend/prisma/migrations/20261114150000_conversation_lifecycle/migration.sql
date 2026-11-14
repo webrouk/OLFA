@@ -104,31 +104,32 @@ END $$;
 
 -- The user's conversations with section, plan visibility and expiry.
 -- p_limit: visible conversations for the plan (-1 = unlimited). Inbox AND
--- archive share the limit; unmatched conversations are never limited.
+-- archive share the limit; unmatched and consultation chats are never limited.
 CREATE FUNCTION olfa_conversation_list(p_user uuid, p_limit int, p_now timestamptz DEFAULT now())
 RETURNS TABLE (conversation_id uuid, section text, list_position int, locked boolean, expires_at timestamptz, warn boolean)
 LANGUAGE sql STABLE AS $$
   WITH mine AS (
-    SELECT c.id, cm.folder, cm.retention_anchor_at, m.status AS match_status, m.ended_at,
+    SELECT c.id, c.kind, cm.folder, cm.retention_anchor_at, m.status AS match_status, m.ended_at,
            COALESCE(c.last_message_at, c.created_at) AS activity
     FROM conversation_members cm
     JOIN conversations c ON c.id = cm.conversation_id
     LEFT JOIN matches m ON m.id = c.match_id
     WHERE cm.user_id = p_user AND (c.kind = 'CONSULTATION' OR m.status IN ('ACTIVE','UNMATCHED'))
   ), placed AS (
-    SELECT id, CASE WHEN match_status = 'UNMATCHED' THEN 'UNMATCHED' ELSE folder::text END AS section,
-      CASE WHEN match_status = 'UNMATCHED' THEN ended_at + make_interval(days => olfa_setting_int('chat.unmatchedRetentionDays', 30))
+    SELECT id, CASE WHEN kind = 'CONSULTATION' THEN 'CONSULTATION' WHEN match_status = 'UNMATCHED' THEN 'UNMATCHED' ELSE folder::text END AS section,
+      CASE WHEN kind = 'CONSULTATION' THEN NULL
+           WHEN match_status = 'UNMATCHED' THEN ended_at + make_interval(days => olfa_setting_int('chat.unmatchedRetentionDays', 30))
            WHEN folder = 'ARCHIVE'       THEN retention_anchor_at + make_interval(days => olfa_setting_int('chat.archiveRetentionDays', 30))
            ELSE                               retention_anchor_at + make_interval(days => olfa_setting_int('chat.inboxRetentionDays', 15)) END AS expires_at,
-      CASE WHEN match_status = 'UNMATCHED' THEN NULL
-           ELSE row_number() OVER (PARTITION BY (match_status = 'UNMATCHED') ORDER BY activity DESC, id) END AS pos,
+      CASE WHEN kind = 'CONSULTATION' OR match_status = 'UNMATCHED' THEN NULL
+           ELSE row_number() OVER (PARTITION BY (kind = 'CONSULTATION' OR match_status = 'UNMATCHED') ORDER BY activity DESC, id) END AS pos,
       folder
     FROM mine
   )
   SELECT id, section, pos::int,
-         (section <> 'UNMATCHED' AND p_limit >= 0 AND pos > p_limit) AS locked,
+         (section IN ('INBOX','ARCHIVE') AND p_limit >= 0 AND pos > p_limit) AS locked,
          expires_at,
-         CASE WHEN section = 'UNMATCHED' THEN false
+         CASE WHEN section IN ('UNMATCHED','CONSULTATION') THEN false
               WHEN folder = 'ARCHIVE' THEN p_now >= expires_at - make_interval(days => olfa_setting_int('chat.archiveWarnBeforeDays', 7))
               ELSE p_now >= expires_at - make_interval(days => olfa_setting_int('chat.inboxRetentionDays', 15) - olfa_setting_int('chat.inboxWarnAfterDays', 10)) END
   FROM placed

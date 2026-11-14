@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Inject, Injectable, Module, Pa
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { EducationLevel, MaritalStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsEnum, IsInt, IsISO31661Alpha2, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsEnum, IsInt, IsISO31661Alpha2, IsOptional, IsString, IsUUID, Max, MaxLength, Min, IsIn } from 'class-validator';
 import { ENV, Env } from '../../config/env';
 import { AppError, ErrorCode, fromPgError } from '../../common/errors';
 import { AuthUser, CurrentUser, RateLimit } from '../../common/http';
@@ -11,6 +11,8 @@ import { profileInclude, toPublicProfile } from '../profiles/profile.mapper';
 import { NotificationsService } from '../notifications/notifications.module';
 import { EntitlementsService, QuotaService } from '../quotas/quotas.module';
 import { MatchingService } from './matching.service';
+
+import ref from '../../reference/reference.json';
 
 const csv = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.split(',').filter(Boolean) : value);
 
@@ -23,7 +25,9 @@ class DiscoveryQuery {
   @ApiPropertyOptional({ description: 'comma-separated; free plans: one basic interest' }) @IsOptional() @Transform(csv) @IsArray() @ArrayMaxSize(8) @IsString({ each: true }) interests?: string[];
   @ApiPropertyOptional({ enum: MaritalStatus, isArray: true, description: 'paid' }) @IsOptional() @Transform(csv) @IsArray() @IsEnum(MaritalStatus, { each: true }) maritalStatuses?: MaritalStatus[];
   @ApiPropertyOptional({ enum: EducationLevel, isArray: true, description: 'paid' }) @IsOptional() @Transform(csv) @IsArray() @IsEnum(EducationLevel, { each: true }) educations?: EducationLevel[];
-  @ApiPropertyOptional({ description: 'paid' }) @IsOptional() @IsString() @MaxLength(80) occupation?: string;
+  @ApiPropertyOptional({ description: 'paid · occupation key' }) @IsOptional() @IsIn(ref.occupations) occupation?: string;
+  @ApiPropertyOptional({ description: 'paid · nationality ISO code' }) @IsOptional() @IsIn(ref.nationalities) nationality?: string;
+  @ApiPropertyOptional({ enum: ['nearest', 'best'], description: 'nearest (default): closest first, then own country' }) @IsOptional() @IsIn(['nearest', 'best']) sort?: 'nearest' | 'best';
   @ApiPropertyOptional({ description: 'paid' }) @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(100) minCompatibility?: number;
 }
 

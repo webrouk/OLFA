@@ -30,6 +30,12 @@ const schema = z.object({
 
   MODERATION_PROVIDER: z.enum(['rekognition', 'manual']).default('manual'),
   FCM_CREDENTIALS_JSON: z.string().optional(), // service account JSON
+
+  // Consultations are a person-to-person service: paid on the web gateway
+  // (App Store guideline 3.1.3(d) / Play policy allow this for real-time 1:1 services).
+  PAYMENT_PROVIDER: z.enum(['stripe', 'test']).default('stripe'),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof schema>;
@@ -46,6 +52,12 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   }
   if (env.SMS_PROVIDER === 'twilio' && (!env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN || !env.TWILIO_FROM)) {
     throw new Error('Twilio credentials are required when SMS_PROVIDER=twilio');
+  }
+  if (env.NODE_ENV === 'production' && env.PAYMENT_PROVIDER === 'test') {
+    throw new Error('PAYMENT_PROVIDER=test is not allowed in production');
+  }
+  if (env.PAYMENT_PROVIDER === 'stripe' && (!env.STRIPE_SECRET_KEY || !env.STRIPE_WEBHOOK_SECRET)) {
+    throw new Error('STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are required when PAYMENT_PROVIDER=stripe');
   }
   return env;
 }

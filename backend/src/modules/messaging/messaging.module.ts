@@ -3,7 +3,7 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { ConnectedSocket, MessageBody, OnGatewayConnection, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Type } from 'class-transformer';
-import { IsDateString, IsInt, IsOptional, IsString, IsUUID, Length, Max, Min, validateOrReject } from 'class-validator';
+import { IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Max, Min, validateOrReject } from 'class-validator';
 import { EventEmitter } from 'node:events';
 import type { Server, Socket } from 'socket.io';
 import { ENV, Env } from '../../config/env';
@@ -17,6 +17,14 @@ import { EntitlementsService, QuotaService } from '../quotas/quotas.module';
 export class SendMessageDto {
   @ApiProperty({ description: 'Client-generated UUID (idempotency key)' }) @IsUUID() clientMessageId: string;
   @ApiProperty() @IsString() @Length(1, 2000) body: string;
+}
+
+class ListQuery {
+  @ApiPropertyOptional({ enum: ['INBOX', 'ARCHIVE', 'UNMATCHED', 'CONSULTATION'] }) @IsOptional() @IsIn(['INBOX', 'ARCHIVE', 'UNMATCHED', 'CONSULTATION']) section?: string;
+}
+
+class RematchResponseDto {
+  @ApiProperty() @IsBoolean() accept: boolean;
 }
 
 class PageQuery {
@@ -40,44 +48,144 @@ export class MessagingService {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  /** Membership + active match + no block in either direction. */
-  async assertCanChat(userId: string, conversationId: string) {
+  /**
+   * Membership + conversation open + no block + not locked by the plan.
+   * Match chats: the match must be ACTIVE (after an unmatch the chat is
+   * closed until a re-match is accepted — also enforced by a DB trigger).
+   * Consultation chats: open while CONFIRMED and for N days after completion.
+   */
+  async assertCanChat(userId: string, conversationId: string, opts: { forWrite?: boolean } = {}) {
     const c = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
-      select: { id: true, match: { select: { status: true, userAId: true, userBId: true } }, members: { select: { userId: true } } },
+      select: {
+        id: true,
+        kind: true,
+        match: { select: { status: true, userAId: true, userBId: true } },
+        consultation: { select: { status: true, completedAt: true, clientId: true, counselorId: true } },
+        members: { select: { userId: true } },
+      },
     });
     if (!c || !c.members.some((m) => m.userId === userId)) throw new AppError(ErrorCode.NOT_FOUND);
-    if (c.match.status !== 'ACTIVE') throw new AppError(ErrorCode.FORBIDDEN, 'Conversation closed');
-    const peerId = c.match.userAId === userId ? c.match.userBId : c.match.userAId;
+    let peerId: string;
+    if (c.kind === 'CONSULTATION') {
+      const k = c.consultation!;
+      const graceDays = await this.settings.get('consultations.chatOpenDaysAfterCompletion', 7);
+      const open = k.status === 'CONFIRMED' || (k.status === 'COMPLETED' && !!k.completedAt && Date.now() - k.completedAt.getTime() < graceDays * 86_400_000);
+      if (opts.forWrite && !open) throw new AppError(ErrorCode.CONVERSATION_CLOSED, 'Consultation chat is closed');
+      peerId = k.clientId === userId ? k.counselorId : k.clientId;
+    } else {
+      const m = c.match!;
+      if (m.status === 'BLOCKED') throw new AppError(ErrorCode.NOT_FOUND);
+      if (opts.forWrite && m.status !== 'ACTIVE') throw new AppError(ErrorCode.CONVERSATION_CLOSED, 'Unmatched — request a re-match first');
+      peerId = m.userAId === userId ? m.userBId : m.userAId;
+      if (m.status === 'ACTIVE') {
+        const row = await this.listRows(userId).then((r) => r.find((x) => x.conversation_id === conversationId));
+        if (row?.locked) throw new AppError(ErrorCode.CONVERSATION_LOCKED, 'Upgrade to open more conversations', { feature: 'visibleConversations' });
+      }
+    }
     const blocked = await this.prisma.blockedUser.findFirst({ where: { OR: [{ blockerId: userId, blockedId: peerId }, { blockerId: peerId, blockedId: userId }] } });
     if (blocked) throw new AppError(ErrorCode.BLOCKED);
-    return { peerId };
+    return { peerId, kind: c.kind };
   }
 
-  async list(userId: string) {
-    const rows = await this.prisma.conversationMember.findMany({
-      where: { userId, conversation: { match: { status: 'ACTIVE' } } },
+  private async listRows(userId: string) {
+    const ent = await this.entitlements.forUser(userId);
+    return this.prisma.$queryRaw<{ conversation_id: string; section: 'INBOX' | 'ARCHIVE' | 'UNMATCHED' | 'CONSULTATION'; list_position: number | null; locked: boolean; expires_at: Date | null; warn: boolean }[]>`
+      SELECT * FROM olfa_conversation_list(${userId}::uuid, ${ent.visibleConversations}::int)`;
+  }
+
+  /**
+   * Sections: INBOX · ARCHIVE · UNMATCHED · CONSULTATION. Locked rows (over the
+   * plan's limit) carry no peer identity and no message preview.
+   */
+  async list(userId: string, section?: string) {
+    const rows = (await this.listRows(userId)).filter((r) => !section || r.section === section);
+    const ids = rows.filter((r) => !r.locked).map((r) => r.conversation_id);
+    const convs = await this.prisma.conversation.findMany({
+      where: { id: { in: ids } },
       select: {
-        lastReadAt: true,
-        conversation: {
-          select: {
-            id: true,
-            lastMessageAt: true,
-            match: { select: { userAId: true, userA: { include: profileInclude }, userB: { include: profileInclude } } },
-            messages: { where: { deletedAt: null }, orderBy: { createdAt: 'desc' }, take: 1, select: { body: true, senderId: true, createdAt: true } },
-          },
-        },
+        id: true,
+        kind: true,
+        lastMessageAt: true,
+        rematch: { select: { requestedBy: true, status: true } },
+        match: { select: { userAId: true, endedAt: true, endedBy: true, userA: { include: profileInclude }, userB: { include: profileInclude } } },
+        consultation: { select: { id: true, status: true, scheduledAt: true, clientId: true, counselor: { select: { userId: true, displayName: true, kind: true } } } },
+        members: { where: { userId }, select: { lastReadAt: true } },
+        messages: { where: { deletedAt: null }, orderBy: { createdAt: 'desc' }, take: 1, select: { body: true, senderId: true, createdAt: true } },
       },
-      orderBy: { conversation: { lastMessageAt: { sort: 'desc', nulls: 'last' } } },
     });
+    const byId = new Map(convs.map((c) => [c.id, c]));
     return Promise.all(
       rows.map(async (r) => {
-        const c = r.conversation;
-        const peer = c.match.userAId === userId ? c.match.userB : c.match.userA;
-        const unread = await this.prisma.message.count({ where: { conversationId: c.id, senderId: { not: userId }, deletedAt: null, ...(r.lastReadAt ? { createdAt: { gt: r.lastReadAt } } : {}) } });
-        return { id: c.id, lastMessage: c.messages[0] ?? null, lastMessageAt: c.lastMessageAt, unread, peer: peer.profile ? toPublicProfile(peer, this.env.CDN_BASE_URL) : null };
+        const base = { id: r.conversation_id, section: r.section, locked: r.locked, expiresAt: r.expires_at, expiringSoon: r.warn };
+        const c = byId.get(r.conversation_id);
+        if (r.locked || !c) return base;
+        const lastReadAt = c.members[0]?.lastReadAt;
+        const unread = await this.prisma.message.count({ where: { conversationId: c.id, senderId: { not: userId }, deletedAt: null, ...(lastReadAt ? { createdAt: { gt: lastReadAt } } : {}) } });
+        const rematch = c.rematch ? { status: c.rematch.status, byMe: c.rematch.requestedBy === userId } : null;
+        if (c.kind === 'CONSULTATION') {
+          const k = c.consultation!;
+          return { ...base, kind: c.kind, unread, lastMessage: c.messages[0] ?? null, lastMessageAt: c.lastMessageAt, consultation: { id: k.id, status: k.status, scheduledAt: k.scheduledAt, counselor: k.clientId === userId ? k.counselor : null } };
+        }
+        const m = c.match!;
+        const peer = m.userAId === userId ? m.userB : m.userA;
+        return {
+          ...base,
+          kind: c.kind,
+          unread,
+          lastMessage: c.messages[0] ?? null,
+          lastMessageAt: c.lastMessageAt,
+          unmatchedAt: r.section === 'UNMATCHED' ? m.endedAt : null,
+          unmatchedByMe: r.section === 'UNMATCHED' ? m.endedBy === userId : null,
+          rematch,
+          peer: peer.profile ? toPublicProfile(peer, this.env.CDN_BASE_URL) : null,
+        };
       }),
     );
+  }
+
+  async setFolder(userId: string, conversationId: string, folder: 'INBOX' | 'ARCHIVE') {
+    await this.assertCanChat(userId, conversationId);
+    await this.prisma.conversationMember.update({
+      where: { conversationId_userId: { conversationId, userId } },
+      data: { folder, archivedAt: folder === 'ARCHIVE' ? new Date() : null, retentionAnchorAt: new Date(), expiryWarnedAt: null },
+    });
+  }
+
+  async unmatch(userId: string, conversationId: string) {
+    try {
+      await this.prisma.$executeRaw`SELECT olfa_unmatch(${conversationId}::uuid, ${userId}::uuid)`;
+    } catch (e) {
+      throw fromPgError(e) ?? e;
+    }
+    const members = await this.prisma.conversationMember.findMany({ where: { conversationId }, select: { userId: true } });
+    this.events.emit('conversation', { conversationId, userIds: members.map((m) => m.userId), section: 'UNMATCHED' });
+  }
+
+  /** One request per conversation, ever (primary key in rematch_requests). */
+  async requestRematch(userId: string, conversationId: string) {
+    let peerId: string;
+    try {
+      [{ peer: peerId }] = await this.prisma.$queryRaw<{ peer: string }[]>`SELECT olfa_request_rematch(${conversationId}::uuid, ${userId}::uuid) AS peer`;
+    } catch (e) {
+      const err = fromPgError(e);
+      if (err?.code === ErrorCode.CONFLICT) throw new AppError(ErrorCode.REMATCH_USED, 'A re-match request was already used in this conversation');
+      throw err ?? e;
+    }
+    await this.notifications.push(peerId, 'push.rematch_request', { conversationId });
+    this.events.emit('conversation', { conversationId, userIds: [userId, peerId], section: 'UNMATCHED' });
+  }
+
+  async respondRematch(userId: string, conversationId: string, accept: boolean) {
+    let status: string;
+    try {
+      [{ status }] = await this.prisma.$queryRaw<{ status: string }[]>`SELECT olfa_respond_rematch(${conversationId}::uuid, ${userId}::uuid, ${accept}) AS status`;
+    } catch (e) {
+      throw fromPgError(e) ?? e;
+    }
+    const members = await this.prisma.conversationMember.findMany({ where: { conversationId }, select: { userId: true } });
+    this.events.emit('conversation', { conversationId, userIds: members.map((m) => m.userId), section: accept ? 'INBOX' : 'UNMATCHED' });
+    return { status };
   }
 
   async page(userId: string, conversationId: string, q: PageQuery) {
@@ -102,7 +210,7 @@ export class MessagingService {
    *  - every_message: every message also consumes the daily message quota.
    */
   async send(userId: string, conversationId: string, dto: SendMessageDto) {
-    const { peerId } = await this.assertCanChat(userId, conversationId);
+    const { peerId, kind } = await this.assertCanChat(userId, conversationId, { forWrite: true });
     const existing = await this.prisma.message.findUnique({
       where: { conversationId_senderId_clientMessageId: { conversationId, senderId: userId, clientMessageId: dto.clientMessageId } },
     });
@@ -118,7 +226,8 @@ export class MessagingService {
       msg = await this.prisma.$transaction(async (tx) => {
         // counter key "msg:<conversationId>" fits varchar(40) exactly
         await this.quotas.consume(userId, `msg:${conversationId}`, contLimit, { type: 'message', id: conversationId }, tx);
-        if (policy === 'every_message') {
+        // Paid consultation chats never consume dating message credits.
+        if (policy === 'every_message' && kind === 'MATCH') {
           const ent = await this.entitlements.forUser(userId);
           await this.quotas.consume(userId, 'messages', ent.dailyMessages, { type: 'message', id: conversationId }, tx);
         }
@@ -176,6 +285,10 @@ export class ChatGateway implements OnGatewayConnection {
     );
     events.on('read', (e: { userIds: string[]; conversationId: string; readerId: string; at: Date }) =>
       e.userIds.forEach((u) => this.server?.to(`user:${u}`).emit('message:read', { conversationId: e.conversationId, readerId: e.readerId, at: e.at })),
+    );
+    // unmatch / re-match / archive moves: clients re-fetch the affected section
+    events.on('conversation', (e: { userIds: string[]; conversationId: string; section: string }) =>
+      e.userIds.forEach((u) => this.server?.to(`user:${u}`).emit('conversation:moved', { conversationId: e.conversationId, section: e.section })),
     );
   }
 
@@ -239,9 +352,36 @@ export class ChatGateway implements OnGatewayConnection {
 export class MessagingController {
   constructor(private readonly messaging: MessagingService) {}
 
+  /** Sections: INBOX · ARCHIVE · UNMATCHED · CONSULTATION (omit for all). */
   @Get()
-  list(@CurrentUser() u: AuthUser) {
-    return this.messaging.list(u.id);
+  list(@CurrentUser() u: AuthUser, @Query() q: ListQuery) {
+    return this.messaging.list(u.id, q.section);
+  }
+
+  @Post(':id/archive') @HttpCode(204)
+  async archive(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    await this.messaging.setFolder(u.id, id, 'ARCHIVE');
+  }
+
+  @Post(':id/restore') @HttpCode(204)
+  async restore(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    await this.messaging.setFolder(u.id, id, 'INBOX');
+  }
+
+  /** Moves the chat to Unmatched for both people immediately. */
+  @RateLimit(20, 3600) @Post(':id/unmatch') @HttpCode(204)
+  async unmatch(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    await this.messaging.unmatch(u.id, id);
+  }
+
+  @RateLimit(20, 3600) @Post(':id/rematch') @HttpCode(204)
+  async rematch(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    await this.messaging.requestRematch(u.id, id);
+  }
+
+  @Post(':id/rematch/respond')
+  respond(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: RematchResponseDto) {
+    return this.messaging.respondRematch(u.id, id, dto.accept);
   }
 
   @Get(':id/messages')

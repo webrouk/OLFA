@@ -7,7 +7,9 @@ import { AllowPending, AuthUser, CurrentUser, Public, RateLimit } from '../../co
 import { AuditService, PrismaService, SettingsService } from '../../common/infra';
 import { ageOn, profileCompleteness } from '../../domain/security';
 import { profileInclude, toOwnProfile, toPublicProfile } from './profile.mapper';
-import { CreateProfileDto, DeleteAccountDto, PreferencesDto, UpdateProfileDto } from './profiles.dto';
+import { CreateProfileDto, DeleteAccountDto, PreferencesDto, UpdateProfileDto, LocationDto } from './profiles.dto';
+import { defaultNationality } from '../../domain/reference';
+import { roundCoord } from '../../domain/proximity';
 
 @Injectable()
 export class ProfilesService {
@@ -40,13 +42,14 @@ export class ProfilesService {
           birthDate: birth,
           gender: dto.gender,
           countryCode: dto.countryCode,
+          nationality: dto.nationality ?? defaultNationality(dto.countryCode),
           city: dto.city.trim(),
           showLocation: dto.showLocation ?? true,
           maritalStatus: dto.maritalStatus,
           hasChildren: dto.hasChildren,
           wantsChildren: dto.wantsChildren,
           education: dto.education,
-          occupation: dto.occupation.trim(),
+          occupation: dto.occupation,
           marriageTimeline: dto.marriageTimeline,
           smoking: dto.smoking,
           willingToRelocate: dto.willingToRelocate,
@@ -74,12 +77,13 @@ export class ProfilesService {
     const data: Prisma.UserProfileUpdateInput = {
       city: dto.city?.trim(),
       countryCode: dto.countryCode,
+      nationality: dto.nationality,
       showLocation: dto.showLocation,
       maritalStatus: dto.maritalStatus,
       hasChildren: dto.hasChildren,
       wantsChildren: dto.wantsChildren,
       education: dto.education,
-      occupation: dto.occupation?.trim(),
+      occupation: dto.occupation,
       marriageTimeline: dto.marriageTimeline,
       smoking: dto.smoking,
       willingToRelocate: dto.willingToRelocate,
@@ -129,6 +133,16 @@ export class ProfilesService {
   }
 
   /** Public profile for another user — never exposes private fields. */
+  /** Stores an approximate location (2 decimals ≈ 1 km) for "nearest first". */
+  async setLocation(userId: string, dto: LocationDto) {
+    const lat = roundCoord(dto.latitude), lng = roundCoord(dto.longitude);
+    await this.prisma.userProfile.update({
+      where: { userId },
+      data: { latitude: lat, longitude: lng, locationCountry: dto.countryCode ?? undefined, locationUpdatedAt: new Date() },
+    });
+    return { locationCountry: dto.countryCode ?? null };
+  }
+
   async publicProfile(viewerId: string, targetId: string) {
     if (viewerId === targetId) throw new AppError(ErrorCode.NOT_FOUND);
     const blocked = await this.prisma.blockedUser.findFirst({
@@ -198,6 +212,11 @@ export class ProfilesController {
   @AllowPending() @Put('me/preferences') @HttpCode(200)
   preferences(@CurrentUser() u: AuthUser, @Body() dto: PreferencesDto) {
     return this.profiles.setPreferences(u.id, dto);
+  }
+
+  @AllowPending() @RateLimit(60, 3600) @Put('me/location') @HttpCode(200)
+  location(@CurrentUser() u: AuthUser, @Body() dto: LocationDto) {
+    return this.profiles.setLocation(u.id, dto);
   }
 
   @RateLimit(300, 3600) @Get('profiles/:id')

@@ -19,7 +19,7 @@ const url = (cdn: string, key?: string) => (key ? `${cdn}/${key}` : null);
  * PUBLIC view: no phone, no exact birth date, no status, no non-approved
  * photos, location only if the owner allows it. Photos are CDN variants only.
  */
-export function toPublicProfile(u: UserWithProfile, cdn: string, extra: { compatibility?: number } = {}) {
+export function toPublicProfile(u: UserWithProfile, cdn: string, extra: { compatibility?: number; distanceKm?: number | null } = {}) {
   const p = u.profile!;
   const photos = u.photos
     .filter((ph) => ph.status === 'APPROVED')
@@ -36,6 +36,8 @@ export function toPublicProfile(u: UserWithProfile, cdn: string, extra: { compat
     countryCode: p.showLocation ? p.countryCode : null,
     city: p.showLocation ? p.city : null,
     showLocation: p.showLocation,
+    nationality: p.nationality,
+    distanceKm: p.showLocation ? extra.distanceKm ?? null : null, // rounded; never coordinates
     maritalStatus: p.maritalStatus,
     education: p.education,
     occupation: p.occupation,
@@ -69,6 +71,7 @@ export function toOwnProfile(u: UserWithProfile, cdn: string) {
       wantsChildren: u.profile!.wantsChildren,
       smoking: u.profile!.smoking,
       willingToRelocate: u.profile!.willingToRelocate,
+      locationCountry: u.profile!.locationCountry, // owner only; coordinates are never returned
       photos: u.photos.map((ph) => {
         const v = (ph.variants ?? {}) as Variants;
         return { id: ph.id, position: ph.position, status: ph.status, rejectReason: ph.rejectReason, thumbUrl: ph.status === 'APPROVED' ? url(cdn, v.thumb) : null };

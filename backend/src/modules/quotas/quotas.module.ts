@@ -16,6 +16,10 @@ export interface Entitlements {
   seeWhoLikedYou: boolean;
   incognito: boolean;
   priorityVisibility: boolean;
+  /** Discovery outside the country the user is in (Free: own country only). */
+  searchOutsideCountry: boolean;
+  /** Conversations visible in Messages + Archive; -1 = unlimited. */
+  visibleConversations: number;
 }
 
 /** Resolves the user's effective plan and its feature values from the DB. */
@@ -44,6 +48,8 @@ export class EntitlementsService {
       seeWhoLikedYou: bool('see_who_liked_you'),
       incognito: bool('incognito'),
       priorityVisibility: bool('priority_visibility'),
+      searchOutsideCountry: bool('search_outside_country'),
+      visibleConversations: typeof v['visible_conversations'] === 'number' ? (v['visible_conversations'] as number) : 5,
     };
   }
 
@@ -110,6 +116,8 @@ export class QuotaService {
         seeWhoLikedYou: e.seeWhoLikedYou,
         incognito: e.incognito,
         priorityVisibility: e.priorityVisibility,
+        searchOutsideCountry: e.searchOutsideCountry,
+        visibleConversations: e.visibleConversations,
       },
     };
   }

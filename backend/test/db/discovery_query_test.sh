@@ -53,8 +53,10 @@ INSERT INTO discovery_history (viewer_id,candidate_id,action) VALUES
 SQL
 
 QUERY=$(cat src/modules/matching/sql/candidates.sql)
-run(){ # countries
-  $PSQL -d "$DB" -c "PREPARE q AS $QUERY" -c "EXECUTE q('10000000-0000-0000-0000-000000000000','MALE','1992-11-15','2002-11-14','1994-05-01',$1,2,24,50)" | cut -d'|' -f2 | sort | tr '\n' ' '; }
+run(){ # countries [lat lng]
+  $PSQL -d "$DB" -c "PREPARE q AS $QUERY" -c "EXECUTE q('10000000-0000-0000-0000-000000000000','MALE','1992-11-15','2002-11-14','1994-05-01',$1,2,24,50,${2:-NULL},${3:-NULL})" | cut -d'|' -f2 | sort | tr '\n' ' '; }
+ordered(){ # names in query order, viewer at lat/lng
+  $PSQL -d "$DB" -c "PREPARE q AS $QUERY" -c "EXECUTE q('10000000-0000-0000-0000-000000000000','MALE','1992-11-15','2002-11-14','1994-05-01',NULL,2,24,50,$1,$2)" | cut -d'|' -f2 | tr '\n' ' '; }
 
 echo "discovery candidate query"
 got=$(run NULL)
@@ -65,7 +67,11 @@ for name in man too_young she_wants_younger pending suspended one_photo blocked_
   echo "$got" | grep -qw "$name" && { echo "  ✗ excluded: $name"; fail=$((fail+1)); } || { pass=$((pass+1)); }
 done
 echo "  ✓ 12 exclusion rules hold (gender, age both ways, status, photos, block, like, pass, cooldown, soft delete, pending deletion)"
-plan=$($PSQL -d "$DB" -c "PREPARE q AS $QUERY" -c "EXPLAIN EXECUTE q('10000000-0000-0000-0000-000000000000','MALE','1992-11-15','2002-11-14','1994-05-01',NULL,2,24,50)" | head -1)
+# nearest first: viewer in Dubai; 'ok' in Abu Dhabi (~123 km), 'pass_expired' in Dubai (~1 km), 'other_country' unknown location
+$PSQL -d "$DB" -c "UPDATE user_profiles SET latitude=24.45, longitude=54.38 WHERE display_name='ok'; UPDATE user_profiles SET latitude=25.21, longitude=55.27 WHERE display_name='pass_expired'" >/dev/null
+check "nearest candidates come first; unknown location last" "$(ordered 25.20 55.27)" "pass_expired ok other_country "
+check "distance is computed in SQL (km)" "$($PSQL -d "$DB" -c "PREPARE q AS $QUERY" -c "EXECUTE q('10000000-0000-0000-0000-000000000000','MALE','1992-11-15','2002-11-14','1994-05-01',NULL,2,24,50,25.20,55.27)" | awk -F'|' '$2=="ok"{printf "%d", $19}')" "122"
+plan=$($PSQL -d "$DB" -c "PREPARE q AS $QUERY" -c "EXPLAIN EXECUTE q('10000000-0000-0000-0000-000000000000','MALE','1992-11-15','2002-11-14','1994-05-01',NULL,2,24,50,NULL,NULL)" | head -1)
 [ -n "$plan" ] && { echo "  ✓ query plans successfully"; pass=$((pass+1)); }
 echo; echo "discovery tests: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
