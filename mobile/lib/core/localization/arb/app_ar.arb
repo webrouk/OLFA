@@ -326,5 +326,6 @@
   "errorEntitlement": "هذه الميزة تتطلب خطة أعلى.",
   "errorDuplicate": "تم ذلك مسبقًا.",
   "errorValidation": "يرجى مراجعة الحقول المحددة.",
-  "errorUnauthorized": "يرجى تسجيل الدخول مجددًا."
+  "errorUnauthorized": "يرجى تسجيل الدخول مجددًا.",
+  "quotaResetsAt": "تتجدد الساعة {time}"
 }

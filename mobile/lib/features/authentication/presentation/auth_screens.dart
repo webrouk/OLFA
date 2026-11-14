@@ -99,7 +99,14 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
   Future<void> _verify() async {
     final ok = await ref.read(authControllerProvider.notifier).verify(_code);
-    if (ok && mounted) context.push(Routes.age);
+    if (!ok || !mounted) return;
+    final r = ref.read(authControllerProvider).result;
+    // Returning users skip setup; new users continue to age confirmation.
+    if (r != null && r.profileComplete) {
+      context.go(r.accountStatus == 'ACTIVE' ? Routes.discover : Routes.verification);
+    } else {
+      context.push(Routes.age);
+    }
   }
 
   @override

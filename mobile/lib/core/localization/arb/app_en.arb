@@ -469,5 +469,13 @@
   "errorEntitlement": "This feature needs a higher plan.",
   "errorDuplicate": "Already done.",
   "errorValidation": "Please check the highlighted fields.",
-  "errorUnauthorized": "Please sign in again."
+  "errorUnauthorized": "Please sign in again.",
+  "quotaResetsAt": "Resets at {time}",
+  "@quotaResetsAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  }
 }

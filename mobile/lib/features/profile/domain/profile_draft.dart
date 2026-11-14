@@ -20,6 +20,7 @@ class ProfileDraft {
     this.prefMarital = const {MaritalStatus.neverMarried},
     this.prefWantsChildren = true,
     this.photoSlots = const [false, false, false, false, false, false],
+    this.photoIds = const [null, null, null, null, null, null],
     this.photoRightsConfirmed = false,
     this.policyAccepted = false,
   });
@@ -44,7 +45,8 @@ class ProfileDraft {
   final bool prefSameCountry;
   final Set<MaritalStatus> prefMarital;
   final bool? prefWantsChildren; // null = doesn't matter
-  final List<bool> photoSlots; // demo: true = slot has a picked image
+  final List<bool> photoSlots; // true = slot holds an uploaded photo
+  final List<String?> photoIds; // server photo ids (API mode)
   final bool photoRightsConfirmed;
   final bool policyAccepted;
 
@@ -69,6 +71,7 @@ class ProfileDraft {
     Set<MaritalStatus>? prefMarital,
     bool? Function()? prefWantsChildren,
     List<bool>? photoSlots,
+    List<String?>? photoIds,
     bool? photoRightsConfirmed,
     bool? policyAccepted,
   }) =>
@@ -90,6 +93,7 @@ class ProfileDraft {
         prefMarital: prefMarital ?? this.prefMarital,
         prefWantsChildren: prefWantsChildren != null ? prefWantsChildren() : this.prefWantsChildren,
         photoSlots: photoSlots ?? this.photoSlots,
+        photoIds: photoIds ?? this.photoIds,
         photoRightsConfirmed: photoRightsConfirmed ?? this.photoRightsConfirmed,
         policyAccepted: policyAccepted ?? this.policyAccepted,
       );
@@ -106,6 +110,7 @@ class ProfileDraft {
         bio: p.bio,
         interests: p.interests.toSet(),
         photoSlots: [for (var i = 0; i < 6; i++) i < p.photos.length],
+        photoIds: [for (var i = 0; i < 6; i++) i < p.photos.length ? p.photos[i].id : null],
         photoRightsConfirmed: true,
         policyAccepted: true,
       );

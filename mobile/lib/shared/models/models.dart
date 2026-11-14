@@ -177,8 +177,11 @@ class Entitlements {
     required this.advancedFilters,
     required this.seeWhoLikedYou,
     required this.incognito,
+    this.resetsAt,
   });
 
+  /// When today's quotas renew (server computes it in UTC; render in local time).
+  final DateTime? resetsAt;
   final PlanCode plan;
   final int dailyLikes;
   final int likesUsed;
@@ -205,6 +208,7 @@ class Entitlements {
         advancedFilters: advancedFilters,
         seeWhoLikedYou: seeWhoLikedYou,
         incognito: incognito,
+        resetsAt: resetsAt,
       );
 }
 

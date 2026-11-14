@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/errors/failure.dart';
 import '../../../shared/models/models.dart';
 import '../data/auth_repository_impl.dart';
+import '../domain/auth_repository.dart';
 
 class AuthState {
   const AuthState({
@@ -12,6 +13,8 @@ class AuthState {
     this.failure,
     this.resendAt,
     this.attemptsLeft = 5,
+    this.challenge,
+    this.result,
   });
 
   final Country country;
@@ -20,6 +23,8 @@ class AuthState {
   final Failure? failure;
   final DateTime? resendAt;
   final int attemptsLeft;
+  final OtpChallenge? challenge;
+  final AuthResult? result;
 
   String get e164 => '${country.dial}${nationalNumber.replaceAll(RegExp(r'\D'), '')}';
 
@@ -30,19 +35,19 @@ class AuthState {
     return '${country.dial} ${d.substring(0, 2)} *** **${d.substring(d.length - 2)}';
   }
 
-  AuthState copyWith({Country? country, String? nationalNumber, bool? busy, Failure? Function()? failure, DateTime? resendAt, int? attemptsLeft}) => AuthState(
+  AuthState copyWith({Country? country, String? nationalNumber, bool? busy, Failure? Function()? failure, DateTime? resendAt, int? attemptsLeft, OtpChallenge? challenge, AuthResult? result}) => AuthState(
         country: country ?? this.country,
         nationalNumber: nationalNumber ?? this.nationalNumber,
         busy: busy ?? this.busy,
         failure: failure != null ? failure() : this.failure,
         resendAt: resendAt ?? this.resendAt,
         attemptsLeft: attemptsLeft ?? this.attemptsLeft,
+        challenge: challenge ?? this.challenge,
+        result: result ?? this.result,
       );
 }
 
 class AuthController extends Notifier<AuthState> {
-  static const resendCooldown = Duration(seconds: 45);
-
   @override
   AuthState build() => const AuthState();
 
@@ -61,9 +66,12 @@ class AuthController extends Notifier<AuthState> {
     if (state.resendAt != null && now.isBefore(state.resendAt!)) return false;
     state = state.copyWith(busy: true, failure: () => null);
     try {
-      await ref.read(authRepositoryProvider).requestOtp(state.e164);
-      state = state.copyWith(busy: false, resendAt: DateTime.now().add(resendCooldown), attemptsLeft: 5);
+      final c = await ref.read(authRepositoryProvider).requestOtp(country: state.country, nationalNumber: state.nationalNumber);
+      state = state.copyWith(busy: false, challenge: c, resendAt: DateTime.now().add(c.resendAfter), attemptsLeft: 5);
       return true;
+    } on OtpRateLimitedFailure catch (f) {
+      state = state.copyWith(busy: false, failure: () => f, resendAt: DateTime.now().add(f.retryAfter));
+      return false;
     } on Failure catch (f) {
       state = state.copyWith(busy: false, failure: () => f);
       return false;
@@ -71,11 +79,12 @@ class AuthController extends Notifier<AuthState> {
   }
 
   Future<bool> verify(String code) async {
-    if (state.busy || code.length != 6) return false;
+    final c = state.challenge;
+    if (state.busy || code.length != 6 || c == null) return false;
     state = state.copyWith(busy: true, failure: () => null);
     try {
-      await ref.read(authRepositoryProvider).verifyOtp(state.e164, code);
-      state = state.copyWith(busy: false);
+      final r = await ref.read(authRepositoryProvider).verifyOtp(c, code);
+      state = state.copyWith(busy: false, result: r);
       return true;
     } on InvalidOtpFailure catch (f) {
       state = state.copyWith(busy: false, failure: () => f, attemptsLeft: f.attemptsLeft);

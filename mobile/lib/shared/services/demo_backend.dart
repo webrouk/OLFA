@@ -98,6 +98,7 @@ class DemoBackend {
       advancedFilters: p.advancedFilters,
       seeWhoLikedYou: p.seeWhoLikedYou,
       incognito: plan == PlanCode.premium,
+      resetsAt: DateTime.now().toUtc().add(const Duration(days: 1)).copyWith(hour: 0, minute: 0, second: 0, millisecond: 0, microsecond: 0).toLocal(),
     );
   }
 
