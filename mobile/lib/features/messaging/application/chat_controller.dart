@@ -22,9 +22,14 @@ class ChatState {
       );
 }
 
+/// RFC 4122 v4 UUID — the server's idempotency key for messages.
 String newClientId() {
   final r = Random.secure();
-  return List.generate(16, (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+  final b = List<int>.generate(16, (_) => r.nextInt(256));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  final h = b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+  return '${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}';
 }
 
 class ChatController extends FamilyAsyncNotifier<ChatState, String> {
@@ -39,7 +44,10 @@ class ChatController extends FamilyAsyncNotifier<ChatState, String> {
       if (e.typing != null) state = AsyncData(s.copyWith(peerTyping: e.typing));
       if (e.readClientId != null) {
         state = AsyncData(s.copyWith(
-          messages: [for (final m in s.messages) m.clientId == e.readClientId ? m.copyWith(status: MessageStatus.read) : m],
+          messages: [
+            for (final m in s.messages)
+              (m.fromMe && (e.readClientId == '*' || m.clientId == e.readClientId)) ? m.copyWith(status: MessageStatus.read) : m,
+          ],
         ));
       }
       final msg = e.message;

@@ -7,11 +7,11 @@ ON CONFLICT (code) DO NOTHING;
 
 WITH v(code, key, value) AS (VALUES
   ('FREE','daily_likes','10'), ('FREE','daily_messages','1'), ('FREE','daily_undos','0'),
-  ('FREE','advanced_filters','false'), ('FREE','see_who_liked_you','false'), ('FREE','incognito','false'), ('FREE','priority_visibility','false'),
+  ('FREE','advanced_filters','false'), ('FREE','see_who_liked_you','false'), ('FREE','incognito','false'), ('FREE','priority_visibility','false'), ('FREE','search_outside_country','false'), ('FREE','visible_conversations','5'),
   ('PLUS','daily_likes','100'), ('PLUS','daily_messages','5'), ('PLUS','daily_undos','3'),
-  ('PLUS','advanced_filters','true'), ('PLUS','see_who_liked_you','true'), ('PLUS','incognito','false'), ('PLUS','priority_visibility','false'),
+  ('PLUS','advanced_filters','true'), ('PLUS','see_who_liked_you','true'), ('PLUS','incognito','false'), ('PLUS','priority_visibility','false'), ('PLUS','search_outside_country','true'), ('PLUS','visible_conversations','10'),
   ('PREMIUM','daily_likes','200'), ('PREMIUM','daily_messages','10'), ('PREMIUM','daily_undos','10'),
-  ('PREMIUM','advanced_filters','true'), ('PREMIUM','see_who_liked_you','true'), ('PREMIUM','incognito','true'), ('PREMIUM','priority_visibility','true')
+  ('PREMIUM','advanced_filters','true'), ('PREMIUM','see_who_liked_you','true'), ('PREMIUM','incognito','true'), ('PREMIUM','priority_visibility','true'), ('PREMIUM','search_outside_country','true'), ('PREMIUM','visible_conversations','-1')
 )
 INSERT INTO feature_entitlements (plan_id, feature_key, value)
 SELECT p.id, v.key, v.value::jsonb FROM v JOIN subscription_plans p ON p.code = v.code::plan_code
@@ -39,7 +39,17 @@ INSERT INTO system_settings (key, value, description) VALUES
   ('otp.maxVerifyAttempts', '5', 'Wrong attempts before the challenge locks'),
   ('chat.continuationDailyLimit', '200', 'Max messages per user per conversation per day (anti-spam)'),
   ('chat.messagesConsumeCredit', '"start_only"', 'start_only = credits only start conversations; every_message = each message consumes'),
-  ('chat.attachmentsEnabled', 'false', 'Allow attachments in chat')
+  ('chat.attachmentsEnabled', 'false', 'Allow attachments in chat'),
+  ('matching.defaultSort', '"nearest"', 'nearest = closest first, then own country; best = highest compatibility first'),
+  ('consultations.paymentWindowMinutes', '30', 'Unpaid bookings expire after this many minutes'),
+  ('consultations.platformFeePercent', '15', 'Platform commission on each consultation'),
+  ('consultations.chatOpenDaysAfterCompletion', '7', 'Days the client and counselor can still message after completion'),
+  ('consultations.durations', '[30,45,60,90]', 'Durations counselors may offer (minutes)'),
+  ('chat.inboxRetentionDays', '15', 'Inactive conversations in Messages are deleted after N days'),
+  ('chat.inboxWarnAfterDays', '10', 'Warn after N days of inactivity in Messages'),
+  ('chat.archiveRetentionDays', '30', 'Archived conversations are deleted after N days'),
+  ('chat.archiveWarnBeforeDays', '7', 'Warn N days before an archived conversation is deleted'),
+  ('chat.unmatchedRetentionDays', '30', 'Unmatched conversations are deleted after N days without a re-match')
 ON CONFLICT (key) DO NOTHING;
 
 INSERT INTO roles (key, name) VALUES
@@ -53,15 +63,16 @@ INSERT INTO permissions (key, description) VALUES
   ('chat.moderate','View reported messages'), ('plans.manage','Edit plans and quotas'),
   ('payments.read','View payments'), ('payments.refund','Issue refunds'),
   ('settings.manage','Edit system settings and matching weights'), ('admins.manage','Manage admin accounts and roles'),
-  ('support.manage','Handle tickets and FAQ'), ('notifications.send','Send broadcast notifications'), ('audit.read','Read audit logs')
+  ('support.manage','Handle tickets and FAQ'), ('notifications.send','Send broadcast notifications'), ('audit.read','Read audit logs'),
+  ('counselors.review','Approve, reject or suspend counselors'), ('consultations.manage','View consultations and resolve disputes')
 ON CONFLICT (key) DO NOTHING;
 
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id FROM roles r JOIN permissions p ON
   r.key = 'super_admin'
   OR (r.key = 'admin' AND p.key <> 'admins.manage')
-  OR (r.key = 'moderator' AND p.key IN ('users.read','verification.review','reports.manage','chat.moderate'))
-  OR (r.key = 'support' AND p.key IN ('users.read','support.manage'))
+  OR (r.key = 'moderator' AND p.key IN ('users.read','verification.review','reports.manage','chat.moderate','counselors.review'))
+  OR (r.key = 'support' AND p.key IN ('users.read','support.manage','consultations.manage'))
   OR (r.key = 'finance' AND p.key IN ('users.read','payments.read','payments.refund','plans.manage'))
   OR (r.key = 'viewer' AND p.key IN ('users.read','payments.read','audit.read'))
 ON CONFLICT DO NOTHING;

@@ -276,16 +276,36 @@ class _PhotosScreenState extends ConsumerState<PhotosScreen> {
   }
 }
 
-/// Shared 3×2 photo grid (setup + edit profile). Demo: tapping a slot toggles
-/// a placeholder; Phase 3 wires image_picker → compress → presigned upload.
-class PhotoGrid extends StatelessWidget {
+/// Shared 3×2 photo grid (setup + edit profile). In API mode an empty slot
+/// opens the picker and uploads; a filled slot deletes the photo.
+class PhotoGrid extends StatefulWidget {
   const PhotoGrid({super.key, required this.slots, required this.onToggle});
   final List<bool> slots;
-  final ValueChanged<int> onToggle;
+  final Future<void> Function(int) onToggle;
+
+  @override
+  State<PhotoGrid> createState() => _PhotoGridState();
+}
+
+class _PhotoGridState extends State<PhotoGrid> {
+  int? _busy;
+
+  Future<void> _tap(int i) async {
+    if (_busy != null) return;
+    setState(() => _busy = i);
+    try {
+      await widget.onToggle(i);
+    } catch (e) {
+      if (mounted) showToast(context, failureMessage(context, e));
+    } finally {
+      if (mounted) setState(() => _busy = null);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final slots = widget.slots;
     return GridView.count(
       crossAxisCount: 3,
       shrinkWrap: true,
@@ -295,31 +315,33 @@ class PhotoGrid extends StatelessWidget {
       childAspectRatio: 3 / 4,
       children: [
         for (var i = 0; i < slots.length; i++)
-          slots[i]
-              ? ClipRRect(
-                  borderRadius: OlfaRadius.all(18),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      const PhotoPlaceholder(),
-                      if (i == 0) PositionedDirectional(bottom: 8, start: 8, child: OlfaTag(l.mainPhoto, style: OlfaTagStyle.primary)),
-                      PositionedDirectional(
-                        top: 4,
-                        end: 4,
-                        child: OlfaIconButton(icon: Icons.close_rounded, tooltip: l.removePhoto, style: OlfaIconStyle.elevated, circle: true, size: 30, onPressed: () => onToggle(i)),
+          _busy == i
+              ? const OlfaSkeleton(height: double.infinity, radius: 18)
+              : slots[i]
+                  ? ClipRRect(
+                      borderRadius: OlfaRadius.all(18),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          const PhotoPlaceholder(),
+                          if (i == 0) PositionedDirectional(bottom: 8, start: 8, child: OlfaTag(l.mainPhoto, style: OlfaTagStyle.primary)),
+                          PositionedDirectional(
+                            top: 4,
+                            end: 4,
+                            child: OlfaIconButton(icon: Icons.close_rounded, tooltip: l.removePhoto, style: OlfaIconStyle.elevated, circle: true, size: 30, onPressed: () => _tap(i)),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                )
-              : Semantics(
-                  button: true,
-                  label: l.addPhoto,
-                  child: InkWell(
-                    borderRadius: OlfaRadius.all(18),
-                    onTap: () => onToggle(i),
-                    child: DottedSlot(label: l.add),
-                  ),
-                ),
+                    )
+                  : Semantics(
+                      button: true,
+                      label: l.addPhoto,
+                      child: InkWell(
+                        borderRadius: OlfaRadius.all(18),
+                        onTap: () => _tap(i),
+                        child: DottedSlot(label: l.add),
+                      ),
+                    ),
       ],
     );
   }

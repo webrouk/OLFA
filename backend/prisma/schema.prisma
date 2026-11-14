@@ -170,6 +170,15 @@ enum NotificationType {
   VERIFICATION_REJECTED
   SUBSCRIPTION
   SYSTEM
+  CONSULTATION_REQUEST
+  CONSULTATION_CONFIRMED
+  CONSULTATION_DECLINED
+  CONSULTATION_COMPLETED
+  COUNSELOR_APPROVED
+  COUNSELOR_REJECTED
+  CONVERSATION_EXPIRING
+  REMATCH_REQUEST
+  REMATCH_ACCEPTED
 
   @@map("notification_type")
 }
@@ -240,6 +249,9 @@ enum ModerationActionType {
   SUSPEND
   REACTIVATE
   DISMISS_REPORT
+  APPROVE_COUNSELOR
+  REJECT_COUNSELOR
+  SUSPEND_COUNSELOR
 
   @@map("moderation_action_type")
 }
@@ -297,6 +309,10 @@ model User {
   blocksReceived       BlockedUser[]        @relation("Blocked")
   tickets              SupportTicket[]
   notifications        Notification[]
+  counselorProfile     CounselorProfile?
+  consultationsBooked  Consultation[]       @relation("ConsultationClient")
+  reviewsWritten       ConsultationReview[]
+  rematchRequests      RematchRequest[]
 
   @@map("users")
 }
@@ -313,7 +329,7 @@ model UserProfile {
   hasChildren       Boolean?         @map("has_children")
   wantsChildren     Boolean?         @map("wants_children")
   education         EducationLevel
-  occupation        String           @db.VarChar(80)
+  occupation        String           @db.VarChar(60) // key from shared/reference/occupations.tsv
   marriageTimeline  MarriageTimeline @map("marriage_timeline")
   smoking           Boolean?
   willingToRelocate Boolean?         @map("willing_to_relocate")
@@ -322,9 +338,15 @@ model UserProfile {
   completeness      Int              @default(0) @db.SmallInt
   createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt         DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  nationality       String?          @db.Char(2)
+  latitude          Float? // rounded to 2 decimals (~1 km), never exposed
+  longitude         Float?
+  locationCountry   String?          @map("location_country") @db.Char(2)
+  locationUpdatedAt DateTime?        @map("location_updated_at") @db.Timestamptz
   user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([gender, countryCode, birthDate], map: "user_profiles_discovery_idx")
+  @@index([locationCountry, latitude, longitude], map: "user_profiles_geo_idx")
   @@map("user_profiles")
 }
 
@@ -503,14 +525,18 @@ model DiscoveryHistory {
 
 model Conversation {
   id            String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  matchId       String               @unique @map("match_id") @db.Uuid
+  matchId       String?              @unique @map("match_id") @db.Uuid
   startedBy     String               @map("started_by") @db.Uuid
   createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz
   lastMessageAt DateTime?            @map("last_message_at") @db.Timestamptz
-  match         Match                @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  kind          ConversationKind     @default(MATCH)
+  consultationId String?             @unique @map("consultation_id") @db.Uuid
+  match         Match?               @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  consultation  Consultation?        @relation(fields: [consultationId], references: [id], onDelete: Cascade)
   starter       User                 @relation(fields: [startedBy], references: [id])
   members       ConversationMember[]
   messages      Message[]
+  rematch       RematchRequest?
 
   @@index([lastMessageAt(sort: Desc)], map: "conversations_last_idx")
   @@map("conversations")
@@ -522,6 +548,10 @@ model ConversationMember {
   joinedAt       DateTime     @default(now()) @map("joined_at") @db.Timestamptz
   lastReadAt     DateTime?    @map("last_read_at") @db.Timestamptz
   muted          Boolean      @default(false)
+  folder            ConversationFolder @default(INBOX)
+  archivedAt        DateTime?    @map("archived_at") @db.Timestamptz
+  retentionAnchorAt DateTime     @default(now()) @map("retention_anchor_at") @db.Timestamptz
+  expiryWarnedAt    DateTime?    @map("expiry_warned_at") @db.Timestamptz
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -664,8 +694,11 @@ model Payment {
   status            PaymentStatus
   createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz
   refundedAt        DateTime?         @map("refunded_at") @db.Timestamptz
+  consultationId    String?           @map("consultation_id") @db.Uuid
   user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   subscription      UserSubscription? @relation(fields: [subscriptionId], references: [id])
+  consultation      Consultation?     @relation("ConsultationPayments", fields: [consultationId], references: [id])
+  paidConsultation  Consultation?     @relation("ConsultationPayment")
   transactions      Transaction[]
 
   @@unique([provider, providerPaymentId])
@@ -718,6 +751,7 @@ model AdminUser {
   reportsHandled       Report[]
   ticketsAssigned      SupportTicket[]
   settingsUpdated      SystemSetting[]
+  counselorsReviewed   CounselorProfile[]
 
   @@map("admin_users")
 }
@@ -930,4 +964,186 @@ model UserSession {
 
   @@index([familyId], map: "user_sessions_family_idx")
   @@map("user_sessions")
+}
+
+// ───────────── Family consultations ─────────────
+
+enum CounselorKind {
+  PSYCHOLOGIST
+  FAMILY_COUNSELOR
+
+  @@map("counselor_kind")
+}
+
+enum CounselorStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+
+  @@map("counselor_status")
+}
+
+enum ConsultationService {
+  PREMARITAL
+  MARITAL
+  FAMILY
+  PARENTING
+  INDIVIDUAL
+  DIVORCE_RECOVERY
+
+  @@map("consultation_service")
+}
+
+enum ConsultationStatus {
+  AWAITING_PAYMENT
+  PAID
+  CONFIRMED
+  COMPLETED
+  DECLINED
+  CANCELLED
+  REFUNDED
+  EXPIRED
+
+  @@map("consultation_status")
+}
+
+enum ConversationKind {
+  MATCH
+  CONSULTATION
+
+  @@map("conversation_kind")
+}
+
+model CounselorProfile {
+  userId           String                @id @map("user_id") @db.Uuid
+  kind             CounselorKind
+  status           CounselorStatus       @default(PENDING)
+  displayName      String                @map("display_name") @db.VarChar(60)
+  headline         String                @db.VarChar(120)
+  bio              String                @db.VarChar(1500)
+  yearsExperience  Int                   @map("years_experience") @db.SmallInt
+  licenseNumber    String                @map("license_number") @db.VarChar(80)
+  licenseAuthority String                @map("license_authority") @db.VarChar(120)
+  licenseCountry   String                @map("license_country") @db.Char(2)
+  credentialKeys   String[]              @map("credential_keys")
+  languages        String[]              @db.Char(2)
+  services         ConsultationService[]
+  ratingAvg        Decimal               @default(0) @map("rating_avg") @db.Decimal(3, 2)
+  ratingCount      Int                   @default(0) @map("rating_count")
+  rejectReason     String?               @map("reject_reason") @db.VarChar(300)
+  reviewedBy       String?               @map("reviewed_by") @db.Uuid
+  reviewedAt       DateTime?             @map("reviewed_at") @db.Timestamptz
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewer         AdminUser?            @relation(fields: [reviewedBy], references: [id])
+  offerings        CounselorOffering[]
+  consultations    Consultation[]
+  reviews          ConsultationReview[]
+
+  @@index([status, kind, ratingAvg(sort: Desc)], map: "counselor_profiles_listing_idx")
+  @@map("counselor_profiles")
+}
+
+model CounselorOffering {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  counselorId     String              @map("counselor_id") @db.Uuid
+  service         ConsultationService
+  language        String              @db.Char(2)
+  durationMinutes Int                 @map("duration_minutes") @db.SmallInt
+  priceMinor      Int                 @map("price_minor")
+  currency        String              @db.Char(3)
+  active          Boolean             @default(true)
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  counselor       CounselorProfile    @relation(fields: [counselorId], references: [userId], onDelete: Cascade)
+  consultations   Consultation[]
+
+  @@unique([counselorId, service, language, durationMinutes])
+  @@map("counselor_offerings")
+}
+
+/// State machine and "paid before confirmation" are enforced by the
+/// olfa_consultation_guard trigger (see migration 20261114140000).
+model Consultation {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientId        String              @map("client_id") @db.Uuid
+  counselorId     String              @map("counselor_id") @db.Uuid
+  offeringId      String              @map("offering_id") @db.Uuid
+  service         ConsultationService
+  language        String              @db.Char(2)
+  durationMinutes Int                 @map("duration_minutes") @db.SmallInt
+  priceMinor      Int                 @map("price_minor")
+  currency        String              @db.Char(3)
+  status          ConsultationStatus  @default(AWAITING_PAYMENT)
+  clientNote      String?             @map("client_note") @db.VarChar(1000)
+  preferredTime   DateTime?           @map("preferred_time") @db.Timestamptz
+  scheduledAt     DateTime?           @map("scheduled_at") @db.Timestamptz
+  declineReason   String?             @map("decline_reason") @db.VarChar(300)
+  paymentId       String?             @unique @map("payment_id") @db.Uuid
+  expiresAt       DateTime            @map("expires_at") @db.Timestamptz
+  paidAt          DateTime?           @map("paid_at") @db.Timestamptz
+  confirmedAt     DateTime?           @map("confirmed_at") @db.Timestamptz
+  completedAt     DateTime?           @map("completed_at") @db.Timestamptz
+  cancelledAt     DateTime?           @map("cancelled_at") @db.Timestamptz
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  client          User                @relation("ConsultationClient", fields: [clientId], references: [id], onDelete: Cascade)
+  counselor       CounselorProfile    @relation(fields: [counselorId], references: [userId])
+  offering        CounselorOffering   @relation(fields: [offeringId], references: [id])
+  payment         Payment?            @relation("ConsultationPayment", fields: [paymentId], references: [id])
+  payments        Payment[]           @relation("ConsultationPayments")
+  conversation    Conversation?
+  review          ConsultationReview?
+
+  @@index([clientId, createdAt(sort: Desc)], map: "consultations_client_idx")
+  @@index([counselorId, status, createdAt(sort: Desc)], map: "consultations_counselor_idx")
+  @@map("consultations")
+}
+
+model ConsultationReview {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  consultationId String           @unique @map("consultation_id") @db.Uuid
+  clientId       String           @map("client_id") @db.Uuid
+  counselorId    String           @map("counselor_id") @db.Uuid
+  rating         Int              @db.SmallInt
+  comment        String?          @db.VarChar(1000)
+  hidden         Boolean          @default(false)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  consultation   Consultation     @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  client         User             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  counselor      CounselorProfile @relation(fields: [counselorId], references: [userId], onDelete: Cascade)
+
+  @@index([counselorId, createdAt(sort: Desc)], map: "consultation_reviews_counselor_idx")
+  @@map("consultation_reviews")
+}
+
+// ───────────── Conversation lifecycle (migration 20261114150000) ─────────────
+
+enum ConversationFolder {
+  INBOX
+  ARCHIVE
+
+  @@map("conversation_folder")
+}
+
+enum RematchStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+
+  @@map("rematch_status")
+}
+
+/// One re-match request per conversation, ever (primary key).
+model RematchRequest {
+  conversationId String        @id @map("conversation_id") @db.Uuid
+  requestedBy    String        @map("requested_by") @db.Uuid
+  status         RematchStatus @default(PENDING)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  respondedAt    DateTime?     @map("responded_at") @db.Timestamptz
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  requester      User          @relation(fields: [requestedBy], references: [id], onDelete: Cascade)
+
+  @@map("rematch_requests")
 }

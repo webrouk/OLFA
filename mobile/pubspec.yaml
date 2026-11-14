@@ -25,6 +25,9 @@ dependencies:
   freezed_annotation: ^2.4.4
   json_annotation: ^4.9.0
   flutter_svg: ^2.0.17
+  image_picker: ^1.1.2
+  socket_io_client: ^3.0.2
+  flutter_timezone: ^3.0.1
   # Phase 3 (needs Firebase project config files first):
   # firebase_core, firebase_messaging, in_app_purchase
 

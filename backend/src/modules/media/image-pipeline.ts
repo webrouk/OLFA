@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 
+export const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'] as const;
+export type AllowedMime = (typeof ALLOWED_MIME)[number];
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
 export const VARIANTS = { thumb: 200, card: 800, full: 1600 } as const;
 export type VariantName = keyof typeof VARIANTS;
 
@@ -58,4 +62,15 @@ export function hamming(a: string, b: string): number {
     x >>= 1n;
   }
   return n;
+}
+
+/** Magic-byte sniffing — never trust the declared Content-Type. */
+export function sniffImage(buf: Buffer): AllowedMime | null {
+  if (buf.length < 12) return null;
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+  if (buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
+  const brand = buf.toString('ascii', 4, 12);
+  if (/^ftyp(heic|heix|mif1|msf1)/.test(brand)) return 'image/heic';
+  return null;
 }

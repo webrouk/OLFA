@@ -2,7 +2,7 @@ import { Controller, Get, Global, Injectable, Module } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Prisma, PlanCode } from '@prisma/client';
 import { fromPgError } from '../../common/errors';
-import { AllowPending, AuthUser, CurrentUser } from '../../common/http';
+import { AllowPending, AuthUser, CurrentUser, Public } from '../../common/http';
 import { PrismaService } from '../../common/infra';
 import { dayWindow, DayWindow } from '../../domain/quota-period';
 
@@ -61,7 +61,7 @@ export class EntitlementsService {
   }
 }
 
-export type CounterKey = 'likes' | 'messages' | 'undos';
+export type CounterKey = 'likes' | 'messages' | 'undos' | `msg:${string}`;
 
 /** Server-side daily quotas. UTC storage, user-local reset. */
 @Injectable()
@@ -129,9 +129,36 @@ export class EntitlementsController {
   }
 }
 
+@ApiTags('entitlements')
+@Controller('v1')
+export class PlansController {
+  constructor(private readonly prisma: PrismaService) {}
+
+  /** Plans and their (admin-managed) features. Prices come from the stores at purchase time. */
+  @Public() @Get('plans')
+  async plans() {
+    const plans = await this.prisma.subscriptionPlan.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+      select: { code: true, nameAr: true, nameEn: true, entitlements: { select: { featureKey: true, value: true } }, products: { where: { isActive: true }, select: { provider: true, productId: true, durationDays: true } } },
+    });
+    return plans.map((p) => ({ ...p, entitlements: Object.fromEntries(p.entitlements.map((e) => [e.featureKey, e.value])) }));
+  }
+
+  @ApiBearerAuth() @AllowPending() @Get('me/payments')
+  payments(@CurrentUser() u: AuthUser) {
+    return this.prisma.payment.findMany({
+      where: { userId: u.id },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: { id: true, provider: true, amountMinor: true, currency: true, status: true, createdAt: true, subscription: { select: { plan: { select: { code: true } } } } },
+    });
+  }
+}
+
 @Global()
 @Module({
-  controllers: [EntitlementsController],
+  controllers: [EntitlementsController, PlansController],
   providers: [EntitlementsService, QuotaService],
   exports: [EntitlementsService, QuotaService],
 })

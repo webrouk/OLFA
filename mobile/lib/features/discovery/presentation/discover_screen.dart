@@ -104,7 +104,15 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> with SingleTick
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(l.navDiscover, style: t.h3.copyWith(fontSize: 18, fontWeight: FontWeight.w700)),
-                          if (ent != null) Text(l.likesLeftToday(ent.likesLeft), style: t.caption),
+                          if (ent != null)
+                            Text(
+                              ent.resetsAt == null
+                                  ? l.likesLeftToday(ent.likesLeft)
+                                  : '${l.likesLeftToday(ent.likesLeft)} · ${l.quotaResetsAt(MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(ent.resetsAt!)))}',
+                              style: t.caption,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                         ],
                       ),
                     ),

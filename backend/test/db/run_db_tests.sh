@@ -16,7 +16,7 @@ expect_error(){ # name sqlstate sql
 
 createdb "$DB" || exit 1
 trap 'dropdb --if-exists "$DB" >/dev/null 2>&1' EXIT
-$PSQL -d "$DB" -f prisma/migrations/20261114000000_init/migration.sql >/dev/null || { echo "migration failed"; exit 1; }
+for m in prisma/migrations/*/migration.sql; do $PSQL -d "$DB" -f "$m"; done >/dev/null || { echo "migration failed"; exit 1; }
 echo "migration applied: $($PSQL -d "$DB" -c "select count(*) from information_schema.tables where table_schema='public'") tables"
 
 # ── fixtures ──

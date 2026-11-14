@@ -2,7 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/models/models.dart';
 import '../../../shared/services/demo_backend.dart';
+import '../../../core/network/api_client.dart' show useApi;
 import '../data/profile_repository_impl.dart';
+import 'photo_picker.dart';
 import '../domain/profile_draft.dart';
 
 /// Holds the in-progress profile across setup screens 7–10.
@@ -28,10 +30,25 @@ class ProfileDraftController extends Notifier<ProfileDraft> {
     state = state.copyWith(prefMarital: s);
   }
 
-  void togglePhoto(int i) {
-    final l = [...state.photoSlots];
-    l[i] = !l[i];
-    state = state.copyWith(photoSlots: l);
+  /// Empty slot → pick, compress and upload. Filled slot → delete.
+  /// Demo mode toggles a placeholder without picking.
+  Future<void> togglePhoto(int i) async {
+    final slots = [...state.photoSlots];
+    final ids = [...state.photoIds];
+    final repo = ref.read(photoRepositoryProvider);
+    if (slots[i]) {
+      if (ids[i] != null) await repo.delete(ids[i]!);
+      slots[i] = false;
+      ids[i] = null;
+    } else {
+      if (useApi) {
+        final picked = await ref.read(photoPickerProvider).pick();
+        if (picked == null) return;
+        ids[i] = await repo.upload(position: i, bytes: picked.bytes, mimeType: picked.mimeType);
+      }
+      slots[i] = true;
+    }
+    state = state.copyWith(photoSlots: slots, photoIds: ids);
   }
 
   Future<void> submit() async {

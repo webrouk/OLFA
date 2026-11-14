@@ -1,0 +1,157 @@
+# key	category	english	arabic
+doctor	health	Physician	طبيب
+surgeon	health	Surgeon	جرّاح
+dentist	health	Dentist	طبيب أسنان
+pharmacist	health	Pharmacist	صيدلي
+nurse	health	Nurse	ممرض
+midwife	health	Midwife	قابلة
+physiotherapist	health	Physiotherapist	أخصائي علاج طبيعي
+psychologist	health	Psychologist	أخصائي نفسي
+psychiatrist	health	Psychiatrist	طبيب نفسي
+nutritionist	health	Nutritionist	أخصائي تغذية
+lab_technician	health	Laboratory technician	فني مختبر
+radiologist	health	Radiology technician	فني أشعة
+optometrist	health	Optometrist	أخصائي بصريات
+veterinarian	health	Veterinarian	طبيب بيطري
+paramedic	health	Paramedic	مسعف
+speech_therapist	health	Speech therapist	أخصائي نطق وتخاطب
+occupational_therapist	health	Occupational therapist	أخصائي علاج وظيفي
+healthcare_admin	health	Healthcare administrator	إداري رعاية صحية
+software_engineer	tech	Software engineer	مهندس برمجيات
+web_developer	tech	Web developer	مطور ويب
+mobile_developer	tech	Mobile developer	مطور تطبيقات جوال
+data_scientist	tech	Data scientist	عالم بيانات
+data_analyst	tech	Data analyst	محلل بيانات
+ai_engineer	tech	AI / ML engineer	مهندس ذكاء اصطناعي
+cybersecurity	tech	Cybersecurity specialist	أخصائي أمن سيبراني
+it_support	tech	IT support specialist	أخصائي دعم فني
+network_engineer	tech	Network engineer	مهندس شبكات
+systems_admin	tech	Systems administrator	مدير أنظمة
+devops	tech	DevOps / cloud engineer	مهندس DevOps وسحابة
+product_manager	tech	Product manager	مدير منتج
+ux_designer	tech	UX / UI designer	مصمم تجربة وواجهات المستخدم
+qa_engineer	tech	QA engineer	مهندس اختبار جودة
+game_developer	tech	Game developer	مطور ألعاب
+civil_engineer	engineering	Civil engineer	مهندس مدني
+mechanical_engineer	engineering	Mechanical engineer	مهندس ميكانيكي
+electrical_engineer	engineering	Electrical engineer	مهندس كهربائي
+chemical_engineer	engineering	Chemical engineer	مهندس كيميائي
+petroleum_engineer	engineering	Petroleum engineer	مهندس بترول
+industrial_engineer	engineering	Industrial engineer	مهندس صناعي
+aerospace_engineer	engineering	Aerospace engineer	مهندس طيران وفضاء
+biomedical_engineer	engineering	Biomedical engineer	مهندس طبي حيوي
+environmental_engineer	engineering	Environmental engineer	مهندس بيئي
+architect	engineering	Architect	مهندس معماري
+interior_designer	engineering	Interior designer	مصمم داخلي
+surveyor	engineering	Surveyor	مسّاح
+urban_planner	engineering	Urban planner	مخطط مدن
+technician	engineering	Technician	فني
+teacher	education	Teacher	معلم
+kindergarten_teacher	education	Kindergarten teacher	معلم رياض أطفال
+special_ed_teacher	education	Special education teacher	معلم تربية خاصة
+professor	education	University professor	أستاذ جامعي
+lecturer	education	Lecturer	محاضر
+researcher	education	Researcher	باحث
+school_principal	education	School principal	مدير مدرسة
+education_counselor	education	School counselor	مرشد طلابي
+tutor	education	Private tutor	مدرس خصوصي
+librarian	education	Librarian	أمين مكتبة
+quran_teacher	education	Quran teacher	معلم قرآن
+student	education	Student	طالب
+accountant	business	Accountant	محاسب
+auditor	business	Auditor	مدقق حسابات
+financial_analyst	business	Financial analyst	محلل مالي
+banker	business	Banker	مصرفي
+investment_manager	business	Investment manager	مدير استثمار
+actuary	business	Actuary	خبير اكتواري
+tax_advisor	business	Tax advisor	مستشار ضريبي
+insurance	business	Insurance specialist	أخصائي تأمين
+business_owner	business	Business owner	صاحب عمل
+entrepreneur	business	Entrepreneur	رائد أعمال
+manager	business	Manager	مدير
+executive	business	Executive / C-level	مدير تنفيذي
+project_manager	business	Project manager	مدير مشاريع
+consultant	business	Management consultant	مستشار إداري
+hr	business	Human resources	موارد بشرية
+recruiter	business	Recruiter	أخصائي توظيف
+marketing	business	Marketing specialist	أخصائي تسويق
+digital_marketing	business	Digital marketing	تسويق رقمي
+sales	business	Sales representative	مندوب مبيعات
+sales_manager	business	Sales manager	مدير مبيعات
+customer_service	business	Customer service	خدمة عملاء
+administrative	business	Administrative officer	موظف إداري
+secretary	business	Secretary / executive assistant	سكرتير
+procurement	business	Procurement specialist	أخصائي مشتريات
+supply_chain	business	Supply chain / logistics	سلاسل إمداد ولوجستيات
+real_estate	business	Real estate agent	وسيط عقاري
+economist	business	Economist	اقتصادي
+lawyer	law	Lawyer	محامٍ
+judge	law	Judge	قاضٍ
+legal_advisor	law	Legal advisor	مستشار قانوني
+notary	law	Notary	كاتب عدل
+paralegal	law	Paralegal	مساعد قانوني
+diplomat	government	Diplomat	دبلوماسي
+civil_servant	government	Civil servant	موظف حكومي
+military	government	Military officer	عسكري
+police	government	Police officer	ضابط شرطة
+firefighter	government	Firefighter	رجل إطفاء
+customs	government	Customs officer	موظف جمارك
+imam	religion	Imam / preacher	إمام وخطيب
+islamic_scholar	religion	Islamic scholar	عالم شرعي
+journalist	media	Journalist	صحفي
+editor	media	Editor	محرر
+writer	media	Writer / author	كاتب
+translator	media	Translator / interpreter	مترجم
+photographer	media	Photographer	مصور
+videographer	media	Videographer / filmmaker	مصور فيديو ومخرج
+graphic_designer	media	Graphic designer	مصمم جرافيك
+artist	media	Artist	فنان تشكيلي
+musician	media	Musician	موسيقي
+actor	media	Actor	ممثل
+content_creator	media	Content creator	صانع محتوى
+public_relations	media	Public relations	علاقات عامة
+broadcaster	media	TV / radio presenter	مذيع
+fashion_designer	media	Fashion designer	مصمم أزياء
+chef	hospitality	Chef	طاهٍ
+baker	hospitality	Baker	خبّاز
+hotel_manager	hospitality	Hotel manager	مدير فندق
+tourism	hospitality	Tourism specialist	أخصائي سياحة
+flight_attendant	hospitality	Flight attendant	مضيف طيران
+event_planner	hospitality	Event planner	منظم فعاليات
+pilot	transport	Pilot	طيار
+ship_captain	transport	Ship captain / officer	ربان سفينة
+driver	transport	Driver	سائق
+air_traffic	transport	Air traffic controller	مراقب جوي
+mechanic	trades	Mechanic	ميكانيكي
+electrician	trades	Electrician	كهربائي
+plumber	trades	Plumber	سباك
+carpenter	trades	Carpenter	نجار
+welder	trades	Welder	لحّام
+construction	trades	Construction worker	عامل بناء
+contractor	trades	Contractor	مقاول
+tailor	trades	Tailor	خياط
+barber	trades	Barber / hairdresser	حلاق ومصفف شعر
+beautician	trades	Beautician	أخصائي تجميل
+craftsman	trades	Craftsman	حِرفي
+farmer	agriculture	Farmer	مزارع
+agricultural_engineer	agriculture	Agricultural engineer	مهندس زراعي
+fisherman	agriculture	Fisherman	صياد
+geologist	science	Geologist	جيولوجي
+chemist	science	Chemist	كيميائي
+physicist	science	Physicist	فيزيائي
+biologist	science	Biologist	عالم أحياء
+mathematician	science	Mathematician	عالم رياضيات
+statistician	science	Statistician	إحصائي
+social_worker	social	Social worker	أخصائي اجتماعي
+family_counselor	social	Family counselor	مستشار أسري
+nonprofit	social	Non-profit / NGO	عمل خيري وتطوعي
+coach	sports	Sports coach / trainer	مدرب رياضي
+athlete	sports	Athlete	رياضي محترف
+fitness_trainer	sports	Personal trainer	مدرب لياقة
+retail	retail	Retail / shop staff	موظف مبيعات تجزئة
+merchant	retail	Merchant / trader	تاجر
+freelancer	other	Freelancer	عمل حر
+homemaker	other	Homemaker	ربة/رب منزل
+retired	other	Retired	متقاعد
+job_seeker	other	Looking for work	باحث عن عمل
+other	other	Other	أخرى

@@ -4,8 +4,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Inject, Injectable } from '@nestjs/common';
 import { ENV, Env } from '../../config/env';
 
-export const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'] as const;
-export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+import { MAX_UPLOAD_BYTES } from './image-pipeline';
 
 /**
  * Two buckets: PRIVATE (originals + pending variants, never public) and
@@ -70,15 +69,4 @@ export class StorageService {
     if (publicKeys.length === 0) return;
     await this.s3.send(new DeleteObjectsCommand({ Bucket: this.env.S3_PUBLIC_BUCKET, Delete: { Objects: publicKeys.map((Key) => ({ Key })) } }));
   }
-}
-
-/** Magic-byte sniffing — never trust the declared Content-Type. */
-export function sniffImage(buf: Buffer): (typeof ALLOWED_MIME)[number] | null {
-  if (buf.length < 12) return null;
-  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
-  if (buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
-  if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
-  const brand = buf.toString('ascii', 4, 12);
-  if (/^ftyp(heic|heix|mif1|msf1)/.test(brand)) return 'image/heic';
-  return null;
 }
