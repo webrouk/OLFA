@@ -8,6 +8,7 @@ import { PrismaService, SettingsService } from '../../common/infra';
 import { compatibility, DEFAULT_WEIGHTS, Member, mutuallyCompatible, parseWeights, rankCandidates, Weights } from '../../domain/matching';
 import { dayWindow } from '../../domain/quota-period';
 import { ageOn } from '../../domain/security';
+import { discoveryScope, publicDistanceKm, sortNearest } from '../../domain/proximity';
 import { profileInclude, toPublicProfile } from '../profiles/profile.mapper';
 import { EntitlementsService } from '../quotas/quotas.module';
 
@@ -24,7 +25,9 @@ export interface DiscoveryFilters {
   maritalStatuses?: MaritalStatus[];
   educations?: EducationLevel[];
   occupation?: string;
+  nationality?: string;
   minCompatibility?: number;
+  sort?: 'nearest' | 'best';
 }
 
 export function usesPaidFilters(f: DiscoveryFilters, basicInterests: Set<string>): boolean {
@@ -32,6 +35,7 @@ export function usesPaidFilters(f: DiscoveryFilters, basicInterests: Set<string>
     !!f.maritalStatuses?.length ||
     !!f.educations?.length ||
     !!f.occupation ||
+    !!f.nationality ||
     f.minCompatibility != null ||
     (f.interests?.length ?? 0) > 1 ||
     (f.interests ?? []).some((k) => !basicInterests.has(k))
@@ -62,6 +66,9 @@ type CandidateRow = {
   occupations: string[];
   pref_wants_children: boolean | null;
   interests: string[];
+  nationality: string | null;
+  show_location: boolean;
+  distance_km: number | null;
 };
 
 @Injectable()
@@ -149,13 +156,23 @@ export class MatchingService {
     const minBirth = yearsAgo(ageMax + 1, 1); // oldest allowed
     const maxBirth = yearsAgo(ageMin); // youngest allowed
 
-    let countries: string[] | null = null;
-    if (viewer.prefs.sameCountryOnly) countries = [viewer.profile.countryCode];
-    else if (viewer.prefs.countryCodes.length) countries = viewer.prefs.countryCodes;
-    if (f.countryCode) countries = countries ? countries.filter((c) => c === f.countryCode) : [f.countryCode];
+    const vp = await this.prisma.userProfile.findUniqueOrThrow({
+      where: { userId: viewerId },
+      select: { birthDate: true, countryCode: true, locationCountry: true, latitude: true, longitude: true },
+    });
+    // "Own country" = where the user is now (detected), else residence.
+    const homeCountry = vp.locationCountry ?? vp.countryCode;
+    const scope = discoveryScope({
+      homeCountry,
+      requestedCountry: f.countryCode,
+      prefSameCountryOnly: viewer.prefs.sameCountryOnly,
+      prefCountries: viewer.prefs.countryCodes,
+      canSearchOutside: ent.searchOutsideCountry,
+    });
+    if (!scope.ok) throw new AppError(ErrorCode.ENTITLEMENT_REQUIRED, 'Searching outside your country requires Plus or Premium', { feature: 'searchOutsideCountry' });
+    const countries = scope.countries;
     if (countries && countries.length === 0) return { items: [], weightsVersion: (await this.weights()).version };
-
-    const viewerBirth = (await this.prisma.userProfile.findUniqueOrThrow({ where: { userId: viewerId }, select: { birthDate: true } })).birthDate;
+    const viewerBirth = vp.birthDate;
     const minPhotos = await this.settings.get('profile.minPhotos', 2);
     const cooldownH = await this.settings.get('matching.shownCooldownHours', 24);
     const pool = Math.min(400, f.limit * 20);
@@ -171,6 +188,8 @@ export class MatchingService {
       minPhotos,
       cooldownH,
       pool,
+      vp.latitude,
+      vp.longitude,
     );
 
     const candidates: Member[] = rows
@@ -178,7 +197,8 @@ export class MatchingService {
       .filter((r) => !f.interests?.length || f.interests.some((k) => r.interests.includes(k)))
       .filter((r) => !f.maritalStatuses?.length || f.maritalStatuses.includes(r.marital_status))
       .filter((r) => !f.educations?.length || f.educations.includes(r.education))
-      .filter((r) => !f.occupation || r.occupation.toLocaleLowerCase().includes(f.occupation.toLocaleLowerCase()))
+      .filter((r) => !f.occupation || r.occupation === f.occupation)
+      .filter((r) => !f.nationality || r.nationality === f.nationality)
       .map((r) => ({
         profile: {
           id: r.id,
@@ -211,7 +231,17 @@ export class MatchingService {
 
     const weights = await this.weights();
     const tz = (await this.prisma.user.findUniqueOrThrow({ where: { id: viewerId }, select: { timezone: true } })).timezone;
-    const ranked = rankCandidates(viewer, candidates, { weights, minScore: f.minCompatibility, dayKey: dayWindow(today, tz).dayKey, limit: f.limit });
+    const rowById = new Map(rows.map((r) => [r.id, r]));
+    const scored = rankCandidates(viewer, candidates, { weights, minScore: f.minCompatibility, dayKey: dayWindow(today, tz).dayKey });
+    const sortMode = f.sort ?? (await this.settings.get<string>('matching.defaultSort', 'nearest'));
+    const ranked = (
+      sortMode === 'best'
+        ? scored
+        : sortNearest(
+            scored.map((x) => ({ item: x, score: x.result.score, distanceKm: rowById.get(x.member.profile.id)?.distance_km ?? null, countryCode: x.member.profile.countryCode })),
+            homeCountry,
+          ).map((p) => p.item)
+    ).slice(0, f.limit);
     if (ranked.length === 0) return { items: [], weightsVersion: weights.version };
 
     const ids = ranked.map((r) => r.member.profile.id);
@@ -229,7 +259,10 @@ export class MatchingService {
     const users = await this.prisma.user.findMany({ where: { id: { in: ids } }, include: profileInclude });
     const byId = new Map(users.map((u) => [u.id, u]));
     return {
-      items: ranked.map((r) => toPublicProfile(byId.get(r.member.profile.id)!, this.env.CDN_BASE_URL, { compatibility: r.result.score })),
+      items: ranked.map((r) => {
+        const row = rowById.get(r.member.profile.id);
+        return toPublicProfile(byId.get(r.member.profile.id)!, this.env.CDN_BASE_URL, { compatibility: r.result.score, distanceKm: publicDistanceKm(row?.distance_km, row?.show_location ?? false) });
+      }),
       weightsVersion: weights.version,
     };
   }

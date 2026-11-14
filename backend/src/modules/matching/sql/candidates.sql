@@ -2,12 +2,13 @@
 -- engine then applies the full MUTUAL hard filters, scores and ranks.
 -- $1 viewer id · $2 viewer gender · $3 min birth date · $4 max birth date
 -- $5 viewer birth date · $6 allowed countries (NULL = any) · $7 min approved photos
--- $8 shown-cooldown hours · $9 pool size
+-- $8 shown-cooldown hours · $9 pool size · $10/$11 viewer latitude/longitude (NULL = unknown)
 SELECT
   u.id,
   p.display_name, p.birth_date, p.gender, p.country_code, p.city, p.show_location,
   p.marital_status, p.education, p.occupation, p.marriage_timeline,
-  p.has_children, p.wants_children, p.smoking, p.willing_to_relocate, p.bio, p.completeness,
+  p.has_children, p.wants_children, p.smoking, p.willing_to_relocate, p.bio, p.completeness, p.nationality,
+  olfa_distance_km($10::float8, $11::float8, p.latitude, p.longitude) AS distance_km,
   pr.age_min, pr.age_max, pr.same_country_only, pr.country_codes, pr.cities,
   pr.marital_statuses, pr.education_levels, pr.occupations, pr.wants_children AS pref_wants_children,
   COALESCE(array_agg(i.key ORDER BY i.key) FILTER (WHERE i.key IS NOT NULL), '{}') AS interests
@@ -41,5 +42,6 @@ WHERE u.status = 'ACTIVE'
                   WHERE h.viewer_id = $1::uuid AND h.candidate_id = u.id AND h.action = 'SHOWN'
                     AND h.created_at > now() - make_interval(hours => $8::int))
 GROUP BY u.id, p.user_id, pr.user_id
-ORDER BY u.last_active_at DESC NULLS LAST, u.id
+-- nearest first, then recently active (the pool is re-ranked in the service)
+ORDER BY distance_km ASC NULLS LAST, u.last_active_at DESC NULLS LAST, u.id
 LIMIT $9::int

@@ -36,7 +36,7 @@ C1=00000000-0000-0000-0000-300000000001; P1=00000000-0000-0000-0000-100000000001
 C2=00000000-0000-0000-0000-300000000002; P2=00000000-0000-0000-0000-100000000002
 msg(){ q "INSERT INTO messages (conversation_id, sender_id, client_message_id, body) VALUES ('$1','$2',gen_random_uuid(),'hi') RETURNING 'sent'"; }
 list(){ q "SELECT string_agg(section || ':' || COALESCE(list_position::text,'-') || ':' || locked, ',' ORDER BY section, list_position) FROM olfa_conversation_list('$ME', $1)"; }
-count_visible(){ q "SELECT count(*) FILTER (WHERE NOT locked) || '/' || count(*) FILTER (WHERE locked) FROM olfa_conversation_list('$ME', $1) WHERE section <> 'UNMATCHED'"; }
+count_visible(){ q "SELECT count(*) FILTER (WHERE NOT locked) || '/' || count(*) FILTER (WHERE locked) FROM olfa_conversation_list('$ME', $1) WHERE section IN ('INBOX','ARCHIVE')"; }
 
 echo "plan visibility (inbox + archive share the limit)"
 check "Free: 5 visible, 9 locked"    "$(count_visible 5)"  "5/9"
@@ -48,6 +48,21 @@ check "archiving does not free a slot" "$(count_visible 5)" "5/9"
 check "archived chats stay in their section" "$(q "SELECT string_agg(section, ',' ORDER BY list_position) FROM olfa_conversation_list('$ME',5) WHERE conversation_id IN ('$C1','$C2')")" "ARCHIVE,ARCHIVE"
 q "UPDATE conversation_members SET folder='INBOX', archived_at=NULL WHERE user_id='$ME'" >/dev/null
 expect_error "archive flag and timestamp go together" 23514 "UPDATE conversation_members SET folder='ARCHIVE' WHERE user_id='$ME' AND conversation_id='$C1'"
+
+# a paid consultation chat is neither counted nor locked
+K=00000000-0000-0000-0000-0000000000a1
+$PSQL -d "$DB" <<SQL >/dev/null
+INSERT INTO users (id, phone_e164, phone_country, status) VALUES ('$K','+971500000099','AE','ACTIVE');
+INSERT INTO counselor_profiles (user_id, kind, status, display_name, headline, bio, years_experience, license_number, license_authority, license_country, credential_keys, languages, services)
+VALUES ('$K','FAMILY_COUNSELOR','APPROVED','Dr','h','b',5,'L','A','AE','{k}','{ar}','{MARITAL}');
+INSERT INTO counselor_offerings (id, counselor_id, service, language, duration_minutes, price_minor, currency) VALUES ('00000000-0000-0000-0000-0000000000f1','$K','MARITAL','ar',60,100,'AED');
+INSERT INTO consultations (id, client_id, counselor_id, offering_id, service, language, duration_minutes, price_minor, currency, expires_at)
+VALUES ('00000000-0000-0000-0000-0000000000b1','$ME','$K','00000000-0000-0000-0000-0000000000f1','MARITAL','ar',60,100,'AED',now());
+INSERT INTO conversations (id, kind, consultation_id, started_by, last_message_at) VALUES ('00000000-0000-0000-0000-3000000000ff','CONSULTATION','00000000-0000-0000-0000-0000000000b1','$K', now());
+INSERT INTO conversation_members (conversation_id, user_id) VALUES ('00000000-0000-0000-0000-3000000000ff','$ME'), ('00000000-0000-0000-0000-3000000000ff','$K');
+SQL
+check "consultation chat: own section, never locked" "$(q "SELECT section || ':' || locked FROM olfa_conversation_list('$ME',5) WHERE conversation_id='00000000-0000-0000-0000-3000000000ff'")" "CONSULTATION:false"
+check "…and does not take a free slot" "$(count_visible 5)" "5/9"
 
 echo "unmatch & re-match"
 check "message allowed while matched" "$(msg $C1 $ME)" "sent"
@@ -85,9 +100,10 @@ msg $C5 $ME >/dev/null
 check "a new message keeps the chat (timer + warning reset)" "$(q "SELECT bool_and(expiry_warned_at IS NULL AND retention_anchor_at > now() - interval '1 minute') FROM conversation_members WHERE conversation_id='$C5'")" "t"
 r=$(q "SELECT string_agg(action, ',' ORDER BY action) FROM olfa_run_retention(now() + interval '16 days')")
 check "inbox chats expire after 15 idle days" "$(q "SELECT count(*) FROM conversation_members cm JOIN conversations c ON c.id=cm.conversation_id JOIN matches m ON m.id=c.match_id WHERE m.status='ACTIVE'")" "0"
+check "consultation chats are not touched by retention" "$(q "SELECT count(*) FROM conversation_members WHERE conversation_id='00000000-0000-0000-0000-3000000000ff'")" "2"
 check "…and empty conversations are removed" "$(echo "$r" | grep -c deleted_empty)" "1"
 check "unmatched chats survive until their own month" "$(q "SELECT count(*) FROM conversations c JOIN matches m ON m.id=c.match_id WHERE m.status='UNMATCHED'")" "2"
 q "SELECT * FROM olfa_run_retention(now() + interval '31 days')" >/dev/null
-check "unmatched for a month → deleted" "$(q "SELECT count(*) FROM conversations")" "0"
+check "unmatched for a month → deleted" "$(q "SELECT count(*) FROM conversations WHERE kind='MATCH'")" "0"
 
 echo; echo "conversation tests: $pass passed, $fail failed"; [ "$fail" -eq 0 ]

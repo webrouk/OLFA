@@ -20,6 +20,11 @@ export enum ErrorCode {
   ACCOUNT_NOT_ACTIVE = 'ACCOUNT_NOT_ACTIVE',
   UNDERAGE = 'UNDERAGE',
   UPLOAD_INVALID = 'UPLOAD_INVALID',
+  CONVERSATION_CLOSED = 'CONVERSATION_CLOSED',
+  CONVERSATION_LOCKED = 'CONVERSATION_LOCKED',
+  REMATCH_USED = 'REMATCH_USED',
+  INVALID_STATE = 'INVALID_STATE',
+  NOT_PAID = 'NOT_PAID',
   INTERNAL = 'INTERNAL',
 }
 
@@ -42,6 +47,11 @@ const STATUS: Record<ErrorCode, HttpStatus> = {
   ACCOUNT_NOT_ACTIVE: HttpStatus.FORBIDDEN,
   UNDERAGE: HttpStatus.UNPROCESSABLE_ENTITY,
   UPLOAD_INVALID: HttpStatus.BAD_REQUEST,
+  CONVERSATION_CLOSED: HttpStatus.FORBIDDEN,
+  CONVERSATION_LOCKED: HttpStatus.PAYMENT_REQUIRED,
+  REMATCH_USED: HttpStatus.CONFLICT,
+  INVALID_STATE: HttpStatus.CONFLICT,
+  NOT_PAID: HttpStatus.PAYMENT_REQUIRED,
   INTERNAL: HttpStatus.INTERNAL_SERVER_ERROR,
 };
 
@@ -71,6 +81,21 @@ export function fromPgError(e: unknown): AppError | null {
       return new AppError(ErrorCode.NOT_ELIGIBLE);
     case 'OLL03':
       return new AppError(ErrorCode.BLOCKED);
+    // conversation lifecycle & consultations (see migrations 20261114140000/150000)
+    case 'P0010':
+      return new AppError(ErrorCode.CONVERSATION_CLOSED);
+    case 'P0011':
+      return new AppError(ErrorCode.NOT_FOUND);
+    case 'P0001':
+    case 'P0012':
+    case 'P0013':
+    case 'P0014':
+    case 'P0015':
+      return new AppError(ErrorCode.INVALID_STATE);
+    case 'P0002':
+      return new AppError(ErrorCode.NOT_PAID);
+    case 'P0003':
+      return new AppError(ErrorCode.FORBIDDEN);
     case '23505':
     case 'P2002':
       return new AppError(ErrorCode.CONFLICT);
