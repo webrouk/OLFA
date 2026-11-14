@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist-unit",
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": ["src/domain/**/*.ts", "test/unit/**/*.ts"]
+}

@@ -1,16 +1,17 @@
-// OLFA — Database Schema (PostgreSQL 16)
-// See docs/03-database-erd.md for the ERD and design notes.
+// OLFA — Prisma schema. Mirrors prisma/migrations/*/migration.sql
+// (checked by test/db/check_prisma_vs_db.py). SQL functions olfa_like and
+// olfa_consume_quota are called through $queryRaw.
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgcrypto]
 }
-
-// ───────────────────────────── Enums ─────────────────────────────
 
 enum AccountStatus {
   PENDING_VERIFICATION
@@ -19,18 +20,23 @@ enum AccountStatus {
   SUSPENDED
   RESTRICTED
   DELETED
+
+  @@map("account_status")
 }
 
 enum Gender {
   MALE
   FEMALE
+
+  @@map("gender")
 }
 
 enum MaritalStatus {
   NEVER_MARRIED
   DIVORCED
   WIDOWED
-  MARRIED // only where permitted by local law & AppSettings
+
+  @@map("marital_status")
 }
 
 enum EducationLevel {
@@ -39,7 +45,8 @@ enum EducationLevel {
   BACHELOR
   MASTER
   DOCTORATE
-  OTHER
+
+  @@map("education_level")
 }
 
 enum MarriageTimeline {
@@ -47,23 +54,33 @@ enum MarriageTimeline {
   WITHIN_1_YEAR
   WITHIN_2_YEARS
   NOT_SURE
+
+  @@map("marriage_timeline")
 }
 
-enum Locale {
+enum AppLocale {
   ar
   en
+
+  @@map("app_locale")
 }
 
 enum PhotoStatus {
-  PENDING
+  UPLOADING
+  PROCESSING
+  PENDING_REVIEW
   APPROVED
   REJECTED
+
+  @@map("photo_status")
 }
 
 enum VerificationType {
-  PROFILE_REVIEW   // profile + photos moderation
-  LIVENESS_SELFIE  // "real person" check
-  IDENTITY         // government-ID check (later phase)
+  PROFILE_REVIEW
+  LIVENESS
+  IDENTITY
+
+  @@map("verification_type")
 }
 
 enum VerificationStatus {
@@ -71,33 +88,51 @@ enum VerificationStatus {
   APPROVED
   REJECTED
   CANCELLED
+
+  @@map("verification_status")
+}
+
+enum DiscoveryAction {
+  SHOWN
+  LIKED
+  PASSED
+
+  @@map("discovery_action")
 }
 
 enum MatchStatus {
   ACTIVE
   UNMATCHED
   BLOCKED
+
+  @@map("match_status")
 }
 
 enum MessageType {
   TEXT
   SYSTEM
+
+  @@map("message_type")
 }
 
 enum PlanCode {
   FREE
   PLUS
   PREMIUM
+
+  @@map("plan_code")
 }
 
 enum SubscriptionStatus {
   ACTIVE
   GRACE_PERIOD
   BILLING_RETRY
-  CANCELLED // auto-renew off, still valid until expiresAt
+  CANCELLED
   EXPIRED
   REFUNDED
   REVOKED
+
+  @@map("subscription_status")
 }
 
 enum PaymentProvider {
@@ -105,6 +140,8 @@ enum PaymentProvider {
   GOOGLE
   WEB
   ADMIN_GRANT
+
+  @@map("payment_provider")
 }
 
 enum PaymentStatus {
@@ -112,6 +149,17 @@ enum PaymentStatus {
   SUCCEEDED
   FAILED
   REFUNDED
+
+  @@map("payment_status")
+}
+
+enum TransactionType {
+  CHARGE
+  REFUND
+  CHARGEBACK
+  ADJUSTMENT
+
+  @@map("transaction_type")
 }
 
 enum NotificationType {
@@ -122,12 +170,16 @@ enum NotificationType {
   VERIFICATION_REJECTED
   SUBSCRIPTION
   SYSTEM
+
+  @@map("notification_type")
 }
 
 enum ReportTarget {
   USER
   PHOTO
   MESSAGE
+
+  @@map("report_target")
 }
 
 enum ReportReason {
@@ -138,6 +190,8 @@ enum ReportReason {
   UNDERAGE
   NOT_SERIOUS
   OTHER
+
+  @@map("report_reason")
 }
 
 enum ReportStatus {
@@ -145,6 +199,8 @@ enum ReportStatus {
   IN_REVIEW
   ACTION_TAKEN
   DISMISSED
+
+  @@map("report_status")
 }
 
 enum TicketCategory {
@@ -153,6 +209,8 @@ enum TicketCategory {
   VERIFICATION
   TECHNICAL
   OTHER
+
+  @@map("ticket_category")
 }
 
 enum TicketStatus {
@@ -160,529 +218,716 @@ enum TicketStatus {
   PENDING_USER
   RESOLVED
   CLOSED
+
+  @@map("ticket_status")
 }
 
-enum AdminRole {
-  SUPER_ADMIN
+enum ActorType {
   ADMIN
-  MODERATOR
-  SUPPORT
-  FINANCE
-  VIEWER
+  USER
+  SYSTEM
+
+  @@map("actor_type")
 }
 
-// ───────────────────────────── Identity ─────────────────────────────
+enum ModerationActionType {
+  APPROVE_PROFILE
+  REJECT_PROFILE
+  APPROVE_PHOTO
+  REJECT_PHOTO
+  WARN
+  RESTRICT
+  SUSPEND
+  REACTIVATE
+  DISMISS_REPORT
+
+  @@map("moderation_action_type")
+}
+
+// ───────────────────────── identity & profile ─────────────────────────
 
 model User {
-  id                String        @id @default(uuid()) @db.Uuid
-  phoneE164         String        @unique
-  phoneCountryCode  String        @db.VarChar(4)
-  phoneVerifiedAt   DateTime?
-  status            AccountStatus @default(PENDING_VERIFICATION)
-  locale            Locale        @default(ar)
-  timezone          String        @default("UTC")
-  countryCode       String?       @db.Char(2) // user-selected residence
-  ageConfirmedAt    DateTime?
-  termsVersion      String?
-  termsAcceptedAt   DateTime?
-  privacyVersion    String?
-  isPhotosReviewed  Boolean       @default(false)
-  isLivenessVerified Boolean      @default(false)
-  isIdentityVerified Boolean      @default(false)
-  restrictions      Json          @default("{}") // e.g. {"chat":true,"likes":true}
-  lastActiveAt      DateTime?
-  deletionRequestedAt DateTime?
-  deletedAt         DateTime?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  id                  String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phoneE164           String        @map("phone_e164") @db.VarChar(16)
+  phoneCountry        String        @map("phone_country") @db.Char(2)
+  phoneVerifiedAt     DateTime?     @map("phone_verified_at") @db.Timestamptz
+  status              AccountStatus @default(PENDING_VERIFICATION)
+  locale              AppLocale     @default(ar)
+  timezone            String        @default("UTC") @db.VarChar(64)
+  ageConfirmedAt      DateTime?     @map("age_confirmed_at") @db.Timestamptz
+  termsVersion        String?       @map("terms_version") @db.VarChar(20)
+  termsAcceptedAt     DateTime?     @map("terms_accepted_at") @db.Timestamptz
+  lastActiveAt        DateTime?     @map("last_active_at") @db.Timestamptz
+  deletionRequestedAt DateTime?     @map("deletion_requested_at") @db.Timestamptz
+  deletedAt           DateTime?     @map("deleted_at") @db.Timestamptz
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  profile           UserProfile?
-  preferences       UserPreference?
-  photos            UserPhoto[]
-  interests         UserInterest[]
-  devices           UserDevice[]
-  sessions          UserSession[]
+  profile              UserProfile?
+  preferences          UserPreference?
+  interests            UserInterest[]
+  photos               UserPhoto[]
+  verifications        UserVerification[]
   verificationRequests VerificationRequest[]
-  likesSent         Like[]        @relation("LikeFrom")
-  likesReceived     Like[]        @relation("LikeTo")
-  passesSent        Pass[]        @relation("PassFrom")
-  passesReceived    Pass[]        @relation("PassTo")
-  matchesA          Match[]       @relation("MatchUserA")
-  matchesB          Match[]       @relation("MatchUserB")
-  messages          Message[]
-  subscriptions     Subscription[]
-  payments          Payment[]
-  dailyUsage        DailyUsage[]
-  notifications     Notification[]
-  reportsFiled      Report[]      @relation("Reporter")
-  reportsAgainst    Report[]      @relation("Reported")
-  blocksMade        BlockedUser[] @relation("Blocker")
-  blocksReceived    BlockedUser[] @relation("Blocked")
-  tickets           SupportTicket[]
+  sessions             UserSession[]
+  likesSent            Like[]               @relation("LikeFrom")
+  likesReceived        Like[]               @relation("LikeTo")
+  passesSent           Pass[]               @relation("PassFrom")
+  passesReceived       Pass[]               @relation("PassTo")
+  matchesA             Match[]              @relation("MatchA")
+  matchesB             Match[]              @relation("MatchB")
+  matchesEnded         Match[]              @relation("MatchEndedBy")
+  scoresAsViewer       CompatibilityScore[] @relation("ScoreViewer")
+  scoresAsCandidate    CompatibilityScore[] @relation("ScoreCandidate")
+  historyAsViewer      DiscoveryHistory[]   @relation("HistoryViewer")
+  historyAsCandidate   DiscoveryHistory[]   @relation("HistoryCandidate")
+  conversationsStarted Conversation[]
+  memberships          ConversationMember[]
+  messages             Message[]
+  receipts             MessageReceipt[]
+  subscriptions        UserSubscription[]
+  usageCounters        UsageCounter[]
+  usageEvents          UsageEvent[]
+  payments             Payment[]
+  purchaseEvents       PurchaseEvent[]
+  moderationActions    ModerationAction[]
+  reportsFiled         Report[]             @relation("Reporter")
+  reportsAgainst       Report[]             @relation("Reported")
+  blocksMade           BlockedUser[]        @relation("Blocker")
+  blocksReceived       BlockedUser[]        @relation("Blocked")
+  tickets              SupportTicket[]
+  notifications        Notification[]
 
-  @@index([status, countryCode])
-  @@index([lastActiveAt])
+  @@map("users")
 }
-
-model OtpChallenge {
-  id          String    @id @default(uuid()) @db.Uuid
-  phoneE164   String
-  codeHash    String    // argon2/HMAC — never plaintext
-  attempts    Int       @default(0)
-  ipHash      String?
-  deviceId    String?
-  expiresAt   DateTime
-  consumedAt  DateTime?
-  createdAt   DateTime  @default(now())
-
-  @@index([phoneE164, createdAt])
-}
-
-model UserDevice {
-  id          String   @id @default(uuid()) @db.Uuid
-  userId      String   @db.Uuid
-  deviceId    String   // app-generated install id
-  platform    String   // ios | android
-  fcmToken    String?
-  appVersion  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, deviceId])
-  @@index([fcmToken])
-}
-
-model UserSession {
-  id               String    @id @default(uuid()) @db.Uuid
-  userId           String    @db.Uuid
-  deviceId         String?
-  refreshTokenHash String    @unique
-  expiresAt        DateTime
-  revokedAt        DateTime?
-  createdAt        DateTime  @default(now())
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
-
-// ───────────────────────────── Profile ─────────────────────────────
 
 model UserProfile {
-  userId           String           @id @db.Uuid
-  displayName      String           @db.VarChar(40)
-  birthDate        DateTime         @db.Date
-  gender           Gender
-  countryCode      String           @db.Char(2)
-  city             String           @db.VarChar(80)
-  showLocation     Boolean          @default(true)
-  maritalStatus    MaritalStatus
-  hasChildren      Boolean?
-  wantsChildren    Boolean?
-  education        EducationLevel?
-  occupation       String?          @db.VarChar(80)
-  heightCm         Int?
-  religion         String?          @db.VarChar(40)
-  religiosity      Int?             // 1..5 self-reported
-  smoking          Boolean?
-  marriageTimeline MarriageTimeline @default(NOT_SURE)
-  willingToRelocate Boolean?
-  bio              String?          @db.VarChar(500)
-  lifestyle        Json             @default("{}")
-  completeness     Int              @default(0) // 0..100
-  updatedAt        DateTime         @updatedAt
-  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId            String           @id @map("user_id") @db.Uuid
+  displayName       String           @map("display_name") @db.VarChar(40)
+  birthDate         DateTime         @map("birth_date") @db.Date
+  gender            Gender
+  countryCode       String           @map("country_code") @db.Char(2)
+  city              String           @db.VarChar(80)
+  showLocation      Boolean          @default(true) @map("show_location")
+  maritalStatus     MaritalStatus    @map("marital_status")
+  hasChildren       Boolean?         @map("has_children")
+  wantsChildren     Boolean?         @map("wants_children")
+  education         EducationLevel
+  occupation        String           @db.VarChar(80)
+  marriageTimeline  MarriageTimeline @map("marriage_timeline")
+  smoking           Boolean?
+  willingToRelocate Boolean?         @map("willing_to_relocate")
+  bio               String           @db.VarChar(500)
+  lifestyle         Json             @default("{}")
+  completeness      Int              @default(0) @db.SmallInt
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([gender, countryCode, birthDate])
-  @@index([countryCode, city])
-}
-
-model UserPreference {
-  userId            String            @id @db.Uuid
-  ageMin            Int               @default(18)
-  ageMax            Int               @default(60)
-  countryCodes      String[]          // empty = any
-  cities            String[]
-  maritalStatuses   MaritalStatus[]   // empty = any
-  educationLevels   EducationLevel[]  // premium filter
-  occupations       String[]          // premium filter
-  wantsChildren     Boolean?
-  smokingOk         Boolean?
-  updatedAt         DateTime          @updatedAt
-  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([gender, countryCode, birthDate], map: "user_profiles_discovery_idx")
+  @@map("user_profiles")
 }
 
 model Interest {
   id        Int            @id @default(autoincrement())
-  key       String         @unique // stable key, e.g. "reading"
-  nameAr    String
-  nameEn    String
-  category  String
-  isBasic   Boolean        @default(true) // available in free filters
-  isActive  Boolean        @default(true)
+  key       String         @unique @db.VarChar(40)
+  nameAr    String         @map("name_ar") @db.VarChar(60)
+  nameEn    String         @map("name_en") @db.VarChar(60)
+  category  String         @db.VarChar(40)
+  isBasic   Boolean        @default(false) @map("is_basic")
+  isActive  Boolean        @default(true) @map("is_active")
   users     UserInterest[]
+
+  @@map("interests")
 }
 
 model UserInterest {
-  userId     String   @db.Uuid
-  interestId Int
+  userId     String   @map("user_id") @db.Uuid
+  interestId Int      @map("interest_id")
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   interest   Interest @relation(fields: [interestId], references: [id])
 
   @@id([userId, interestId])
-  @@index([interestId])
+  @@index([interestId], map: "user_interests_interest_idx")
+  @@map("user_interests")
+}
+
+model UserPreference {
+  userId          String           @id @map("user_id") @db.Uuid
+  ageMin          Int              @default(18) @map("age_min") @db.SmallInt
+  ageMax          Int              @default(60) @map("age_max") @db.SmallInt
+  sameCountryOnly Boolean          @default(false) @map("same_country_only")
+  countryCodes    String[]         @default([]) @map("country_codes") @db.Char(2)
+  cities          String[]         @default([])
+  maritalStatuses MaritalStatus[]  @default([]) @map("marital_statuses")
+  educationLevels EducationLevel[] @default([]) @map("education_levels")
+  occupations     String[]         @default([])
+  wantsChildren   Boolean?         @map("wants_children")
+  updatedAt       DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
 }
 
 model UserPhoto {
-  id             String      @id @default(uuid()) @db.Uuid
-  userId         String      @db.Uuid
-  storageKey     String      // original (private bucket)
-  variants       Json        @default("{}") // {"thumb":"...","card":"...","full":"..."}
-  position       Int         // 0 = primary
-  status         PhotoStatus @default(PENDING)
-  rightsConfirmed Boolean    @default(false)
-  phash          String?     // perceptual hash for duplicate detection
-  moderation     Json?       // automated scan result
-  rejectReason   String?
-  createdAt      DateTime    @default(now())
-  reviewedAt     DateTime?
-  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String      @map("user_id") @db.Uuid
+  storageKey      String      @unique @map("storage_key")
+  mimeType        String?     @map("mime_type") @db.VarChar(32)
+  bytes           Int?
+  width           Int?
+  height          Int?
+  sha256          String?     @db.Char(64)
+  phash           String?     @db.VarChar(32)
+  variants        Json        @default("{}")
+  position        Int         @db.SmallInt
+  status          PhotoStatus @default(UPLOADING)
+  rightsConfirmed Boolean     @map("rights_confirmed")
+  moderation      Json?
+  rejectReason    String?     @map("reject_reason") @db.VarChar(200)
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  reviewedAt      DateTime?   @map("reviewed_at") @db.Timestamptz
+  deletedAt       DateTime?   @map("deleted_at") @db.Timestamptz
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, position])
-  @@index([phash])
+  @@map("user_photos")
 }
 
-// ───────────────────────────── Verification ─────────────────────────────
+model UserVerification {
+  userId     String           @map("user_id") @db.Uuid
+  type       VerificationType
+  verifiedAt DateTime         @default(now()) @map("verified_at") @db.Timestamptz
+  provider   String           @default("olfa-review") @db.VarChar(40)
+  reference  String?          @db.VarChar(120)
+  revokedAt  DateTime?        @map("revoked_at") @db.Timestamptz
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, type])
+  @@map("user_verifications")
+}
 
 model VerificationRequest {
-  id            String             @id @default(uuid()) @db.Uuid
-  userId        String             @db.Uuid
-  type          VerificationType
-  status        VerificationStatus @default(PENDING)
-  selfieKey     String?
-  autoResult    Json?              // automated checks summary
-  rejectReason  String?
-  rejectCode    String?            // i18n key for user-facing fix steps
-  reviewedById  String?            @db.Uuid
-  submittedAt   DateTime           @default(now())
-  reviewedAt    DateTime?
-  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reviewedBy    AdminUser?         @relation(fields: [reviewedById], references: [id])
+  id           String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String             @map("user_id") @db.Uuid
+  type         VerificationType
+  status       VerificationStatus @default(PENDING)
+  selfieKey    String?            @map("selfie_key")
+  autoResult   Json?              @map("auto_result")
+  rejectCode   String?            @map("reject_code") @db.VarChar(40)
+  rejectReason String?            @map("reject_reason") @db.VarChar(300)
+  reviewedBy   String?            @map("reviewed_by") @db.Uuid
+  submittedAt  DateTime           @default(now()) @map("submitted_at") @db.Timestamptz
+  reviewedAt   DateTime?          @map("reviewed_at") @db.Timestamptz
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewer     AdminUser?         @relation(fields: [reviewedBy], references: [id])
 
-  @@index([status, type, submittedAt])
-  @@index([userId])
+  @@index([status, type, submittedAt], map: "verification_requests_queue_idx")
+  @@map("verification_requests")
 }
 
-// ───────────────────────────── Swipes & Matches ─────────────────────────────
+// ───────────────────────── discovery & matching ─────────────────────────
 
 model Like {
-  id         String   @id @default(uuid()) @db.Uuid
-  fromUserId String   @db.Uuid
-  toUserId   String   @db.Uuid
-  isSuper    Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  undoneAt   DateTime?
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fromUserId String   @map("from_user_id") @db.Uuid
+  toUserId   String   @map("to_user_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
   from       User     @relation("LikeFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
   to         User     @relation("LikeTo", fields: [toUserId], references: [id], onDelete: Cascade)
 
-  @@unique([fromUserId, toUserId]) // prevents duplicate likes
-  @@index([toUserId, createdAt])
+  @@unique([fromUserId, toUserId])
+  @@index([toUserId, createdAt(sort: Desc)], map: "likes_to_idx")
+  @@map("likes")
 }
 
 model Pass {
-  id         String   @id @default(uuid()) @db.Uuid
-  fromUserId String   @db.Uuid
-  toUserId   String   @db.Uuid
-  createdAt  DateTime @default(now())
-  expiresAt  DateTime? // optional resurfacing after N days (AppSettings)
-  from       User     @relation("PassFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
-  to         User     @relation("PassTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fromUserId String    @map("from_user_id") @db.Uuid
+  toUserId   String    @map("to_user_id") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt  DateTime? @map("expires_at") @db.Timestamptz
+  from       User      @relation("PassFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  to         User      @relation("PassTo", fields: [toUserId], references: [id], onDelete: Cascade)
 
   @@unique([fromUserId, toUserId])
+  @@map("passes")
 }
 
 model Match {
-  id           String        @id @default(uuid()) @db.Uuid
-  userAId      String        @db.Uuid // always the smaller UUID
-  userBId      String        @db.Uuid
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userAId      String        @map("user_a_id") @db.Uuid
+  userBId      String        @map("user_b_id") @db.Uuid
   status       MatchStatus   @default(ACTIVE)
-  score        Int?          // compatibility at match time
-  createdAt    DateTime      @default(now())
-  endedAt      DateTime?
-  userA        User          @relation("MatchUserA", fields: [userAId], references: [id], onDelete: Cascade)
-  userB        User          @relation("MatchUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  score        Int?          @db.SmallInt
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  endedAt      DateTime?     @map("ended_at") @db.Timestamptz
+  endedBy      String?       @map("ended_by") @db.Uuid
+  userA        User          @relation("MatchA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB        User          @relation("MatchB", fields: [userBId], references: [id], onDelete: Cascade)
+  endedByUser  User?         @relation("MatchEndedBy", fields: [endedBy], references: [id])
   conversation Conversation?
 
   @@unique([userAId, userBId])
-  @@index([userBId])
+  @@index([userBId], map: "matches_b_idx")
+  @@map("matches")
 }
 
-// ───────────────────────────── Chat ─────────────────────────────
+model CompatibilityScore {
+  viewerId       String   @map("viewer_id") @db.Uuid
+  candidateId    String   @map("candidate_id") @db.Uuid
+  score          Int      @db.SmallInt
+  breakdown      Json
+  weightsVersion Int      @map("weights_version")
+  computedAt     DateTime @default(now()) @map("computed_at") @db.Timestamptz
+  viewer         User     @relation("ScoreViewer", fields: [viewerId], references: [id], onDelete: Cascade)
+  candidate      User     @relation("ScoreCandidate", fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@id([viewerId, candidateId])
+  @@map("compatibility_scores")
+}
+
+model DiscoveryHistory {
+  id          BigInt          @id @default(autoincrement())
+  viewerId    String          @map("viewer_id") @db.Uuid
+  candidateId String          @map("candidate_id") @db.Uuid
+  action      DiscoveryAction
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  viewer      User            @relation("HistoryViewer", fields: [viewerId], references: [id], onDelete: Cascade)
+  candidate   User            @relation("HistoryCandidate", fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([viewerId, candidateId, createdAt(sort: Desc)], map: "discovery_history_viewer_idx")
+  @@map("discovery_history")
+}
+
+// ───────────────────────── messaging ─────────────────────────
 
 model Conversation {
-  id             String    @id @default(uuid()) @db.Uuid
-  matchId        String    @unique @db.Uuid
-  startedById    String?   @db.Uuid // who spent the "start conversation" credit
-  startedAt      DateTime?
-  lastMessageAt  DateTime?
-  lastReadA      DateTime?
-  lastReadB      DateTime?
-  createdAt      DateTime  @default(now())
-  match          Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  messages       Message[]
+  id            String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  matchId       String               @unique @map("match_id") @db.Uuid
+  startedBy     String               @map("started_by") @db.Uuid
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  lastMessageAt DateTime?            @map("last_message_at") @db.Timestamptz
+  match         Match                @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  starter       User                 @relation(fields: [startedBy], references: [id])
+  members       ConversationMember[]
+  messages      Message[]
 
-  @@index([lastMessageAt])
+  @@index([lastMessageAt(sort: Desc)], map: "conversations_last_idx")
+  @@map("conversations")
+}
+
+model ConversationMember {
+  conversationId String       @map("conversation_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  joinedAt       DateTime     @default(now()) @map("joined_at") @db.Timestamptz
+  lastReadAt     DateTime?    @map("last_read_at") @db.Timestamptz
+  muted          Boolean      @default(false)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId], map: "conversation_members_user_idx")
+  @@map("conversation_members")
 }
 
 model Message {
-  id              String      @id @default(uuid()) @db.Uuid
-  conversationId  String      @db.Uuid
-  senderId        String      @db.Uuid
-  clientMessageId String      @db.Uuid // idempotency
-  type            MessageType @default(TEXT)
-  body            String      @db.VarChar(2000)
-  deliveredAt     DateTime?
-  readAt          DateTime?
-  flagged         Boolean     @default(false)
-  createdAt       DateTime    @default(now())
-  deletedAt       DateTime?
-  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender          User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId  String           @map("conversation_id") @db.Uuid
+  senderId        String           @map("sender_id") @db.Uuid
+  clientMessageId String           @map("client_message_id") @db.Uuid
+  type            MessageType      @default(TEXT)
+  body            String           @db.VarChar(2000)
+  flagged         Boolean          @default(false)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  deletedAt       DateTime?        @map("deleted_at") @db.Timestamptz
+  conversation    Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender          User             @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  receipts        MessageReceipt[]
 
   @@unique([conversationId, senderId, clientMessageId])
-  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([conversationId, createdAt(sort: Desc)], map: "messages_conv_idx")
+  @@map("messages")
 }
 
-// ───────────────────────────── Plans, Subscriptions & Payments ─────────────────────────────
+model MessageReceipt {
+  messageId   String    @map("message_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  deliveredAt DateTime? @map("delivered_at") @db.Timestamptz
+  readAt      DateTime? @map("read_at") @db.Timestamptz
+  message     Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-model Plan {
-  id            String    @id @default(uuid()) @db.Uuid
-  code          PlanCode  @unique
-  nameAr        String
-  nameEn        String
-  dailyLikes    Int
-  dailyMessages Int       // credits to START new conversations
-  dailyUndos    Int       @default(0)
-  features      Json      @default("{}") // {"advancedFilters":true,"seeWhoLikedYou":true,...}
-  isActive      Boolean   @default(true)
-  sortOrder     Int       @default(0)
-  updatedAt     DateTime  @updatedAt
+  @@id([messageId, userId])
+  @@map("message_receipts")
+}
+
+// ───────────────────────── commercial ─────────────────────────
+
+model SubscriptionPlan {
+  id            String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code          PlanCode             @unique
+  nameAr        String               @map("name_ar") @db.VarChar(40)
+  nameEn        String               @map("name_en") @db.VarChar(40)
+  isActive      Boolean              @default(true) @map("is_active")
+  sortOrder     Int                  @default(0) @map("sort_order") @db.SmallInt
+  updatedAt     DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  entitlements  FeatureEntitlement[]
   products      PlanProduct[]
-  subscriptions Subscription[]
+  subscriptions UserSubscription[]
+
+  @@map("subscription_plans")
+}
+
+model FeatureEntitlement {
+  planId     String           @map("plan_id") @db.Uuid
+  featureKey String           @map("feature_key") @db.VarChar(60)
+  value      Json
+  updatedAt  DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  plan       SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@id([planId, featureKey])
+  @@map("feature_entitlements")
 }
 
 model PlanProduct {
-  id            String          @id @default(uuid()) @db.Uuid
-  planId        String          @db.Uuid
-  provider      PaymentProvider
-  productId     String          // App Store / Play product id or web price id
-  durationDays  Int
-  webPriceMinor Int?            // web only; stores handle their own regional pricing
-  webCurrency   String?         @db.Char(3)
-  isActive      Boolean         @default(true)
-  plan          Plan            @relation(fields: [planId], references: [id])
+  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  planId       String           @map("plan_id") @db.Uuid
+  provider     PaymentProvider
+  productId    String           @map("product_id") @db.VarChar(120)
+  durationDays Int              @map("duration_days") @db.SmallInt
+  isActive     Boolean          @default(true) @map("is_active")
+  plan         SubscriptionPlan @relation(fields: [planId], references: [id])
 
   @@unique([provider, productId])
+  @@map("plan_products")
 }
 
-model Promotion {
-  id          String    @id @default(uuid()) @db.Uuid
-  code        String    @unique
-  description String?
-  planCode    PlanCode?
-  percentOff  Int?
-  bonusDays   Int?
-  startsAt    DateTime
-  endsAt      DateTime
-  maxUses     Int?
-  usedCount   Int       @default(0)
-  isActive    Boolean   @default(true)
-}
-
-model Subscription {
-  id                    String             @id @default(uuid()) @db.Uuid
-  userId                String             @db.Uuid
-  planId                String             @db.Uuid
+model UserSubscription {
+  id                    String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                String             @map("user_id") @db.Uuid
+  planId                String             @map("plan_id") @db.Uuid
   provider              PaymentProvider
   status                SubscriptionStatus
-  originalTransactionId String?            // Apple original tx / Google purchaseToken
-  productId             String?
-  startsAt              DateTime
-  expiresAt             DateTime
-  autoRenew             Boolean            @default(true)
-  cancelledAt           DateTime?
-  createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
+  originalTransactionId String?            @map("original_transaction_id") @db.VarChar(200)
+  productId             String?            @map("product_id") @db.VarChar(120)
+  startsAt              DateTime           @map("starts_at") @db.Timestamptz
+  expiresAt             DateTime           @map("expires_at") @db.Timestamptz
+  autoRenew             Boolean            @default(true) @map("auto_renew")
+  cancelledAt           DateTime?          @map("cancelled_at") @db.Timestamptz
+  createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan                  Plan               @relation(fields: [planId], references: [id])
+  plan                  SubscriptionPlan   @relation(fields: [planId], references: [id])
   payments              Payment[]
 
   @@unique([provider, originalTransactionId])
-  @@index([userId, status, expiresAt])
+  @@index([userId, status, expiresAt(sort: Desc)], map: "user_subscriptions_active_idx")
+  @@map("user_subscriptions")
+}
+
+model UsageCounter {
+  userId      String   @map("user_id") @db.Uuid
+  counterKey  String   @map("counter_key") @db.VarChar(40)
+  periodStart DateTime @map("period_start") @db.Timestamptz
+  periodEnd   DateTime @map("period_end") @db.Timestamptz
+  used        Int      @default(0)
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, counterKey, periodStart])
+  @@map("usage_counters")
+}
+
+model UsageEvent {
+  id          BigInt   @id @default(autoincrement())
+  userId      String   @map("user_id") @db.Uuid
+  counterKey  String   @map("counter_key") @db.VarChar(40)
+  delta       Int
+  periodStart DateTime @map("period_start") @db.Timestamptz
+  refType     String?  @map("ref_type") @db.VarChar(40)
+  refId       String?  @map("ref_id") @db.VarChar(80)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)], map: "usage_events_user_idx")
+  @@map("usage_events")
 }
 
 model Payment {
-  id             String          @id @default(uuid()) @db.Uuid
-  userId         String          @db.Uuid
-  subscriptionId String?         @db.Uuid
-  provider       PaymentProvider
-  providerTxId   String
-  amountMinor    Int?
-  currency       String?         @db.Char(3)
-  status         PaymentStatus
-  rawEventRef    String?         // pointer to stored webhook/receipt (not the secret)
-  createdAt      DateTime        @default(now())
-  refundedAt     DateTime?
-  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  subscription   Subscription?   @relation(fields: [subscriptionId], references: [id])
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String            @map("user_id") @db.Uuid
+  subscriptionId    String?           @map("subscription_id") @db.Uuid
+  provider          PaymentProvider
+  providerPaymentId String            @map("provider_payment_id") @db.VarChar(200)
+  amountMinor       Int?              @map("amount_minor")
+  currency          String?           @db.Char(3)
+  status            PaymentStatus
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  refundedAt        DateTime?         @map("refunded_at") @db.Timestamptz
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription      UserSubscription? @relation(fields: [subscriptionId], references: [id])
+  transactions      Transaction[]
 
-  @@unique([provider, providerTxId])
-  @@index([userId, createdAt])
+  @@unique([provider, providerPaymentId])
+  @@index([userId, createdAt(sort: Desc)], map: "payments_user_idx")
+  @@map("payments")
 }
 
-model DailyUsage {
-  userId          String   @db.Uuid
-  day             DateTime @db.Date // in the user's timezone
-  likes           Int      @default(0)
-  messagesStarted Int      @default(0)
-  undos           Int      @default(0)
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+model Transaction {
+  id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  paymentId   String          @map("payment_id") @db.Uuid
+  type        TransactionType
+  amountMinor Int             @map("amount_minor")
+  currency    String          @db.Char(3)
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  payment     Payment         @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 
-  @@id([userId, day])
+  @@map("transactions")
 }
 
-// ───────────────────────────── Notifications ─────────────────────────────
+model PurchaseEvent {
+  id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  provider    PaymentProvider
+  eventId     String          @map("event_id") @db.VarChar(200)
+  eventType   String          @map("event_type") @db.VarChar(80)
+  userId      String?         @map("user_id") @db.Uuid
+  payload     Json
+  receivedAt  DateTime        @default(now()) @map("received_at") @db.Timestamptz
+  processedAt DateTime?       @map("processed_at") @db.Timestamptz
+  error       String?
+  user        User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-model Notification {
-  id        String           @id @default(uuid()) @db.Uuid
-  userId    String           @db.Uuid
-  type      NotificationType
-  titleKey  String           // i18n key — rendered in user's locale
-  bodyKey   String
-  params    Json             @default("{}")
-  data      Json             @default("{}")
-  readAt    DateTime?
-  createdAt DateTime         @default(now())
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt(sort: Desc)])
+  @@unique([provider, eventId])
+  @@map("purchase_events")
 }
 
-// ───────────────────────────── Safety ─────────────────────────────
-
-model Report {
-  id             String       @id @default(uuid()) @db.Uuid
-  reporterId     String       @db.Uuid
-  reportedUserId String       @db.Uuid
-  targetType     ReportTarget
-  targetId       String?      @db.Uuid // photo or message id
-  reason         ReportReason
-  details        String?      @db.VarChar(1000)
-  status         ReportStatus @default(OPEN)
-  priority       Int          @default(0) // UNDERAGE/HARASSMENT get higher priority
-  resolution     String?
-  handledById    String?      @db.Uuid
-  createdAt      DateTime     @default(now())
-  resolvedAt     DateTime?
-  reporter       User         @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
-  reportedUser   User         @relation("Reported", fields: [reportedUserId], references: [id], onDelete: Cascade)
-  handledBy      AdminUser?   @relation(fields: [handledById], references: [id])
-
-  @@index([status, priority, createdAt])
-  @@index([reportedUserId])
-}
-
-model BlockedUser {
-  blockerId String   @db.Uuid
-  blockedId String   @db.Uuid
-  createdAt DateTime @default(now())
-  blocker   User     @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
-  blocked   User     @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
-
-  @@id([blockerId, blockedId])
-  @@index([blockedId])
-}
-
-// ───────────────────────────── Support ─────────────────────────────
-
-model SupportTicket {
-  id           String          @id @default(uuid()) @db.Uuid
-  userId       String          @db.Uuid
-  category     TicketCategory
-  subject      String          @db.VarChar(150)
-  status       TicketStatus    @default(OPEN)
-  assignedToId String?         @db.Uuid
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assignedTo   AdminUser?      @relation(fields: [assignedToId], references: [id])
-  messages     TicketMessage[]
-
-  @@index([status, category])
-}
-
-model TicketMessage {
-  id        String        @id @default(uuid()) @db.Uuid
-  ticketId  String        @db.Uuid
-  authorType String       // USER | ADMIN
-  authorId  String        @db.Uuid
-  body      String        @db.VarChar(4000)
-  createdAt DateTime      @default(now())
-  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-}
-
-model FaqItem {
-  id         String   @id @default(uuid()) @db.Uuid
-  category   String
-  questionAr String
-  questionEn String
-  answerAr   String
-  answerEn   String
-  sortOrder  Int      @default(0)
-  isActive   Boolean  @default(true)
-  updatedAt  DateTime @updatedAt
-}
-
-// ───────────────────────────── Admin ─────────────────────────────
+// ───────────────────────── administration ─────────────────────────
 
 model AdminUser {
-  id            String    @id @default(uuid()) @db.Uuid
-  email         String    @unique
-  name          String
-  passwordHash  String    // argon2id
-  totpSecretEnc String?   // encrypted at rest
-  role          AdminRole
-  isActive      Boolean   @default(true)
-  lastLoginAt   DateTime?
-  createdAt     DateTime  @default(now())
+  id                   String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                String                @unique @db.VarChar(160)
+  name                 String                @db.VarChar(80)
+  passwordHash         String                @map("password_hash")
+  totpSecretEnc        String?               @map("totp_secret_enc")
+  isActive             Boolean               @default(true) @map("is_active")
+  lastLoginAt          DateTime?             @map("last_login_at") @db.Timestamptz
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  roles                AdminUserRole[]
+  reviewedVerifications VerificationRequest[]
+  moderationActions    ModerationAction[]
+  reportsHandled       Report[]
+  ticketsAssigned      SupportTicket[]
+  settingsUpdated      SystemSetting[]
 
-  verificationsReviewed VerificationRequest[]
-  reportsHandled        Report[]
-  ticketsAssigned       SupportTicket[]
-  auditLogs             AuditLog[]
+  @@map("admin_users")
+}
+
+model Role {
+  id          Int              @id @default(autoincrement())
+  key         String           @unique @db.VarChar(40)
+  name        String           @db.VarChar(80)
+  permissions RolePermission[]
+  admins      AdminUserRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          Int              @id @default(autoincrement())
+  key         String           @unique @db.VarChar(60)
+  description String?          @db.VarChar(200)
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       Int        @map("role_id")
+  permissionId Int        @map("permission_id")
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model AdminUserRole {
+  adminId String    @map("admin_id") @db.Uuid
+  roleId  Int       @map("role_id")
+  admin   AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  role    Role      @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([adminId, roleId])
+  @@map("admin_user_roles")
 }
 
 model AuditLog {
   id         BigInt    @id @default(autoincrement())
-  adminId    String?   @db.Uuid // null = system/automation
-  action     String    // e.g. "user.suspend", "plan.update"
-  entityType String
-  entityId   String
+  actorType  ActorType @map("actor_type")
+  actorId    String?   @map("actor_id") @db.Uuid
+  action     String    @db.VarChar(80)
+  entityType String    @map("entity_type") @db.VarChar(40)
+  entityId   String    @map("entity_id") @db.VarChar(80)
   before     Json?
   after      Json?
-  reason     String?
-  ipHash     String?
-  createdAt  DateTime  @default(now())
-  admin      AdminUser? @relation(fields: [adminId], references: [id])
+  reason     String?   @db.VarChar(300)
+  ipHash     String?   @map("ip_hash") @db.Char(64)
+  requestId  String?   @map("request_id") @db.VarChar(64)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
-  @@index([entityType, entityId])
-  @@index([adminId, createdAt])
+  @@index([entityType, entityId, createdAt(sort: Desc)], map: "audit_logs_entity_idx")
+  @@index([actorId, createdAt(sort: Desc)], map: "audit_logs_actor_idx")
+  @@map("audit_logs")
 }
 
-model AppSetting {
-  key         String   @id // e.g. "quota.chat.continuationDailyLimit"
+model ModerationAction {
+  id           String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  adminId      String               @map("admin_id") @db.Uuid
+  targetUserId String               @map("target_user_id") @db.Uuid
+  action       ModerationActionType
+  targetType   String?              @map("target_type") @db.VarChar(40)
+  targetId     String?              @map("target_id") @db.VarChar(80)
+  reportId     String?              @map("report_id") @db.Uuid
+  reason       String?              @db.VarChar(300)
+  createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  admin        AdminUser            @relation(fields: [adminId], references: [id])
+  targetUser   User                 @relation(fields: [targetUserId], references: [id], onDelete: Cascade)
+  report       Report?              @relation(fields: [reportId], references: [id], onDelete: SetNull, map: "moderation_actions_report_fk")
+
+  @@index([targetUserId, createdAt(sort: Desc)], map: "moderation_actions_user_idx")
+  @@map("moderation_actions")
+}
+
+// ───────────────────────── support & safety ─────────────────────────
+
+model Report {
+  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reporterId     String             @map("reporter_id") @db.Uuid
+  reportedUserId String             @map("reported_user_id") @db.Uuid
+  targetType     ReportTarget       @default(USER) @map("target_type")
+  targetId       String?            @map("target_id") @db.Uuid
+  reason         ReportReason
+  details        String?            @db.VarChar(1000)
+  status         ReportStatus       @default(OPEN)
+  priority       Int                @default(0) @db.SmallInt
+  handledBy      String?            @map("handled_by") @db.Uuid
+  resolution     String?            @db.VarChar(300)
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  resolvedAt     DateTime?          @map("resolved_at") @db.Timestamptz
+  reporter       User               @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUser   User               @relation("Reported", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  handler        AdminUser?         @relation(fields: [handledBy], references: [id])
+  actions        ModerationAction[]
+
+  @@index([status, priority(sort: Desc), createdAt], map: "reports_queue_idx")
+  @@index([reportedUserId], map: "reports_user_idx")
+  @@map("reports")
+}
+
+model BlockedUser {
+  blockerId String   @map("blocker_id") @db.Uuid
+  blockedId String   @map("blocked_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  blocker   User     @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId], map: "blocked_users_blocked_idx")
+  @@map("blocked_users")
+}
+
+model SupportTicket {
+  id         String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String          @map("user_id") @db.Uuid
+  category   TicketCategory
+  subject    String          @db.VarChar(150)
+  status     TicketStatus    @default(OPEN)
+  assignedTo String?         @map("assigned_to") @db.Uuid
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignee   AdminUser?      @relation(fields: [assignedTo], references: [id])
+  messages   TicketMessage[]
+
+  @@index([status, category, createdAt], map: "support_tickets_queue_idx")
+  @@map("support_tickets")
+}
+
+model TicketMessage {
+  id         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId   String        @map("ticket_id") @db.Uuid
+  authorType ActorType     @map("author_type")
+  authorId   String        @map("author_id") @db.Uuid
+  body       String        @db.VarChar(4000)
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_messages")
+}
+
+model Notification {
+  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  titleKey  String           @map("title_key") @db.VarChar(80)
+  bodyKey   String           @map("body_key") @db.VarChar(80)
+  params    Json             @default("{}")
+  data      Json             @default("{}")
+  readAt    DateTime?        @map("read_at") @db.Timestamptz
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)], map: "notifications_user_idx")
+  @@map("notifications")
+}
+
+model SystemSetting {
+  key         String     @id @db.VarChar(80)
   value       Json
-  description String?
-  updatedById String?  @db.Uuid
-  updatedAt   DateTime @updatedAt
+  description String?    @db.VarChar(300)
+  updatedBy   String?    @map("updated_by") @db.Uuid
+  updatedAt   DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  updater     AdminUser? @relation(fields: [updatedBy], references: [id])
+
+  @@map("system_settings")
+}
+
+// ───────────────────────── auth support ─────────────────────────
+
+model OtpChallenge {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phoneE164   String    @map("phone_e164") @db.VarChar(16)
+  codeHash    String    @map("code_hash") @db.Char(64)
+  attempts    Int       @default(0) @db.SmallInt
+  maxAttempts Int       @default(5) @map("max_attempts") @db.SmallInt
+  ipHash      String?   @map("ip_hash") @db.Char(64)
+  deviceId    String?   @map("device_id") @db.VarChar(80)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz
+  consumedAt  DateTime? @map("consumed_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([phoneE164, createdAt(sort: Desc)], map: "otp_challenges_phone_idx")
+  @@map("otp_challenges")
+}
+
+model UserSession {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  familyId         String    @map("family_id") @db.Uuid
+  refreshTokenHash String    @unique @map("refresh_token_hash") @db.Char(64)
+  deviceId         String    @map("device_id") @db.VarChar(80)
+  platform         String    @db.VarChar(10)
+  appVersion       String?   @map("app_version") @db.VarChar(20)
+  fcmToken         String?   @map("fcm_token")
+  ipHash           String?   @map("ip_hash") @db.Char(64)
+  userAgent        String?   @map("user_agent") @db.VarChar(200)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  lastUsedAt       DateTime  @default(now()) @map("last_used_at") @db.Timestamptz
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz
+  revokedReason    String?   @map("revoked_reason") @db.VarChar(40)
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([familyId], map: "user_sessions_family_idx")
+  @@map("user_sessions")
 }
