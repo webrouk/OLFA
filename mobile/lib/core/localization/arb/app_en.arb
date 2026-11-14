@@ -918,5 +918,140 @@
   "visibilityIncognito": "Incognito",
   "visibilityIncognitoBody": "only people you've liked can see you",
   "visibilityVisible": "Visible",
-  "visibilityVisibleBody": "compatible members can find you"
+  "visibilityVisibleBody": "compatible members can find you",
+  "addCaption": "Add a caption…",
+  "addPhotos": "Add photos",
+  "maxPhotosPerMessage": "Up to {n} photos per message",
+  "@maxPhotosPerMessage": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "photoAccessNeeded": "Allow photo access in Settings to send photos.",
+  "micAccessNeeded": "Allow microphone access in Settings to record voice messages.",
+  "recordVoice": "Record a voice message",
+  "recording": "Recording",
+  "secondsLeft": "{s, plural, =1{1 s left} other{{s} s left}}",
+  "@secondsLeft": {
+    "placeholders": {
+      "s": {
+        "type": "int"
+      }
+    }
+  },
+  "voiceLeft": "{n, plural, =1{1 voice message left in this chat} other{{n} voice messages left in this chat}}",
+  "@voiceLeft": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "voiceLimitTitle": "Voice message limit reached",
+  "voiceLimitBody": "Your plan includes {n} voice messages per conversation. Plus gives 30 and Premium is unlimited.",
+  "@voiceLimitBody": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "voiceMessage": "Voice message, {d}",
+  "@voiceMessage": {
+    "placeholders": {
+      "d": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceMessageShort": "Voice message",
+  "photoMessageShort": "Photo",
+  "play": "Play",
+  "pause": "Pause",
+  "phoneShareTitle": "Sharing a phone number?",
+  "phoneShareBody": "For your safety, share contact details only after you have got to know this person well. Never send money or personal documents.",
+  "sendAnyway": "Send anyway",
+  "phoneSentNote": "You shared a phone number. Make sure you know this person well before continuing outside OLFA.",
+  "phoneReceivedNote": "This message contains a phone number. Get to know this person well before contacting them outside OLFA, and report anything suspicious.",
+  "copy": "Copy",
+  "copied": "Copied",
+  "reportMessage": "Report this message",
+  "reportMessageTitle": "Report message",
+  "reportMessageNote": "Our team will see this message. The other person won't know who reported it.",
+  "reasonInappropriateMessage": "Offensive or inappropriate message",
+  "searchNamesMessages": "Search names or messages",
+  "searchPeople": "Conversations",
+  "searchMessages": "Messages",
+  "noResultsFor": "No results for “{q}”",
+  "@noResultsFor": {
+    "placeholders": {
+      "q": {
+        "type": "String"
+      }
+    }
+  },
+  "clear": "Clear",
+  "you": "You",
+  "height": "Height",
+  "weight": "Weight",
+  "cm": "cm",
+  "kg": "kg",
+  "preferNotToSay": "Prefer not to say",
+  "yourCompliment": "Your compliment",
+  "inAppSounds": "In-app sounds",
+  "inAppSoundsSub": "Message tone and notification chime",
+  "previewSound": "Play sample",
+  "notificationSettings": "Notification settings",
+  "notifPeople": "Likes & matches",
+  "notifMessages": "Messages",
+  "notifAccount": "Account",
+  "unread": "Unread",
+  "yesterday": "Yesterday",
+  "thisWeek": "This week",
+  "noNotificationsHere": "Nothing here",
+  "swipeToRemove": "Swipe a notification to remove it",
+  "agreeByContinuing": "By continuing you agree to the",
+  "and": "and",
+  "back": "Back",
+  "onboarding4Title": "Guidance when you need it",
+  "onboarding4Body": "Book licensed family counselors and psychologists in your language — private chat, secure payment.",
+  "proofSerious": "Marriage-minded members",
+  "proofOneAccount": "One verified phone, one account",
+  "proofMutual": "Shown only when it's mutual",
+  "proofNearest": "Nearest first",
+  "proofReviewed": "Every profile reviewed",
+  "proofTwoTicks": "Photo + details verified",
+  "proofCounselors": "Licensed counselors",
+  "proofPrivate": "Private by design",
+  "photoVerifiedShort": "Photo verified",
+  "detailsVerifiedShort": "Details verified",
+  "subscriptions": "Subscriptions",
+  "consultationsShort": "Consultations",
+  "consultationPayment": "Consultation",
+  "viewPlans": "View plans",
+  "manageInStoreSub": "Change or cancel in the App Store / Google Play",
+  "paymentsFootnote": "Store subscriptions renew automatically until cancelled in your store account. Consultation payments are processed securely by our payment provider; we never see your full card number.",
+  "receipt": "Receipt",
+  "amount": "Amount",
+  "date": "Date",
+  "paidVia": "Paid via",
+  "receiptReference": "Reference (for support)",
+  "pending": "Pending",
+  "storeRefundNote": "Refunds for store subscriptions are handled by Apple or Google.",
+  "consultRefundNote": "Consultation refunds go back to the card you paid with (usually 5–10 days).",
+  "counselorLive": "Live",
+  "upcomingSessions": "Upcoming",
+  "rating": "Rating",
+  "thisMonth": "This month",
+  "deskRequests": "Requests",
+  "deskUpcoming": "Upcoming",
+  "deskCompleted": "Completed",
+  "noUpcoming": "No upcoming sessions",
+  "noCompleted": "No completed sessions yet",
+  "confirmAndSchedule": "Confirm & schedule",
+  "paidOn": "Paid",
+  "edit": "Edit",
+  "deskFootnote": "Confirming opens a private chat — you can write first. Declining refunds the client in full. Amounts shown are before the platform fee."
 }

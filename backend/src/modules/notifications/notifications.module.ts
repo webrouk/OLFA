@@ -1,4 +1,4 @@
-import { Controller, Get, Global, HttpCode, Inject, Injectable, Logger, Module, OnModuleInit, Post, Query } from '@nestjs/common';
+import { Controller, Delete, Get, Global, HttpCode, Inject, Injectable, Logger, Module, OnModuleInit, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { NotificationType, Prisma } from '@prisma/client';
 import { App, cert, initializeApp } from 'firebase-admin/app';
@@ -27,6 +27,13 @@ const PUSH_TEXT: Record<string, { ar: [string, string]; en: [string, string] }> 
   'push.counselor_approved': { ar: ['تم اعتماد ملفك كاستشاري', 'أضف أسعارك لاستقبال الطلبات'], en: ['Counselor profile approved', 'Add your prices to receive requests'] },
   'push.counselor_rejected': { ar: ['طلب الاستشاري', 'راجع ملاحظات المراجعة'], en: ['Counselor application', 'See the review notes'] },
 };
+
+/** Message sounds vs. everything else; a match / compliment gets the warm chime. */
+export function soundFor(key: string): { ios: string; android: string; channel: string } {
+  if (key === 'push.new_message' || key === 'push.new_photo' || key === 'push.new_voice') return { ios: 'olfa_message.wav', android: 'olfa_message', channel: 'olfa_messages' };
+  if (key === 'push.new_match' || key === 'push.new_compliment' || key === 'push.rematch_accepted') return { ios: 'olfa_match.wav', android: 'olfa_match', channel: 'olfa_matches' };
+  return { ios: 'olfa_notification.wav', android: 'olfa_notification', channel: 'olfa_general' };
+}
 
 @Injectable()
 export class NotificationsService implements OnModuleInit {
@@ -63,7 +70,9 @@ export class NotificationsService implements OnModuleInit {
       tokens: sessions.map((s) => s.fcmToken!),
       notification: text ? { title: text[0], body: text[1] } : undefined,
       data: { type: key, ...data },
-      apns: { payload: { aps: { sound: 'default' } } },
+      // OLFA's own sounds (bundled in the app): one for messages, one for everything else.
+      apns: { payload: { aps: { sound: soundFor(key).ios, 'thread-id': data.conversationId ?? key } } },
+      android: { notification: { channelId: soundFor(key).channel, sound: soundFor(key).android, tag: data.conversationId } },
     });
     // Drop tokens FCM reports as invalid.
     const dead = res.responses.map((r, i) => (!r.success && /registration-token-not-registered|invalid-argument/.test(r.error?.code ?? '') ? sessions[i].id : null)).filter(Boolean) as string[];
@@ -82,6 +91,18 @@ export class NotificationsService implements OnModuleInit {
   markAllRead(userId: string) {
     return this.prisma.notification.updateMany({ where: { userId, readAt: null }, data: { readAt: new Date() } });
   }
+
+  markRead(userId: string, id: string) {
+    return this.prisma.notification.updateMany({ where: { id, userId, readAt: null }, data: { readAt: new Date() } });
+  }
+
+  remove(userId: string, id: string) {
+    return this.prisma.notification.deleteMany({ where: { id, userId } });
+  }
+
+  unreadCount(userId: string) {
+    return this.prisma.notification.count({ where: { userId, readAt: null } });
+  }
 }
 
 @ApiTags('notifications')
@@ -95,9 +116,24 @@ export class NotificationsController {
     return this.n.list(u.id, before ? new Date(before) : undefined);
   }
 
+  @AllowPending() @Get('unread-count')
+  async unread(@CurrentUser() u: AuthUser) {
+    return { count: await this.n.unreadCount(u.id) };
+  }
+
   @AllowPending() @Post('read-all') @HttpCode(204)
   async readAll(@CurrentUser() u: AuthUser) {
     await this.n.markAllRead(u.id);
+  }
+
+  @AllowPending() @Post(':id/read') @HttpCode(204)
+  async readOne(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    await this.n.markRead(u.id, id);
+  }
+
+  @AllowPending() @Delete(':id') @HttpCode(204)
+  async remove(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    await this.n.remove(u.id, id);
   }
 }
 

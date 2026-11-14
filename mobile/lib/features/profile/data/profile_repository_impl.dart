@@ -47,6 +47,8 @@ class ApiProfileRepository implements ProfileRepository, PhotoRepository {
         'maritalStatus': toApiEnum(d.maritalStatus!),
         'education': toApiEnum(d.education!),
         'occupation': d.occupation, // reference key
+        if (d.heightCm != null) 'heightCm': d.heightCm,
+        if (d.weightKg != null) 'weightKg': d.weightKg,
         'marriageTimeline': toApiEnum(d.timeline!),
         'bio': d.bio.trim(),
         'interests': d.interests.toList(),

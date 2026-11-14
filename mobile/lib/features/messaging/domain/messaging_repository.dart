@@ -7,7 +7,16 @@ abstract interface class MessagingRepository {
   Future<({List<ChatMessage> items, bool hasMore})> page(String conversationId, {DateTime? before});
 
   /// Idempotent on [clientId]: retrying never duplicates a message.
-  Future<ChatMessage> send(String conversationId, String clientId, String body);
+  Future<ChatMessage> send(String conversationId, String clientId, String body, {OutgoingMedia? media});
+
+  /// "Typing…" for the other person (best-effort, never throws).
+  void setTyping(String conversationId, bool on);
+
+  /// Names and message text from one field; only unlocked conversations.
+  Future<ChatSearchResult> search(String query);
+
+  /// Voice notes left in this conversation; remaining == null means unlimited.
+  Future<({int limit, int? remaining})> voiceQuota(String conversationId);
 
   Future<void> archive(String conversationId);
   Future<void> restore(String conversationId);

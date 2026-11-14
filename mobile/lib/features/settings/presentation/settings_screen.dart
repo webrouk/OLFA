@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/localization/generated/app_localizations.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/routing/routes.dart';
+import '../../../core/sound/sound_service.dart';
 import '../../../core/theme/olfa_colors.dart';
 import '../../../core/theme/olfa_spacing.dart';
 import '../../../core/theme/olfa_typography.dart';
@@ -60,6 +61,19 @@ class SettingsScreen extends ConsumerWidget {
               onTap: () => ref.read(notificationPrefsProvider.notifier).set(likes: !np.likes),
               trailing: Switch(value: np.likes, onChanged: (v) => ref.read(notificationPrefsProvider.notifier).set(likes: v)),
             ),
+            Consumer(builder: (context, ref, _) {
+              final on = ref.watch(soundsEnabledProvider);
+              return OlfaListTile(
+                icon: Icons.music_note_outlined,
+                title: l.inAppSounds,
+                subtitle: l.inAppSoundsSub,
+                onTap: () => ref.read(soundsEnabledProvider.notifier).set(!on),
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                  IconButton(tooltip: l.previewSound, icon: const Icon(Icons.play_circle_outline_rounded), onPressed: () => ref.read(soundServiceProvider).play(OlfaSound.notification)),
+                  Switch(value: on, onChanged: (v) => ref.read(soundsEnabledProvider.notifier).set(v)),
+                ]),
+              );
+            }),
           ]),
           SectionLabel(l.about),
           TileGroup(children: [

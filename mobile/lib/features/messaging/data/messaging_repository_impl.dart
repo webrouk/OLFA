@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,6 +29,7 @@ class ApiMessagingRepository implements MessagingRepository {
   Future<void> _connect() async {
     if (_socket != null) return;
     final token = await _store.readAccessToken();
+    if (token == null || _socket != null) return; // not signed in yet: connect on the next call
     final s = io.io('$apiBaseUrl/chat', io.OptionBuilder().setTransports(['websocket']).setAuth({'token': token}).enableReconnection().build());
     _socket = s;
     s.onConnect((_) => _onConnection(true));
@@ -104,11 +106,70 @@ class ApiMessagingRepository implements MessagingRepository {
       });
 
   @override
-  Future<ChatMessage> send(String conversationId, String clientId, String body) => guard(() async {
-        final r = await _api.dio.post<Map<String, dynamic>>('/conversations/$conversationId/messages', data: {'clientMessageId': clientId, 'body': body});
+  Future<ChatMessage> send(String conversationId, String clientId, String body, {OutgoingMedia? media}) => guard(() async {
+        final ids = <String>[];
+        if (media != null) {
+          // 1) ask for a private upload slot per file  2) upload straight to storage  3) send with the ids
+          final parts = media.isVoice
+              ? [(kind: 'VOICE', mime: 'audio/mp4', bytes: media.voice!.bytes, w: null, h: null, dur: media.voice!.durationMs, wave: media.voice!.waveform)]
+              : [for (final f in media.files) (kind: 'IMAGE', mime: 'image/jpeg', bytes: f.bytes, w: f.width, h: f.height, dur: null, wave: const <int>[])];
+          for (final p in parts) {
+            final slot = await _api.dio.post<Map<String, dynamic>>('/conversations/$conversationId/attachments', data: {
+              'kind': p.kind,
+              'mime': p.mime,
+              'bytes': p.bytes.length,
+              if (p.w != null) 'width': p.w,
+              if (p.h != null) 'height': p.h,
+              if (p.dur != null) 'durationMs': p.dur,
+              if (p.wave.isNotEmpty) 'waveform': p.wave,
+            });
+            final up = Map<String, dynamic>.from(slot.data!['upload'] as Map);
+            await Dio().post<void>(up['url'] as String,
+                data: FormData.fromMap({
+                  ...Map<String, dynamic>.from(up['fields'] as Map),
+                  'file': MultipartFile.fromBytes(p.bytes, filename: p.kind == 'VOICE' ? 'voice.m4a' : 'photo.jpg', contentType: DioMediaType.parse(p.mime)),
+                }));
+            ids.add(slot.data!['id'] as String);
+          }
+        }
+        final r = await _api.dio.post<Map<String, dynamic>>('/conversations/$conversationId/messages', data: {
+          'clientMessageId': clientId,
+          if (body.trim().isNotEmpty) 'body': body,
+          if (ids.isNotEmpty) 'attachmentIds': ids,
+        });
         final j = Map<String, dynamic>.from(r.data!)..putIfAbsent('receipts', () => const []);
         return ApiMappers.message(j, conversationId, await _me());
-      }, quota: 'messages');
+      }, quota: media?.isVoice ?? false ? 'voice' : 'messages');
+
+  @override
+  Future<ChatSearchResult> search(String query) => guard(() async {
+        final r = await _api.dio.get<Map<String, dynamic>>('/conversations/search', queryParameters: {'q': query});
+        final me = await _me();
+        return ChatSearchResult(
+          conversationIds: (r.data!['conversations'] as List).cast<String>(),
+          messages: (r.data!['messages'] as List).map((x) {
+            final m = Map<String, dynamic>.from(x as Map);
+            return ChatMessage(
+              id: m['id'] as String,
+              clientId: m['id'] as String,
+              conversationId: m['conversationId'] as String,
+              fromMe: m['fromMe'] == true || m['senderId'] == me,
+              body: m['body'] as String,
+              sentAt: DateTime.parse(m['createdAt'] as String).toLocal(),
+              status: MessageStatus.delivered,
+            );
+          }).toList(),
+        );
+      });
+
+  @override
+  Future<({int limit, int? remaining})> voiceQuota(String conversationId) => guard(() async {
+        final r = await _api.dio.get<Map<String, dynamic>>('/conversations/$conversationId/voice-quota');
+        return (limit: (r.data!['limit'] as num).toInt(), remaining: (r.data!['remaining'] as num?)?.toInt());
+      });
+
+  @override
+  void setTyping(String conversationId, bool on) => sendTyping(conversationId, on);
 
   @override
   Stream<ChatEvent> events() {
@@ -145,7 +206,13 @@ class DemoMessagingRepository implements MessagingRepository {
   @override
   Future<({List<ChatMessage> items, bool hasMore})> page(String conversationId, {DateTime? before}) => _b.messages(conversationId, before: before);
   @override
-  Future<ChatMessage> send(String conversationId, String clientId, String body) => _b.send(conversationId, clientId, body);
+  Future<ChatMessage> send(String conversationId, String clientId, String body, {OutgoingMedia? media}) => _b.send(conversationId, clientId, body, media: media);
+  @override
+  void setTyping(String conversationId, bool on) {} // the demo peer types on its own
+  @override
+  Future<ChatSearchResult> search(String query) => _b.searchChats(query);
+  @override
+  Future<({int limit, int? remaining})> voiceQuota(String conversationId) => _b.voiceQuota(conversationId);
   @override
   Stream<ChatEvent> events() => _b.events;
 }

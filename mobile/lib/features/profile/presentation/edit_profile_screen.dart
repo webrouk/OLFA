@@ -81,6 +81,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         ),
         OlfaTextField(label: l.city, initialValue: d.city, onChanged: (v) => ctrl.update((x) => x.copyWith(city: v))),
         OccupationField(label: l.occupation, value: occupationByKey(d.occupation)?.key, onChanged: (v) => ctrl.update((x) => x.copyWith(occupation: v ?? x.occupation))),
+        BodyMetricsFields(
+          heightCm: d.heightCm,
+          weightKg: d.weightKg,
+          onHeight: (v) => ctrl.update((x) => x.copyWith(heightCm: () => v)),
+          onWeight: (v) => ctrl.update((x) => x.copyWith(weightKg: () => v)),
+        ),
         OlfaTextField(
           label: l.bio,
           initialValue: d.bio,

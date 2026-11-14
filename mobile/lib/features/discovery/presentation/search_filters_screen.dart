@@ -171,6 +171,9 @@ class _SearchFiltersScreenState extends ConsumerState<SearchFiltersScreen> {
           onLockedTap: _upsell,
           onChanged: (v) => setState(() => _f = _f.copyWith(nationality: () => v)),
         ),
+        // Height and weight are available on every plan.
+        RangeFilter(label: l.height, unit: l.cm, min: 140, max: 220, defaultRange: (155, 185), value: _f.height, onChanged: (v) => setState(() => _f = _f.copyWith(height: () => v))),
+        RangeFilter(label: l.weight, unit: l.kg, min: 40, max: 160, defaultRange: (50, 90), value: _f.weight, onChanged: (v) => setState(() => _f = _f.copyWith(weight: () => v))),
         Text(l.minCompatibility, style: context.type.inputLabel),
         const SizedBox(height: 8),
         ChoiceWrap<int?>(

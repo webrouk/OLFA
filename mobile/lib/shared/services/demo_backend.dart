@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/errors/failure.dart';
 import '../../core/localization/locale_provider.dart';
 import '../models/models.dart';
+import '../utils/phone_detect.dart';
 
 /// In-memory stand-in for the OLFA REST API + realtime gateway, used during
 /// the UI phase (Phase 2). It enforces the same rules the real server will
@@ -117,11 +118,39 @@ class DemoBackend {
         plan = code;
         _payments.insert(
           0,
-          PaymentRecord(id: 'TX-${8800 + _payments.length}', plan: code, store: 'App Store', date: DateTime.now(), status: PaymentStatus.succeeded),
+          PaymentRecord(
+            id: 'TX-${8800 + _payments.length}',
+            plan: code,
+            store: 'App Store',
+            date: DateTime.now(),
+            status: PaymentStatus.succeeded,
+            amountMinor: code == PlanCode.premium ? 7999 : 3999,
+            currency: 'AED',
+            reference: 'DEMO${8800 + _payments.length}',
+          ),
         );
       }, ms: 900);
 
-  Future<List<PaymentRecord>> payments() => _call(() => List.unmodifiable(_payments));
+  Future<List<PaymentRecord>> payments() => _call(() {
+        _seedConsultations();
+        // consultation payments appear next to store purchases, like GET /me/payments
+        final consult = [
+          for (final k in _bookings.where((b) => b.status != ConsultationStatus.awaitingPayment && b.status != ConsultationStatus.expired))
+            PaymentRecord(
+              id: 'P-${k.id}',
+              kind: PaymentKind.consultation,
+              plan: plan,
+              store: 'Card',
+              date: k.createdAt,
+              status: k.status == ConsultationStatus.refunded ? PaymentStatus.refunded : PaymentStatus.succeeded,
+              amountMinor: k.priceMinor,
+              currency: k.currency,
+              reference: 'DEMO-${k.id.toUpperCase()}',
+              description: '${k.counselorName} · ${k.durationMinutes}′',
+            ),
+        ];
+        return [..._payments, ...consult]..sort((a, b) => b.date.compareTo(a.date));
+      });
 
   // ───────────── discovery ─────────────
   Future<List<UserProfile>> discover(DiscoverFilters f) => _call(() {
@@ -145,6 +174,8 @@ class DemoBackend {
             .where((p) => f.maritalStatuses.isEmpty || f.maritalStatuses.contains(p.maritalStatus))
             .where((p) => f.educations.isEmpty || f.educations.contains(p.education))
             .where((p) => f.minCompatibility == null || p.compatibility >= f.minCompatibility!)
+            .where((p) => f.height == null || (p.heightCm != null && p.heightCm! >= f.height!.$1 && p.heightCm! <= f.height!.$2))
+            .where((p) => f.weight == null || (p.weightKg != null && p.weightKg! >= f.weight!.$1 && p.weightKg! <= f.weight!.$2))
             .toList()
           // nearest first, unknown distance last
           ..sort((a, b) => (a.distanceKm ?? 1 << 30).compareTo(b.distanceKm ?? 1 << 30));
@@ -247,6 +278,7 @@ class DemoBackend {
       peer: m.peer,
       section: st.section,
       lastMessage: msgs.isEmpty ? null : msgs.last.body,
+      lastMessageKind: msgs.isEmpty ? MessageKind.text : msgs.last.kind,
       lastAt: msgs.isEmpty ? m.createdAt : msgs.last.sentAt,
       unread: msgs.where((x) => !x.fromMe && x.status != MessageStatus.read).length,
       expiresAt: exp,
@@ -361,7 +393,7 @@ class DemoBackend {
         return (items: older.sublist(start), hasMore: start > 0);
       });
 
-  Future<ChatMessage> send(String convId, String clientId, String body) => _call(() {
+  Future<ChatMessage> send(String convId, String clientId, String body, {OutgoingMedia? media}) => _call(() {
         final list = _messages.putIfAbsent(convId, () => []);
         if (_sentClientIds.contains(clientId)) {
           return list.firstWhere((m) => m.clientId == clientId); // idempotent retry
@@ -373,13 +405,57 @@ class DemoBackend {
         final st = _conv[convId];
         if (st?.section == ConversationSection.unmatched) throw const ServerFailure('conversation_closed');
         if (_index().locked.any((c) => c.id == convId)) throw const EntitlementRequiredFailure('visibleConversations');
+        if (media?.isVoice ?? false) {
+          final q = _voiceLeft(convId);
+          if (q.remaining == 0) throw const QuotaExceededFailure('voice');
+        }
         st?.anchor = DateTime.now(); // a message keeps the chat (inbox and archive)
         _sentClientIds.add(clientId);
-        final msg = ChatMessage(id: 'srv-$clientId', clientId: clientId, conversationId: convId, fromMe: true, body: body.trim(), sentAt: DateTime.now(), status: MessageStatus.sent);
+        final msg = ChatMessage(
+          id: 'srv-$clientId',
+          clientId: clientId,
+          conversationId: convId,
+          fromMe: true,
+          body: body.trim(),
+          sentAt: DateTime.now(),
+          status: MessageStatus.sent,
+          kind: media == null ? MessageKind.text : (media.isVoice ? MessageKind.voice : MessageKind.image),
+          containsPhone: containsPhoneNumber(body),
+          attachments: media == null
+              ? const []
+              : media.isVoice
+                  ? [ChatAttachment(kind: MessageKind.voice, localPath: media.voice!.path, durationMs: media.voice!.durationMs, waveform: media.voice!.waveform)]
+                  : [for (final f in media.files) ChatAttachment(kind: MessageKind.image, localPath: f.path, width: f.width, height: f.height)],
+        );
         list.add(msg);
         _scheduleReply(convId, msg);
         return msg;
       }, ms: 250);
+
+  ({int limit, int? remaining}) _voiceLeft(String convId) {
+    final limit = switch (plan) { PlanCode.free => 10, PlanCode.plus => 30, PlanCode.premium => -1 };
+    if (limit < 0 || convId.startsWith('k-')) return (limit: -1, remaining: null);
+    final used = (_messages[convId] ?? const <ChatMessage>[]).where((m) => m.fromMe && m.kind == MessageKind.voice).length;
+    return (limit: limit, remaining: (limit - used).clamp(0, limit).toInt());
+  }
+
+  Future<({int limit, int? remaining})> voiceQuota(String convId) => _call(() => _voiceLeft(convId), ms: 100);
+
+  /// Names and message text, like GET /conversations/search.
+  Future<ChatSearchResult> searchChats(String q) => _call(() {
+        final t = q.trim().toLowerCase();
+        if (t.length < 2) return ChatSearchResult.empty;
+        final ix = _index();
+        final ids = ix.visible.where((c) => c.title.toLowerCase().contains(t)).map((c) => c.id).toList();
+        final allowed = ix.visible.map((c) => c.id).toSet();
+        final msgs = [
+          for (final e in _messages.entries)
+            if (allowed.contains(e.key))
+              for (final m in e.value)
+                if (m.kind == MessageKind.text && m.body.toLowerCase().contains(t)) m,
+        ]..sort((a, b) => b.sentAt.compareTo(a.sentAt));
+        return ChatSearchResult(conversationIds: ids, messages: msgs.take(30).toList());
+      }, ms: 120);
 
   void _scheduleReply(String convId, ChatMessage mine) {
     Timer(const Duration(milliseconds: 700), () {
@@ -671,19 +747,36 @@ class DemoBackend {
   Future<void> unfreeze() => _call(() => frozen = false, ms: 600);
 
   // ───────────── notifications ─────────────
+  final _readNotifications = <String>{};
+  final _removedNotifications = <String>{};
+
   Future<List<AppNotification>> notifications() => _call(() {
         final now = DateTime.now();
         final ar = lang == 'ar';
+        AppNotification n(String id, NotificationKind k, String tAr, String tEn, String? bAr, String? bEn, Duration ago, {Map<String, String> data = const {}, bool read = false}) => AppNotification(
+              id: id,
+              kind: k,
+              title: ar ? tAr : tEn,
+              body: ar ? bAr : bEn,
+              data: data,
+              createdAt: now.subtract(ago),
+              read: read || _notificationsRead || _readNotifications.contains(id),
+            );
         return [
-          AppNotification(id: 'n1', kind: NotificationKind.match, title: ar ? 'توافق جديد مع سارة' : 'New match with Sara', createdAt: now.subtract(const Duration(minutes: 2)), read: _notificationsRead),
-          AppNotification(id: 'n2', kind: NotificationKind.like, title: ar ? 'لديك 3 إعجابات جديدة' : 'You have 3 new likes', createdAt: now.subtract(const Duration(hours: 1)), read: _notificationsRead),
-          AppNotification(id: 'n3', kind: NotificationKind.verification, title: ar ? 'تم اعتماد ملفك وصورك' : 'Your profile and photos were approved', createdAt: now.subtract(const Duration(hours: 3)), read: true),
-          AppNotification(id: 'n4', kind: NotificationKind.message, title: ar ? 'رسالة جديدة من مريم' : 'New message from Mariam', createdAt: now.subtract(const Duration(days: 1)), read: true),
-          AppNotification(id: 'n5', kind: NotificationKind.reminder, title: ar ? 'أكمل ملفك لزيادة فرص التوافق' : 'Complete your profile to get better matches', createdAt: now.subtract(const Duration(days: 2)), read: true),
-        ];
+          n('n0', NotificationKind.compliment, 'رسالة إطراء من نور', 'A compliment from Nour', '«ابتسامتك جميلة وكلامك عن التطوع أعجبني»', '“Lovely smile — I liked what you wrote about volunteering”', const Duration(minutes: 1)),
+          n('n1', NotificationKind.match, 'توافق جديد مع سارة', 'New match with Sara', 'أعجب كلٌّ منكما بالآخر — ابدأ المحادثة', 'You both liked each other — say hello', const Duration(minutes: 2), data: const {'conversationId': 'c-d1'}),
+          n('n2', NotificationKind.like, 'لديك 3 إعجابات جديدة', 'You have 3 new likes', 'اطّلع على من أعجب بك', 'See who liked you', const Duration(hours: 1)),
+          n('n6', NotificationKind.chatExpiring, 'محادثة ستُحذف قريبًا', 'A chat expires soon', 'أرسل رسالة لتبقى المحادثة', 'Send a message to keep it', const Duration(hours: 2)),
+          n('n3', NotificationKind.verification, 'تم اعتماد ملفك وصورك', 'Your profile and photos were approved', 'ملفك ظاهر الآن لمن يناسبك', 'Your profile is now live', const Duration(hours: 3), read: true),
+          n('n7', NotificationKind.consultation, 'تم تأكيد استشارتك', 'Consultation confirmed', 'يمكنك الآن التحدث مع الاستشاري', 'You can now chat with your counselor', const Duration(hours: 20), data: const {'conversationId': 'k-b1'}, read: true),
+          n('n4', NotificationKind.message, 'رسالة جديدة من مريم', 'New message from Mariam', 'لديك رسالة جديدة', 'You have a new message', const Duration(days: 1), read: true),
+          n('n5', NotificationKind.reminder, 'أكمل ملفك لزيادة فرص التوافق', 'Complete your profile to get better matches', 'أضف الطول والاهتمامات وصورة ثالثة', 'Add your height, interests and a third photo', const Duration(days: 4), read: true),
+        ].where((x) => !_removedNotifications.contains(x.id)).toList();
       });
 
   Future<void> markAllNotificationsRead() => _call(() => _notificationsRead = true, ms: 150);
+  Future<void> markNotificationRead(String id) => _call(() => _readNotifications.add(id), ms: 80);
+  Future<void> removeNotification(String id) => _call(() => _removedNotifications.add(id), ms: 80);
 
   // ───────────── settings & support ─────────────
   Future<PrivacySettings> getPrivacy() => _call(() => privacy, ms: 200);
@@ -770,6 +863,9 @@ class DemoBackend {
       nationality: countryOrNull(iso)?.nationality,
       // demo distances from Dubai, rounded like the server (≥1 km)
       distanceKm: const {'AE': 12, 'SA': 870, 'EG': 2420, 'JO': 2050, 'KW': 850, 'QA': 380, 'OM': 340, 'BH': 480}[iso] ?? (id.hashCode % 40 + 3),
+      // demo sample values (deterministic per profile)
+      heightCm: (g == Gender.female ? 155 : 168) + (id.codeUnits.fold<int>(0, (x, c) => x + c) % 18),
+      weightKg: (g == Gender.female ? 52 : 68) + (id.codeUnits.fold<int>(0, (x, c) => x * 7 + c) % 20),
       timeline: t,
       bio: ar ? bAr : bEn,
       interests: ints,

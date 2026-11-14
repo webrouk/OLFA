@@ -13,24 +13,27 @@ import '../data/settings_repository.dart';
 
 /// Report + optional block. Reports go to the moderation queue in the admin
 /// dashboard; blocking hides both users from each other everywhere.
-Future<void> showReportSheet(BuildContext context, WidgetRef ref, UserProfile user) {
+Future<void> showReportSheet(BuildContext context, WidgetRef ref, UserProfile user, {ChatMessage? message}) {
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    builder: (_) => _ReportSheet(user: user),
+    builder: (_) => _ReportSheet(user: user, message: message),
   );
 }
 
 class _ReportSheet extends ConsumerStatefulWidget {
-  const _ReportSheet({required this.user});
+  const _ReportSheet({required this.user, this.message});
   final UserProfile user;
+
+  /// Set when reporting one specific message.
+  final ChatMessage? message;
   @override
   ConsumerState<_ReportSheet> createState() => _ReportSheetState();
 }
 
 class _ReportSheetState extends ConsumerState<_ReportSheet> {
   String? _reason;
-  bool _block = true;
+  late bool _block = widget.message == null;
   bool _busy = false;
 
   Future<void> _submit() async {
@@ -38,7 +41,7 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
     setState(() => _busy = true);
     final l = AppLocalizations.of(context);
     try {
-      await ref.read(settingsRepositoryProvider).report(widget.user.id, _reason!, block: _block);
+      await ref.read(settingsRepositoryProvider).report(widget.user.id, _reason!, block: _block, messageId: widget.message?.id);
       if (_block) {
         ref.invalidate(discoverControllerProvider);
         ref.invalidate(matchesProvider);
@@ -61,6 +64,7 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final reasons = {
+      if (widget.message != null) 'inappropriate_message': l.reasonInappropriateMessage,
       'fake': l.reasonFake,
       'photos': l.reasonPhotos,
       'harassment': l.reasonHarassment,
@@ -76,7 +80,23 @@ class _ReportSheetState extends ConsumerState<_ReportSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(l.reportTitle(widget.user.name), style: context.type.h3),
+              Text(widget.message == null ? l.reportTitle(widget.user.name) : l.reportMessageTitle, style: context.type.h3),
+              if (widget.message != null) ...[
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: OlfaColors.gray, borderRadius: BorderRadius.circular(14)),
+                  child: Text(
+                    widget.message!.body.isNotEmpty ? widget.message!.body : (widget.message!.kind == MessageKind.voice ? l.voiceMessageShort : l.photoMessageShort),
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.type.bodySmall,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(l.reportMessageNote, style: context.type.caption),
+              ],
               const SizedBox(height: 12),
               TileGroup(children: [
                 for (final e in reasons.entries)

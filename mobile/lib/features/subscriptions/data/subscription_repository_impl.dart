@@ -36,18 +36,36 @@ class ApiSubscriptionRepository implements SubscriptionRepository {
 
   @override
   Future<List<PaymentRecord>> payments() => guard(() async {
-        final r = await _api.dio.get<List<dynamic>>('/me/payments');
-        return r.data!.map((x) {
-          final j = Map<String, dynamic>.from(x as Map);
-          final plan = ((j['subscription'] as Map?)?['plan'] as Map?)?['code'];
-          return PaymentRecord(
-            id: j['id'] as String,
-            plan: fromApiEnum(PlanCode.values, plan, PlanCode.plus),
-            store: switch (j['provider']) { 'APPLE' => 'App Store', 'GOOGLE' => 'Google Play', _ => 'Web' },
-            date: DateTime.parse(j['createdAt'] as String).toLocal(),
-            status: switch (j['status']) { 'REFUNDED' => PaymentStatus.refunded, 'FAILED' => PaymentStatus.failed, _ => PaymentStatus.succeeded },
-          );
-        }).toList();
+        final out = <PaymentRecord>[];
+        String? cursor;
+        do {
+          final r = await _api.dio.get<Map<String, dynamic>>('/me/payments', queryParameters: {if (cursor != null) 'cursor': cursor});
+          for (final x in r.data!['items'] as List) {
+            final j = Map<String, dynamic>.from(x as Map);
+            final sub = j['subscription'] as Map?;
+            final k = j['consultation'] as Map?;
+            out.add(PaymentRecord(
+              id: j['id'] as String,
+              kind: j['kind'] == 'CONSULTATION' ? PaymentKind.consultation : PaymentKind.subscription,
+              plan: fromApiEnum(PlanCode.values, (sub?['plan'] as Map?)?['code'], PlanCode.plus),
+              store: switch (j['provider']) { 'APPLE' => 'App Store', 'GOOGLE' => 'Google Play', 'ADMIN_GRANT' => 'OLFA', _ => 'Card' },
+              date: DateTime.parse(j['createdAt'] as String).toLocal(),
+              status: switch (j['status']) {
+                'REFUNDED' => PaymentStatus.refunded,
+                'FAILED' => PaymentStatus.failed,
+                'PENDING' => PaymentStatus.pending,
+                _ => PaymentStatus.succeeded,
+              },
+              amountMinor: (j['amountMinor'] as num?)?.toInt(),
+              currency: j['currency'] as String?,
+              reference: j['reference'] as String?,
+              refundedAt: j['refundedAt'] is String ? DateTime.parse(j['refundedAt'] as String).toLocal() : null,
+              description: k == null ? null : '${k['counselor']} · ${k['durationMinutes']}′',
+            ));
+          }
+          cursor = r.data!['nextCursor'] as String?;
+        } while (cursor != null && out.length < 300);
+        return out;
       });
 }
 

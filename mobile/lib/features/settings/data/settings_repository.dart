@@ -14,7 +14,8 @@ abstract interface class SettingsRepository {
   Future<List<BlockedUser>> blocked();
   Future<void> unblock(String userId);
   Future<int> blockedCount();
-  Future<void> report(String userId, String reason, {bool block = false});
+  /// [messageId]: report one specific message (moderators see a snapshot of it).
+  Future<void> report(String userId, String reason, {bool block = false, String? messageId, String? details});
   Future<void> block(String userId);
   Future<List<DeviceSession>> devices();
   Future<void> signOutDevice(String sessionId);
@@ -37,6 +38,7 @@ const _reportReasons = {
   'scam': 'SPAM_SCAM',
   'underage': 'UNDERAGE',
   'not_serious': 'NOT_SERIOUS',
+  'inappropriate_message': 'HARASSMENT', // offensive / sexual / threatening message
 };
 
 class ApiSettingsRepository implements SettingsRepository {
@@ -68,8 +70,13 @@ class ApiSettingsRepository implements SettingsRepository {
   Future<int> blockedCount() async => (await blocked()).length;
 
   @override
-  Future<void> report(String userId, String reason, {bool block = false}) =>
-      guard(() => _api.dio.post<void>('/reports', data: {'userId': userId, 'reason': _reportReasons[reason] ?? 'OTHER', 'block': block}));
+  Future<void> report(String userId, String reason, {bool block = false, String? messageId, String? details}) => guard(() => _api.dio.post<void>('/reports', data: {
+        'userId': userId,
+        'reason': _reportReasons[reason] ?? 'OTHER',
+        'block': block,
+        if (messageId != null) ...{'targetType': 'MESSAGE', 'targetId': messageId},
+        if (details != null && details.trim().isNotEmpty) 'details': details.trim(),
+      }));
 
   @override
   Future<void> block(String userId) => guard(() => _api.dio.post<void>('/blocks', data: {'userId': userId}));
@@ -126,7 +133,7 @@ class DemoSettingsRepository implements SettingsRepository {
   @override
   Future<int> blockedCount() => _b.blockedCount();
   @override
-  Future<void> report(String userId, String reason, {bool block = false}) => _b.report(userId, reason, block: block);
+  Future<void> report(String userId, String reason, {bool block = false, String? messageId, String? details}) => _b.report(userId, reason, block: block);
   @override
   Future<void> block(String userId) => _b.block(userId);
   @override

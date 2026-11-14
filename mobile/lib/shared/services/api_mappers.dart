@@ -32,6 +32,8 @@ abstract final class ApiMappers {
         maritalStatus: fromApiEnum(MaritalStatus.values, j['maritalStatus'], MaritalStatus.neverMarried),
         education: fromApiEnum(Education.values, j['education'], Education.bachelor),
         occupation: j['occupation'] as String? ?? '',
+        heightCm: (j['heightCm'] as num?)?.toInt(),
+        weightKg: (j['weightKg'] as num?)?.toInt(),
         timeline: fromApiEnum(MarriageTimeline.values, j['marriageTimeline'], MarriageTimeline.notSure),
         bio: j['bio'] as String? ?? '',
         interests: (j['interests'] as List? ?? const []).cast<String>(),
@@ -102,17 +104,36 @@ abstract final class ApiMappers {
       clientId: j['clientMessageId'] as String,
       conversationId: conversationId,
       fromMe: mine,
-      body: j['body'] as String,
+      body: j['body'] as String? ?? '',
       sentAt: DateTime.parse(j['createdAt'] as String).toLocal(),
       status: !mine ? MessageStatus.delivered : (read ? MessageStatus.read : (delivered ? MessageStatus.delivered : MessageStatus.sent)),
+      kind: switch (j['type']) { 'IMAGE' => MessageKind.image, 'VOICE' => MessageKind.voice, _ => MessageKind.text },
+      containsPhone: j['containsPhone'] == true,
+      attachments: (j['attachments'] as List? ?? const [])
+          .map((x) => Map<String, dynamic>.from(x as Map))
+          .map((a) => ChatAttachment(
+                id: a['id'] as String?,
+                kind: a['kind'] == 'VOICE' ? MessageKind.voice : MessageKind.image,
+                url: a['url'] as String?,
+                width: (a['width'] as num?)?.toInt(),
+                height: (a['height'] as num?)?.toInt(),
+                durationMs: (a['durationMs'] as num?)?.toInt(),
+                waveform: (a['waveform'] as List? ?? const []).map((v) => (v as num).toInt()).toList(),
+              ))
+          .toList(),
     );
   }
 
   static NotificationKind notificationKind(String type) => switch (type) {
         'NEW_MATCH' => NotificationKind.match,
         'NEW_LIKE' => NotificationKind.like,
+        'NEW_COMPLIMENT' => NotificationKind.compliment,
         'NEW_MESSAGE' => NotificationKind.message,
-        'VERIFICATION_APPROVED' || 'VERIFICATION_REJECTED' => NotificationKind.verification,
+        'VERIFICATION_APPROVED' || 'VERIFICATION_REJECTED' || 'COUNSELOR_APPROVED' || 'COUNSELOR_REJECTED' => NotificationKind.verification,
+        'CONSULTATION_REQUEST' || 'CONSULTATION_CONFIRMED' || 'CONSULTATION_DECLINED' || 'CONSULTATION_COMPLETED' => NotificationKind.consultation,
+        'REMATCH_REQUEST' || 'REMATCH_ACCEPTED' => NotificationKind.rematch,
+        'CONVERSATION_EXPIRING' => NotificationKind.chatExpiring,
+        'SUBSCRIPTION' || 'SYSTEM' => NotificationKind.account,
         _ => NotificationKind.reminder,
       };
 
@@ -137,6 +158,7 @@ abstract final class ApiMappers {
               scheduledAt: _date(k['scheduledAt']),
             ),
       lastMessage: last?['body'] as String?,
+      lastMessageKind: switch (last?['type']) { 'IMAGE' => MessageKind.image, 'VOICE' => MessageKind.voice, _ => MessageKind.text },
       lastAt: _date(j['lastMessageAt']),
       unread: (j['unread'] as num?)?.toInt() ?? 0,
       expiresAt: _date(j['expiresAt']),

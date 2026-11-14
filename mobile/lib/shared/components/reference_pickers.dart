@@ -267,3 +267,79 @@ String occupationCategoryLabel(AppLocalizations l, String c) => switch (c) {
 
 /// Display label for a stored occupation key (falls back to legacy free text).
 String occupationLabel(BuildContext context, String keyOrText) => occupationByKey(keyOrText)?.label(langOf(context)) ?? keyOrText;
+
+/// Optional height (cm) and weight (kg), side by side. "—" keeps it private.
+class BodyMetricsFields extends StatelessWidget {
+  const BodyMetricsFields({super.key, required this.heightCm, required this.weightKg, required this.onHeight, required this.onWeight});
+  final int? heightCm;
+  final int? weightKg;
+  final ValueChanged<int?> onHeight;
+  final ValueChanged<int?> onWeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    Widget field(String label, int? value, List<int> range, String unit, ValueChanged<int?> onChanged) => Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: context.type.inputLabel),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<int?>(
+              value: value,
+              isExpanded: true,
+              items: [
+                DropdownMenuItem<int?>(value: null, child: Text(l.preferNotToSay)),
+                for (final v in range) DropdownMenuItem<int?>(value: v, child: Text('$v $unit', textDirection: TextDirection.ltr)),
+              ],
+              onChanged: onChanged,
+            ),
+          ]),
+        );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        field(l.height, heightCm, [for (var v = 140; v <= 220; v++) v], l.cm, onHeight),
+        const SizedBox(width: 12),
+        field(l.weight, weightKg, [for (var v = 40; v <= 160; v++) v], l.kg, onWeight),
+      ]),
+    );
+  }
+}
+
+/// A filter range with an "any" switch (height or weight).
+class RangeFilter extends StatelessWidget {
+  const RangeFilter({super.key, required this.label, required this.unit, required this.min, required this.max, required this.value, required this.onChanged, this.defaultRange});
+  final String label;
+  final String unit;
+  final int min;
+  final int max;
+  final (int, int)? value;
+  final (int, int)? defaultRange;
+  final ValueChanged<(int, int)?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final on = value != null;
+    final v = value ?? defaultRange ?? (min, max);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text(label, style: context.type.inputLabel)),
+          Text(on ? '${v.$1}–${v.$2} $unit' : l.any, textDirection: TextDirection.ltr, style: context.type.bodySmall.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(width: 8),
+          Switch(value: on, onChanged: (x) => onChanged(x ? v : null)),
+        ]),
+        if (on)
+          RangeSlider(
+            values: RangeValues(v.$1.toDouble(), v.$2.toDouble()),
+            min: min.toDouble(),
+            max: max.toDouble(),
+            divisions: max - min,
+            labels: RangeLabels('${v.$1}', '${v.$2}'),
+            onChanged: (r) => onChanged((r.start.round(), r.end.round())),
+          ),
+      ]),
+    );
+  }
+}

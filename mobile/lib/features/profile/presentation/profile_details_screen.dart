@@ -146,6 +146,8 @@ class _DetailsState extends ConsumerState<_Details> {
                       (l.maritalStatus, l.maritalLabel(p.maritalStatus)),
                       (l.education, l.educationLabel(p.education)),
                       (l.occupation, occupationLabel(context, p.occupation)),
+                      if (p.heightCm != null) (l.height, '${p.heightCm} ${l.cm}'),
+                      if (p.weightKg != null) (l.weight, '${p.weightKg} ${l.kg}'),
                       if (p.nationality != null) (l.nationality, nationalityByIso(p.nationality)?.label(langOf(context), female: p.gender == Gender.female) ?? p.nationality!),
                       (l.marriageTimeline, l.timelineLabel(p.timeline)),
                     ]),

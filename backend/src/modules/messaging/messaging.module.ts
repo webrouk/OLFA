@@ -153,7 +153,7 @@ export class MessagingService {
         match: { select: { userAId: true, endedAt: true, endedBy: true, userA: { include: profileInclude }, userB: { include: profileInclude } } },
         consultation: { select: { id: true, status: true, scheduledAt: true, clientId: true, counselor: { select: { userId: true, displayName: true, kind: true } } } },
         members: { where: { userId }, select: { lastReadAt: true } },
-        messages: { where: { deletedAt: null }, orderBy: { createdAt: 'desc' }, take: 1, select: { body: true, senderId: true, createdAt: true } },
+        messages: { where: { deletedAt: null }, orderBy: { createdAt: 'desc' }, take: 1, select: { body: true, type: true, senderId: true, createdAt: true } },
       },
     });
     const byId = new Map(convs.map((c) => [c.id, c]));

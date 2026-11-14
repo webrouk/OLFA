@@ -30,6 +30,8 @@ class ApiDiscoveryRepository implements DiscoveryRepository {
           if (f.nationality != null) 'nationality': f.nationality,
           'sort': 'nearest',
           if (f.minCompatibility != null) 'minCompatibility': f.minCompatibility,
+          if (f.height != null) ...{'heightMin': f.height!.$1, 'heightMax': f.height!.$2},
+          if (f.weight != null) ...{'weightMin': f.weight!.$1, 'weightMax': f.weight!.$2},
         };
         final r = await _api.dio.get<Map<String, dynamic>>('/discovery', queryParameters: q);
         final list = (r.data!['items'] as List).map((j) => ApiMappers.profile(Map<String, dynamic>.from(j as Map))).toList();

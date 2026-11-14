@@ -625,101 +625,269 @@ class _CounselorApplyScreenState extends ConsumerState<CounselorApplyScreen> {
   }
 }
 
-/// C6 — Counselor desk: paid requests to confirm (opens the chat — the
-/// counselor may write first), decline (full refund) or complete; prices.
-class CounselorDeskScreen extends ConsumerWidget {
+/// C6 — Counselor desk: at-a-glance numbers, then Requests (paid, waiting
+/// for you), Upcoming (confirmed — open the chat; you may write first) and
+/// Completed; plus your profile status and prices.
+class CounselorDeskScreen extends ConsumerStatefulWidget {
   const CounselorDeskScreen({super.key});
+  @override
+  ConsumerState<CounselorDeskScreen> createState() => _CounselorDeskScreenState();
+}
 
-  Future<void> _act(BuildContext context, WidgetRef ref, Future<void> Function() op) async {
+enum _DeskTab { requests, upcoming, completed }
+
+class _CounselorDeskScreenState extends ConsumerState<CounselorDeskScreen> {
+  _DeskTab _tab = _DeskTab.requests;
+
+  Future<void> _act(Future<void> Function() op) async {
     try {
       await op();
-      ref.invalidate(counselorDeskProvider);
-      ref.invalidate(conversationIndexProvider);
+      ref
+        ..invalidate(counselorDeskProvider)
+        ..invalidate(conversationIndexProvider);
     } on Failure catch (e) {
-      if (context.mounted) showToast(context, failureMessage(context, e));
+      if (mounted) showToast(context, failureMessage(context, e));
     }
   }
 
+  Future<void> _confirm(Consultation k) async {
+    final now = DateTime.now();
+    final d = await showDatePicker(context: context, firstDate: now, lastDate: now.add(const Duration(days: 60)), initialDate: now.add(const Duration(days: 1)));
+    if (d == null || !mounted) return;
+    final tm = await showTimePicker(context: context, initialTime: const TimeOfDay(hour: 19, minute: 0));
+    if (tm == null || !mounted) return;
+    String? conv;
+    await _act(() async => conv = await ref.read(consultationsRepositoryProvider).confirm(k.id, DateTime(d.year, d.month, d.day, tm.hour, tm.minute)));
+    if (conv != null && mounted) context.push(Routes.chatWith(conv!));
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final t = context.type;
-    final repo = ref.read(consultationsRepositoryProvider);
     final me = ref.watch(myCounselorProvider).valueOrNull;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l.screenCounselorDesk),
-        actions: [OlfaIconButton(icon: Icons.sell_outlined, tooltip: l.myPrices, onPressed: () => showOfferingSheet(context, ref, me)), const SizedBox(width: 6)],
-      ),
+      appBar: AppBar(title: Text(l.screenCounselorDesk)),
       body: AsyncView<List<Consultation>>(
         value: ref.watch(counselorDeskProvider),
         onRetry: () => ref.invalidate(counselorDeskProvider),
         data: (list) {
-          final incoming = list.where((k) => k.status == ConsultationStatus.paid).toList();
-          final confirmed = list.where((k) => k.status == ConsultationStatus.confirmed).toList();
-          Widget card(Consultation k) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: OlfaCard(
-                  padding: const EdgeInsets.all(14),
+          final requests = list.where((k) => k.status == ConsultationStatus.paid).toList();
+          final upcoming = list.where((k) => k.status == ConsultationStatus.confirmed).toList()
+            ..sort((a, b) => (a.scheduledAt ?? a.createdAt).compareTo(b.scheduledAt ?? b.createdAt));
+          final done = list.where((k) => k.status == ConsultationStatus.completed).toList();
+          final now = DateTime.now();
+          final monthDone = done.where((k) => k.createdAt.year == now.year && k.createdAt.month == now.month).toList();
+          final currency = list.isEmpty ? 'AED' : list.first.currency;
+          final monthValue = monthDone.where((k) => k.currency == currency).fold<int>(0, (a, k) => a + k.priceMinor);
+          final shown = switch (_tab) { _DeskTab.requests => requests, _DeskTab.upcoming => upcoming, _DeskTab.completed => done };
+          return RefreshIndicator(
+            color: OlfaColors.primary,
+            onRefresh: () => ref.refresh(counselorDeskProvider.future),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
+              children: [
+                // profile header
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(color: OlfaColors.black, borderRadius: OlfaRadius.all(OlfaRadius.card)),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Row(children: [
+                      const CounselorAvatar(size: 48),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(k.clientName ?? '', style: t.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
-                          Text('${serviceLabel(l, k.service)} · ${l.minutesShort(k.durationMinutes)} · ${languageName(context, k.language)}', style: t.caption),
+                          Text(me?.name ?? '', style: t.h3.copyWith(color: OlfaColors.white), overflow: TextOverflow.ellipsis),
+                          Text(me == null ? '' : kindLabel(l, me.kind), style: t.caption.copyWith(color: OlfaColors.white.withValues(alpha: 0.7))),
                         ]),
                       ),
-                      Text(money(context, k.priceMinor, k.currency), style: t.bodyMedium.copyWith(fontWeight: FontWeight.w700)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(color: OlfaColors.primary, borderRadius: OlfaRadius.all(12)),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.circle, size: 8, color: OlfaColors.white),
+                          const SizedBox(width: 6),
+                          Text(l.counselorLive, style: t.caption.copyWith(color: OlfaColors.white, fontWeight: FontWeight.w700)),
+                        ]),
+                      ),
                     ]),
-                    if (k.note != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('“${k.note}”', style: t.bodySmall)),
-                    if (k.scheduledAt != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(DateFormat.yMMMEd(langOf(context)).add_Hm().format(k.scheduledAt!), style: t.caption)),
-                    const SizedBox(height: 10),
-                    Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-                      if (k.status == ConsultationStatus.paid) ...[
-                        TextButton(
-                          onPressed: () async {
-                            final ok = await showConfirmation(context, title: l.declineBooking, body: l.declineBookingBody, confirmLabel: l.declineBooking, destructive: true);
-                            if (ok && context.mounted) await _act(context, ref, () => repo.decline(k.id));
-                          },
-                          child: Text(l.declineBooking),
-                        ),
-                        const SizedBox(width: 8),
-                        PrimaryButton(
-                          label: l.confirmBooking,
-                          expand: false,
-                          onPressed: () async {
-                            final now = DateTime.now();
-                            final d = await showDatePicker(context: context, firstDate: now, lastDate: now.add(const Duration(days: 60)), initialDate: now.add(const Duration(days: 1)));
-                            if (d == null || !context.mounted) return;
-                            final tm = await showTimePicker(context: context, initialTime: const TimeOfDay(hour: 19, minute: 0));
-                            if (tm == null || !context.mounted) return;
-                            final at = DateTime(d.year, d.month, d.day, tm.hour, tm.minute);
-                            String? conv;
-                            await _act(context, ref, () async => conv = await repo.confirm(k.id, at));
-                            if (conv != null && context.mounted) context.push(Routes.chatWith(conv!));
-                          },
-                        ),
-                      ] else ...[
-                        TextButton(onPressed: () => _act(context, ref, () => repo.complete(k.id)), child: Text(l.markCompleted)),
-                        const SizedBox(width: 8),
-                        if (k.conversationId != null) PrimaryButton(label: l.openChat, icon: Icons.chat_bubble_outline_rounded, expand: false, onPressed: () => context.push(Routes.chatWith(k.conversationId!))),
-                      ],
+                    const SizedBox(height: 16),
+                    Row(children: [
+                      _DeskStat(value: '${requests.length}', label: l.incomingRequests, highlight: requests.isNotEmpty),
+                      _DeskStat(value: '${upcoming.length}', label: l.upcomingSessions),
+                      _DeskStat(value: me == null || me.ratingCount == 0 ? '—' : me.ratingAvg.toStringAsFixed(1), label: l.rating),
+                      _DeskStat(value: monthValue == 0 ? '—' : money(context, monthValue, currency), label: l.thisMonth),
                     ]),
                   ]),
                 ),
-              );
-          return ListView(padding: const EdgeInsets.fromLTRB(20, 4, 20, 28), children: [
-            if ((me?.offerings ?? const []).isEmpty) ...[
-              InfoBanner(text: l.addPricesFirst, accent: true, trailing: TextButton(onPressed: () => showOfferingSheet(context, ref, me), child: Text(l.add))),
-              const SizedBox(height: 8),
-            ],
-            SectionLabel('${l.incomingRequests} · ${incoming.length}', top: 8),
-            if (incoming.isEmpty) Text(l.noIncoming, style: t.bodySmall.copyWith(color: OlfaColors.textMuted)),
-            for (final k in incoming) card(k),
-            SectionLabel('${l.confirmedSessions} · ${confirmed.length}'),
-            for (final k in confirmed) card(k),
-          ]);
+                const SizedBox(height: 12),
+                if ((me?.offerings ?? const []).isEmpty)
+                  InfoBanner(text: l.addPricesFirst, accent: true, trailing: TextButton(onPressed: () => showOfferingSheet(context, ref, me), child: Text(l.add)))
+                else
+                  _PricesStrip(counselor: me!, onEdit: () => showOfferingSheet(context, ref, me)),
+                const SizedBox(height: 16),
+                SegmentedButton<_DeskTab>(
+                  showSelectedIcon: false,
+                  segments: [
+                    ButtonSegment(value: _DeskTab.requests, label: Text('${l.deskRequests} ${requests.isEmpty ? '' : '· ${requests.length}'}')),
+                    ButtonSegment(value: _DeskTab.upcoming, label: Text(l.deskUpcoming)),
+                    ButtonSegment(value: _DeskTab.completed, label: Text(l.deskCompleted)),
+                  ],
+                  selected: {_tab},
+                  onSelectionChanged: (v) => setState(() => _tab = v.first),
+                ),
+                const SizedBox(height: 14),
+                if (shown.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 28),
+                    child: Column(children: [
+                      Icon(_tab == _DeskTab.requests ? Icons.inbox_outlined : Icons.event_available_outlined, size: 40, color: OlfaColors.textMuted),
+                      const SizedBox(height: 8),
+                      Text(switch (_tab) { _DeskTab.requests => l.noIncoming, _DeskTab.upcoming => l.noUpcoming, _DeskTab.completed => l.noCompleted }, style: t.bodyMedium.copyWith(color: OlfaColors.textMuted)),
+                    ]),
+                  ),
+                for (final k in shown)
+                  _DeskCard(
+                    k: k,
+                    onConfirm: () => _confirm(k),
+                    onDecline: () async {
+                      final ok = await showConfirmation(context, title: l.declineBooking, body: l.declineBookingBody, confirmLabel: l.declineBooking, destructive: true);
+                      if (ok) await _act(() => ref.read(consultationsRepositoryProvider).decline(k.id));
+                    },
+                    onComplete: () => _act(() => ref.read(consultationsRepositoryProvider).complete(k.id)),
+                  ),
+                const SizedBox(height: 8),
+                Text(l.deskFootnote, style: t.caption),
+              ],
+            ),
+          );
         },
+      ),
+    );
+  }
+}
+
+class _DeskStat extends StatelessWidget {
+  const _DeskStat({required this.value, required this.label, this.highlight = false});
+  final String value;
+  final String label;
+  final bool highlight;
+  @override
+  Widget build(BuildContext context) => Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(value, style: context.type.h2.copyWith(color: highlight ? OlfaColors.white : OlfaColors.white.withValues(alpha: 0.92))),
+          ),
+          Text(label, maxLines: 2, style: context.type.caption.copyWith(color: OlfaColors.white.withValues(alpha: 0.65))),
+        ]),
+      );
+}
+
+class _PricesStrip extends StatelessWidget {
+  const _PricesStrip({required this.counselor, required this.onEdit});
+  final Counselor counselor;
+  final VoidCallback onEdit;
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return OlfaCard(
+      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+      child: Row(children: [
+        const Icon(Icons.sell_outlined, color: OlfaColors.primary, size: 20),
+        const SizedBox(width: 10),
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              for (final o in counselor.offerings)
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(end: 6),
+                  child: OlfaTag('${serviceLabel(l, o.service)} · ${l.minutesShort(o.durationMinutes)} · ${money(context, o.priceMinor, o.currency)}'),
+                ),
+            ]),
+          ),
+        ),
+        TextButton(onPressed: onEdit, child: Text(l.edit)),
+      ]),
+    );
+  }
+}
+
+class _DeskCard extends StatelessWidget {
+  const _DeskCard({required this.k, required this.onConfirm, required this.onDecline, required this.onComplete});
+  final Consultation k;
+  final VoidCallback onConfirm;
+  final VoidCallback onDecline;
+  final VoidCallback onComplete;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final t = context.type;
+    final initials = (k.clientName ?? '?').trim().split(RegExp(r'\s+')).take(2).map((w) => w.isEmpty ? '' : w.characters.first).join();
+    final when = k.scheduledAt ?? k.createdAt;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: OlfaCard(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+              width: 42,
+              height: 42,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: OlfaColors.primaryTint(), shape: BoxShape.circle),
+              child: Text(initials, style: t.bodyMedium.copyWith(color: OlfaColors.primary, fontWeight: FontWeight.w700)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(k.clientName ?? '', style: t.bodyMedium.copyWith(fontWeight: FontWeight.w700)),
+                Text('${serviceLabel(l, k.service)} · ${l.minutesShort(k.durationMinutes)} · ${languageName(context, k.language)}', style: t.caption),
+              ]),
+            ),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text(money(context, k.priceMinor, k.currency), style: t.bodyMedium.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              StatusPill(k.status),
+            ]),
+          ]),
+          const SizedBox(height: 10),
+          Row(children: [
+            Icon(k.scheduledAt != null ? Icons.event_rounded : Icons.payments_outlined, size: 16, color: OlfaColors.primary),
+            const SizedBox(width: 6),
+            Text(
+              k.scheduledAt != null ? DateFormat.yMMMEd(langOf(context)).add_Hm().format(when) : '${l.paidOn} ${DateFormat.MMMd(langOf(context)).add_Hm().format(when)}',
+              style: t.bodySmall,
+            ),
+          ]),
+          if (k.note != null && k.note!.isNotEmpty)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(top: 10),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: OlfaColors.gray, borderRadius: OlfaRadius.all(12)),
+              child: Text(k.note!, style: t.bodySmall),
+            ),
+          const SizedBox(height: 12),
+          if (k.status == ConsultationStatus.paid)
+            Row(children: [
+              Expanded(child: SecondaryButton(label: l.declineBooking, onPressed: onDecline)),
+              const SizedBox(width: 10),
+              Expanded(child: PrimaryButton(label: l.confirmAndSchedule, icon: Icons.event_available_rounded, onPressed: onConfirm)),
+            ])
+          else if (k.status == ConsultationStatus.confirmed)
+            Row(children: [
+              Expanded(child: SecondaryButton(label: l.markCompleted, onPressed: onComplete)),
+              const SizedBox(width: 10),
+              if (k.conversationId != null)
+                Expanded(child: PrimaryButton(label: l.openChat, icon: Icons.chat_bubble_outline_rounded, onPressed: () => context.push(Routes.chatWith(k.conversationId!)))),
+            ])
+          else if (k.conversationId != null)
+            Align(alignment: AlignmentDirectional.centerEnd, child: TextButton(onPressed: () => context.push(Routes.chatWith(k.conversationId!)), child: Text(l.openChat))),
+        ]),
       ),
     );
   }

@@ -13,6 +13,8 @@ class ProfileDraft {
     this.maritalStatus,
     this.education,
     this.occupation = '',
+    this.heightCm,
+    this.weightKg,
     this.timeline,
     this.bio = '',
     this.interests = const {},
@@ -43,6 +45,8 @@ class ProfileDraft {
   final MaritalStatus? maritalStatus;
   final Education? education;
   final String occupation;
+  final int? heightCm;
+  final int? weightKg;
   final MarriageTimeline? timeline;
   final String bio;
   final Set<String> interests;
@@ -73,6 +77,8 @@ class ProfileDraft {
     MaritalStatus? maritalStatus,
     Education? education,
     String? occupation,
+    int? Function()? heightCm,
+    int? Function()? weightKg,
     MarriageTimeline? timeline,
     String? bio,
     Set<String>? interests,
@@ -97,6 +103,8 @@ class ProfileDraft {
         maritalStatus: maritalStatus ?? this.maritalStatus,
         education: education ?? this.education,
         occupation: occupation ?? this.occupation,
+        heightCm: heightCm != null ? heightCm() : this.heightCm,
+        weightKg: weightKg != null ? weightKg() : this.weightKg,
         timeline: timeline ?? this.timeline,
         bio: bio ?? this.bio,
         interests: interests ?? this.interests,
@@ -121,6 +129,8 @@ class ProfileDraft {
         maritalStatus: p.maritalStatus,
         education: p.education,
         occupation: p.occupation,
+        heightCm: p.heightCm,
+        weightKg: p.weightKg,
         timeline: p.timeline,
         bio: p.bio,
         interests: p.interests.toSet(),

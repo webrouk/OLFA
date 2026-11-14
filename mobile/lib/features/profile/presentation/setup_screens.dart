@@ -151,6 +151,12 @@ class _ProfileInfoScreenState extends ConsumerState<ProfileInfoScreen> {
         ),
         const SizedBox(height: 18),
         OccupationField(label: l.occupation, value: d.occupation.isEmpty ? null : d.occupation, error: e('job'), onChanged: (v) => ctrl.update((x) => x.copyWith(occupation: v ?? ''))),
+        BodyMetricsFields(
+          heightCm: d.heightCm,
+          weightKg: d.weightKg,
+          onHeight: (v) => ctrl.update((x) => x.copyWith(heightCm: () => v)),
+          onWeight: (v) => ctrl.update((x) => x.copyWith(weightKg: () => v)),
+        ),
         Text(l.marriageTimeline, style: context.type.inputLabel),
         const SizedBox(height: 8),
         ChoiceWrap<MarriageTimeline>(options: MarriageTimeline.values, label: l.timelineLabel, isSelected: (t) => d.timeline == t, onTap: (t) => ctrl.update((x) => x.copyWith(timeline: t))),

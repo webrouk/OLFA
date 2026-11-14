@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +14,7 @@ import '../../../core/widgets/olfa_widgets.dart';
 import '../../../shared/components/labels.dart';
 import '../../../shared/models/models.dart';
 import '../../settings/presentation/report_sheet.dart';
+import '../application/chat_controller.dart';
 import '../data/messaging_repository_impl.dart';
 import '../../../shared/components/verification_ticks.dart';
 
@@ -25,7 +28,22 @@ class ConversationsScreen extends ConsumerStatefulWidget {
 }
 
 class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
-  String _q = '';
+  final _search = TextEditingController();
+  String _q = ''; // debounced query sent to the server
+  Timer? _debounce;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _search.dispose();
+    super.dispose();
+  }
+
+  void _onSearch(String v) {
+    setState(() {}); // local name filter updates on every keystroke
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), () => setState(() => _q = v.trim()));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,8 +61,23 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
             child: Row(children: [
               Expanded(
                 child: TextField(
-                  onChanged: (v) => setState(() => _q = v.trim()),
-                  decoration: InputDecoration(hintText: l.searchConversations, prefixIcon: const Icon(Icons.search_rounded)),
+                  controller: _search,
+                  onChanged: _onSearch,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: l.searchNamesMessages,
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    suffixIcon: _search.text.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: l.clear,
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () {
+                              _search.clear();
+                              _onSearch('');
+                            },
+                          ),
+                  ),
                 ),
               ),
               const SizedBox(width: 6),
@@ -70,7 +103,9 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
                 final consult = ix.section(ConversationSection.consultation);
                 final inbox = ix.section(ConversationSection.inbox);
                 final locked = ix.lockedIn(ConversationSection.inbox);
-                final shown = [...consult, ...inbox].where((c) => _q.isEmpty || c.title.toLowerCase().contains(_q.toLowerCase())).toList();
+                final typed = _search.text.trim();
+                if (typed.length >= 2) return _SearchResults(query: _q.isEmpty ? typed : _q, index: ix);
+                final shown = [...consult, ...inbox];
                 if (consult.isEmpty && inbox.isEmpty && locked.isEmpty) {
                   return EmptyState(
                     icon: Icons.chat_bubble_outline_rounded,
@@ -87,7 +122,7 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
                     children: [
                       _PlanMeter(index: ix),
                       for (final c in shown) ConversationTile(conversation: c),
-                      if (locked.isNotEmpty && _q.isEmpty) ...[
+                      if (locked.isNotEmpty) ...[
                         Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: SectionLabel(l.lockedConversationsTitle)),
                         for (final _ in locked.take(4)) const LockedConversationTile(),
                         Padding(
@@ -264,7 +299,11 @@ class ConversationTile extends ConsumerWidget {
           RematchStatus.declined => l.rematchDeclined,
           _ => (c.unmatchedByMe ?? false) ? l.unmatchedByYou : l.unmatchedByThem(c.title),
         },
-      _ => c.lastMessage ?? (c.isConsultation ? l.consultationChatNote : l.saySalam),
+      _ => switch (c.lastMessageKind) {
+          MessageKind.voice => '🎙 ${l.voiceMessageShort}',
+          MessageKind.image when (c.lastMessage ?? '').isEmpty => '📷 ${l.photoMessageShort}',
+          _ => c.lastMessage ?? (c.isConsultation ? l.consultationChatNote : l.saySalam),
+        },
     };
     return InkWell(
       onTap: () => context.push(Routes.chatWith(c.id)),
@@ -447,4 +486,89 @@ class OfflineBar extends StatelessWidget {
           Expanded(child: Text(text, style: context.type.bodySmall.copyWith(color: OlfaColors.white))),
         ]),
       );
+}
+
+/// Instant results while typing: conversations whose name matches (searched
+/// locally and on the server) and messages whose text matches (server, all
+/// unlocked conversations, including archived ones).
+class _SearchResults extends ConsumerWidget {
+  const _SearchResults({required this.query, required this.index});
+  final String query;
+  final ConversationIndex index;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
+    final t = context.type;
+    final res = ref.watch(chatSearchProvider(query));
+    final q = query.toLowerCase();
+    final byId = {for (final c in index.visible) c.id: c};
+    final serverNames = res.valueOrNull?.conversationIds ?? const <String>[];
+    final names = <Conversation>[
+      ...index.visible.where((c) => c.title.toLowerCase().contains(q)),
+      ...serverNames.map((id) => byId[id]).whereType<Conversation>().where((c) => !c.title.toLowerCase().contains(q)),
+    ];
+    final messages = res.valueOrNull?.messages ?? const <ChatMessage>[];
+    return ListView(
+      padding: EdgeInsets.only(bottom: OlfaSize.navBarClearance(context)),
+      children: [
+        if (res.isLoading) const LinearProgressIndicator(minHeight: 2, color: OlfaColors.primary, backgroundColor: OlfaColors.gray),
+        if (names.isNotEmpty) ...[
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: SectionLabel(l.searchPeople, top: 8)),
+          for (final c in names) ConversationTile(conversation: c),
+        ],
+        if (messages.isNotEmpty) ...[
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: SectionLabel(l.searchMessages)),
+          for (final m in messages)
+            InkWell(
+              onTap: () => context.push(Routes.chatWith(m.conversationId)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Icon(Icons.chat_bubble_outline_rounded, size: 20, color: OlfaColors.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        Expanded(child: Text(byId[m.conversationId]?.title ?? '', style: t.bodyMedium.copyWith(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                        Text(shortTime(context, m.sentAt), style: t.caption),
+                      ]),
+                      const SizedBox(height: 2),
+                      _Highlighted(text: (m.fromMe ? '${l.you}: ' : '') + m.body, query: query),
+                    ]),
+                  ),
+                ]),
+              ),
+            ),
+        ],
+        if (!res.isLoading && names.isEmpty && messages.isEmpty)
+          Padding(padding: const EdgeInsets.all(32), child: Text(l.noResultsFor(query), textAlign: TextAlign.center, style: t.bodyMedium.copyWith(color: OlfaColors.textMuted))),
+      ],
+    );
+  }
+}
+
+/// The matching part of a message preview in bold burgundy.
+class _Highlighted extends StatelessWidget {
+  const _Highlighted({required this.text, required this.query});
+  final String text;
+  final String query;
+  @override
+  Widget build(BuildContext context) {
+    final base = context.type.bodySmall.copyWith(color: OlfaColors.textMuted);
+    final i = text.toLowerCase().indexOf(query.toLowerCase());
+    if (i < 0 || query.isEmpty) return Text(text, maxLines: 2, overflow: TextOverflow.ellipsis, style: base);
+    // keep the match visible in long messages
+    final start = i > 40 ? i - 30 : 0;
+    final pre = (start > 0 ? '…' : '') + text.substring(start, i);
+    return Text.rich(
+      TextSpan(style: base, children: [
+        TextSpan(text: pre),
+        TextSpan(text: text.substring(i, i + query.length), style: const TextStyle(color: OlfaColors.primary, fontWeight: FontWeight.w700)),
+        TextSpan(text: text.substring(i + query.length)),
+      ]),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
 }

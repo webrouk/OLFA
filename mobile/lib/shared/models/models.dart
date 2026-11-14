@@ -91,6 +91,8 @@ class UserProfile {
     this.nationality,
     this.distanceKm,
     this.photosBlurred = false,
+    this.heightCm,
+    this.weightKg,
     this.underReview = false,
   });
 
@@ -99,6 +101,10 @@ class UserProfile {
 
   /// The owner shows photos only after a match (server sends blurred copies).
   final bool photosBlurred;
+
+  /// Optional; shown on the profile and usable as filters.
+  final int? heightCm;
+  final int? weightKg;
 
   /// ISO code of the nationality (independent of the residence country).
   final String? nationality;
@@ -270,7 +276,13 @@ class DiscoverFilters {
     this.educations = const {},
     this.profession = '',
     this.minCompatibility,
+    this.height,
+    this.weight,
   });
+
+  /// Inclusive ranges; null = any. Members who left the value empty are not shown when a range is set.
+  final (int, int)? height; // cm
+  final (int, int)? weight; // kg
 
   final int ageMin;
   final int ageMax;
@@ -305,6 +317,8 @@ class DiscoverFilters {
     Set<Education>? educations,
     String? profession,
     int? Function()? minCompatibility,
+    (int, int)? Function()? height,
+    (int, int)? Function()? weight,
   }) =>
       DiscoverFilters(
         scope: scope ?? this.scope,
@@ -318,6 +332,8 @@ class DiscoverFilters {
         educations: educations ?? this.educations,
         profession: profession ?? this.profession,
         minCompatibility: minCompatibility != null ? minCompatibility() : this.minCompatibility,
+        height: height != null ? height() : this.height,
+        weight: weight != null ? weight() : this.weight,
       );
 
   Map<String, dynamic> toQuery() => {
@@ -368,6 +384,22 @@ class MatchItem {
 
 enum MessageStatus { sending, sent, delivered, read, failed }
 
+enum MessageKind { text, image, voice }
+
+/// A photo or voice note. [url] is short-lived and signed (private storage);
+/// [localPath] is set while the sender's copy is still uploading.
+class ChatAttachment {
+  const ChatAttachment({required this.kind, this.id, this.url, this.localPath, this.width, this.height, this.durationMs, this.waveform = const []});
+  final MessageKind kind;
+  final String? id;
+  final String? url;
+  final String? localPath;
+  final int? width;
+  final int? height;
+  final int? durationMs;
+  final List<int> waveform; // 0–100 peaks for the voice bubble
+}
+
 class ChatMessage {
   const ChatMessage({
     required this.id,
@@ -377,16 +409,24 @@ class ChatMessage {
     required this.body,
     required this.sentAt,
     required this.status,
+    this.kind = MessageKind.text,
+    this.attachments = const [],
+    this.containsPhone = false,
   });
   final String id;
   final String clientId; // idempotency key
   final String conversationId;
   final bool fromMe;
-  final String body;
+  final String body; // text, or the caption of photos
   final DateTime sentAt;
   final MessageStatus status;
+  final MessageKind kind;
+  final List<ChatAttachment> attachments;
 
-  ChatMessage copyWith({String? id, MessageStatus? status}) => ChatMessage(
+  /// Set by the server when the text looks like a phone number — both people see a safety note.
+  final bool containsPhone;
+
+  ChatMessage copyWith({String? id, MessageStatus? status, List<ChatAttachment>? attachments}) => ChatMessage(
         id: id ?? this.id,
         clientId: clientId,
         conversationId: conversationId,
@@ -394,7 +434,45 @@ class ChatMessage {
         body: body,
         sentAt: sentAt,
         status: status ?? this.status,
+        kind: kind,
+        attachments: attachments ?? this.attachments,
+        containsPhone: containsPhone,
       );
+}
+
+/// What the composer hands to the repository: text, up to 3 photos, or one voice note.
+class OutgoingMedia {
+  const OutgoingMedia.photos(this.files) : voice = null;
+  const OutgoingMedia.voice(VoiceClip this.voice) : files = const [];
+  final List<PreparedPhoto> files;
+  final VoiceClip? voice;
+  bool get isVoice => voice != null;
+}
+
+/// A photo already compressed on the device (≤ 2048 px, high-quality JPEG).
+class PreparedPhoto {
+  const PreparedPhoto({required this.path, required this.bytes, required this.width, required this.height});
+  final String path;
+  final List<int> bytes;
+  final int width;
+  final int height;
+}
+
+/// A recorded voice note (AAC-LC, 48 kHz mono, ≤ 60 s).
+class VoiceClip {
+  const VoiceClip({required this.path, required this.bytes, required this.durationMs, required this.waveform});
+  final String path;
+  final List<int> bytes;
+  final int durationMs;
+  final List<int> waveform;
+}
+
+/// Result of the messages search field: matching names and matching messages.
+class ChatSearchResult {
+  const ChatSearchResult({required this.conversationIds, required this.messages});
+  final List<String> conversationIds;
+  final List<ChatMessage> messages;
+  static const empty = ChatSearchResult(conversationIds: [], messages: []);
 }
 
 /// Where a conversation is listed. Inbox and archive share the plan's
@@ -426,6 +504,7 @@ class Conversation {
     this.counselor,
     this.section = ConversationSection.inbox,
     this.lastMessage,
+    this.lastMessageKind = MessageKind.text,
     this.lastAt,
     this.unread = 0,
     this.expiresAt,
@@ -440,6 +519,7 @@ class Conversation {
   final CounselorChatInfo? counselor;
   final ConversationSection section;
   final String? lastMessage;
+  final MessageKind lastMessageKind;
   final DateTime? lastAt;
   final int unread;
 
@@ -605,26 +685,52 @@ class BookingIntent {
   final String? clientSecret;
 }
 
-enum NotificationKind { match, like, verification, message, reminder }
+enum NotificationKind { match, like, compliment, message, verification, consultation, rematch, chatExpiring, account, reminder }
 
 class AppNotification {
-  const AppNotification({required this.id, required this.kind, required this.title, required this.createdAt, this.read = false});
+  const AppNotification({required this.id, required this.kind, required this.title, required this.createdAt, this.body, this.data = const {}, this.read = false});
   final String id;
   final NotificationKind kind;
-  final String title; // rendered server-side in the user's locale
+  final String title; // localised from the server's key
+  final String? body;
+  final Map<String, String> data; // conversationId, consultationId, fromUserId…
   final DateTime createdAt;
   final bool read;
+
+  AppNotification copyWith({bool? read}) => AppNotification(id: id, kind: kind, title: title, body: body, data: data, createdAt: createdAt, read: read ?? this.read);
 }
 
-enum PaymentStatus { succeeded, refunded, failed }
+enum PaymentStatus { pending, succeeded, refunded, failed }
 
+enum PaymentKind { subscription, consultation }
+
+/// One row of GET /me/payments: a store subscription charge or a consultation payment.
 class PaymentRecord {
-  const PaymentRecord({required this.id, required this.plan, required this.store, required this.date, required this.status, this.amountLabel});
+  const PaymentRecord({
+    required this.id,
+    required this.plan,
+    required this.store,
+    required this.date,
+    required this.status,
+    this.kind = PaymentKind.subscription,
+    this.amountMinor,
+    this.currency,
+    this.reference,
+    this.refundedAt,
+    this.description,
+    this.amountLabel,
+  });
   final String id;
   final PlanCode plan;
-  final String store;
+  final String store; // App Store · Google Play · Card (web)
   final DateTime date;
   final PaymentStatus status;
+  final PaymentKind kind;
+  final int? amountMinor; // integer minor units
+  final String? currency;
+  final String? reference; // short receipt reference for support
+  final DateTime? refundedAt;
+  final String? description; // consultation: counselor · service
   final String? amountLabel;
 }
 

@@ -10,6 +10,7 @@ import '../../../core/widgets/olfa_widgets.dart';
 import '../../../shared/models/models.dart';
 import '../../subscriptions/application/entitlements_controller.dart';
 import '../data/matching_repository_impl.dart';
+import '../../../core/sound/sound_service.dart';
 
 /// Full-screen "It's a match" moment with a calm scale-in animation.
 Future<void> showMatchDialog(BuildContext context, WidgetRef ref, MatchItem match) {
@@ -36,6 +37,13 @@ class _MatchView extends ConsumerStatefulWidget {
 
 class _MatchViewState extends ConsumerState<_MatchView> {
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // the warm "it's a match" chime
+    WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(soundServiceProvider).play(OlfaSound.match));
+  }
 
   Future<void> _startChat() async {
     if (_busy) return;
