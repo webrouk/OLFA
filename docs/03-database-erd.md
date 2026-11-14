@@ -501,3 +501,13 @@ erDiagram
   support_tickets ||--o{ ticket_messages : "ticket_id"
 ```
 
+
+## November 2026 additions
+
+- `user_privacy_settings` (1:1 users) — visibility, incognito, online/read-receipt flags; `olfa_reset_lapsed_privacy()` turns Premium-only options off when the plan lapses.
+- `users.frozen_at`, `users.freeze_reason` — frozen accounts are excluded by `olfa_candidate_ok()` and cannot be liked.
+- `likes.compliment` + notification `NEW_COMPLIMENT`.
+- `message_attachments` (N:1 messages) — `kind IMAGE|VOICE`, `position 0–2`, `duration_ms ≤ 60000`, `status pending|ready`; guarded by `olfa_attachment_guard`; deleted objects queue into `storage_garbage` via `olfa_attachment_gc`.
+- `messages.type` (`TEXT|IMAGE|VOICE`), `messages.contains_phone`; trigram indexes `messages_body_trgm_idx`, `user_profiles_name_trgm_idx`.
+- `user_profiles.height_cm` (120–230), `user_profiles.weight_kg` (35–250).
+- Scale: `cube` + `earthdistance` + `btree_gist`; GiST KNN indexes `user_profiles_knn_idx` and `user_profiles_country_knn_idx`. Tested at 200k users: discovery 40–125 ms (`backend/test/db/scale_test.sh`).

@@ -567,7 +567,7 @@ const bar=(title,{back=true,right='',line=false}={})=>`<div class="bar ${line?'l
 const progress=(n,tot=4)=>`<div class="pad" style="display:flex;align-items:center;gap:12px;margin:4px 0 20px"><div class="progress"><i style="width:${n/tot*100}%"></i></div><span class="cap ltr">${n}/${tot}</span></div>`;
 const chk=(on,label,act)=>`<button class="check ${on?'on':''}" data-act="${act}"><span class="bx">${on?I('check',14,3):''}</span><span>${label}</span></button>`;
 const tg=(on,act)=>`<button class="tg ${on?'on':''}" data-act="${act}" aria-pressed="${on}"></button>`;
-const row=(ic,t1,t2='',{go='',act='',right=null,danger=false,p=false}={})=>`<button class="row ${danger?'danger':''}" ${go?`data-go="${go}"`:''} ${act?`data-act="${act}"`:''}><span class="ico ${p||danger?'p':''}">${Ix(ic,20)}</span><span class="tx"><div class="t1">${t1}</div>${t2?`<div class="t2">${t2}</div>`:''}</span>${right!==null?right:`<span class="chev">${Ix('fwd',18)}</span>`}</button>`;
+const row=(ic,t1,t2='',{go='',act='',right=null,danger=false,p=false}={})=>{const tag=right&&right.includes('<button')?'div':'button';return `<${tag} class="row ${danger?'danger':''}" ${go?`data-go="${go}"`:''} ${act?`data-act="${act}"`:''}><span class="ico ${p||danger?'p':''}">${Ix(ic,20)}</span><span class="tx"><div class="t1">${t1}</div>${t2?`<div class="t2">${t2}</div>`:''}</span>${right!==null?right:`<span class="chev">${Ix('fwd',18)}</span>`}</${tag}>`};
 const chipSel=(list,sel,act,multi)=>`<div class="chips">${list.map(([k,l])=>`<button class="chip ${(multi?sel.includes(k):sel===k)?'on':''}" data-act="${act}" data-a="${k}">${l}</button>`).join('')}</div>`;
 const vb=(s=20)=>`<span class="vbadge" style="width:${s}px;height:${s}px" title="${t('photosReviewed')}">${I('check',s*.6,3)}</span>`;
 const fmtN=n=>new Intl.NumberFormat(S.lang==='ar'?'ar-AE-u-nu-latn':'en-US').format(n);
@@ -822,7 +822,7 @@ function admin(live){const d=ADEV[S.adev];const narrow=d.W<1000;
 /* ═══════════ CHROME + RENDER ═══════════ */
 const $=s=>document.querySelector(s);
 function chrome(){
- $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.3</small></span></div>
+ $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.4</small></span></div>
  <div class="seg"><button class="${S.mode==='app'?'on':''}" data-ui="mode" data-a="app">${t('vApp')}</button><button class="${S.mode==='admin'?'on':''}" data-ui="mode" data-a="admin">${t('vAdmin')}</button></div>
  ${S.mode==='app'?`<div class="seg"><button class="${S.view==='one'?'on':''}" data-ui="view" data-a="one">${t('vOne')}</button><button class="${S.view==='all'?'on':''}" data-ui="view" data-a="all">${t('vAll')}</button></div>`:''}
  <div class="seg"><button class="${S.lang==='ar'?'on':''}" data-ui="lang" data-a="ar">ع RTL</button><button class="${S.lang==='en'?'on':''}" data-ui="lang" data-a="en">EN LTR</button></div>
@@ -1238,6 +1238,324 @@ const _goGender=ACT.gender;ACT.gender=a=>{_goGender(a);S.convs=null};
 ASEC.splice(4,0,['cns','badge'],['cons','counsel']);
 AS.cns=()=>`<div class="pnl">${tbl([t('user'),t('kind'),t('lic'),t('languages'),t('services'),t('appliedOn'),t('actions')],[[1,'family','DHA-88213','ar,en','MARITAL,PREMARITAL'],[2,'psych','SCFHS-4471','ar','INDIVIDUAL'],[3,'family','MOH-2210','ar,fr','PARENTING']].map(([i,k,lic,ls,sv])=>`<tr><td><div class="uc">${av(null,34)}<b>${AR()?['د. منى الكعبي','أ. فهد العتيبي','د. ليلى بنسعيد'][i-1]:['Dr. Mona Al Kaabi','Fahad Al Otaibi','Dr. Laila Bensaid'][i-1]}</b></div></td><td>${kindL(k)}</td><td class="ltr" style="text-align:start">${lic}</td><td>${ls.split(',').map(l=>t('l_'+l)).join('، ')}</td><td>${sv.split(',').map(s=>`<span class="tag">${t('sv_'+s)}</span>`).join(' ')}</td><td class="ltr" style="text-align:start">1${i}/11/2026</td><td><div style="display:flex;gap:6px"><button class="btn sm">${t('approve')}</button><button class="btn sm out">${t('reject')}</button></div></td></tr>`))}</div>`;
 AS.cons=()=>`<div class="kpis">${[['k8','counsel',318],['st_paid','card',12],['st_done','check',276],['k10','chart','—']].map(([l,ic,v])=>`<div class="kpi"><small>${I(ic,15)}${t(l)}</small><b>${typeof v==='number'?fmtN(v):v}</b></div>`).join('')}</div><div class="pnl">${tbl(['#',t('user'),t('s_counselor'),t('svcType'),t('duration'),t('amount'),t('status')],[['C-1042','b1','conf'],['C-1041','b2','done'],['C-1039','b3','paid']].map(([n,b,st],i)=>`<tr><td class="ltr">${n}</td><td>${AR()?['م. ع.','ن. س.','ر. ح.'][i]:['M. A.','N. S.','R. H.'][i]}</td><td>${AR()?COUNSELORS[i].ar:COUNSELORS[i].en}</td><td>${t('sv_'+COUNSELORS[i].svcs[0])}</td><td>60 ${t('min')}</td><td class="ltr" style="text-align:start">${money(280)}</td><td><span class="tag ${st==='conf'?'p':''}">${stL(st)}</span></td></tr>`))}</div>`;
+
+/* ═══════════ v0.4 EXTENSION — chat photos/voice/phone safety/report, instant search, privacy (server rules), devices, blocked, freeze, legal, compliments, two ticks, likes/matches, height & weight, notifications + sounds, onboarding, payments, counselor desk ═══════════ */
+Object.assign(P,{
+ mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+ play:'<path fill="currentColor" stroke="none" d="M8 5.5v13a1 1 0 0 0 1.5.9l10.4-6.5a1 1 0 0 0 0-1.8L9.5 4.6A1 1 0 0 0 8 5.5Z"/>',
+ pause:'<rect x="6.5" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="13.5" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/>',
+ copy:'<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+ devices:'<rect x="3" y="5" width="13" height="10" rx="2"/><path d="M7 19h5"/><rect x="17" y="8" width="5" height="12" rx="1.5"/>',
+ snow:'<path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9.5 4.5 12 7l2.5-2.5M9.5 19.5 12 17l2.5 2.5"/>',
+ ruler:'<path d="m4 15 11-11 5 5-11 11Z"/><path d="m8 11 2 2M11 8l2 2M14 5l2 2"/>',
+ receipt:'<path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z"/><path d="M9 8h6M9 12h6"/>',
+ compl:'<path d="M20 11.5a8 8 0 0 1-11.6 7.1L4 20l1.4-4.1A8 8 0 1 1 20 11.5Z"/><path fill="currentColor" stroke="none" d="M12 15.2 9 12.4a1.9 1.9 0 0 1 3-2.3 1.9 1.9 0 0 1 3 2.3Z"/>',
+ vol:'<path d="M4 9v6h4l5 4V5L8 9Z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>',
+ tick2:'<path d="m3.5 12.5 4 4 8-9M12.5 16.5l1 1 7-9"/>'
+});
+
+/* ── i18n ── */
+Object.assign(T.ar,{s_devices:'الأجهزة المتصلة',s_blocked:'المستخدمون المحظورون',s_terms:'شروط الاستخدام',s_privpol:'سياسة الخصوصية',s_frozen:'الحساب مجمّد',g7:'الحساب والقانونية',
+ addPhotos:'إضافة صور',addCaption:'أضف تعليقًا…',photos3:'حتى 3 صور في الرسالة',recording:'جارٍ التسجيل',voiceLeft:'{n} رسائل صوتية متبقية في هذه المحادثة',voiceUnl:'رسائل صوتية بلا حدود',
+ voiceLimT:'وصلت إلى حد الرسائل الصوتية',voiceLimD:'خطتك تتيح {n} رسائل صوتية لكل محادثة. بلس 30 وبريميوم بلا حدود.',photoMsg:'صورة',voiceMsg:'رسالة صوتية',
+ phoneT:'مشاركة رقم هاتف؟',phoneD:'حرصًا على سلامتك، لا تشارك بيانات التواصل إلا بعد أن تتعرّف على هذا الشخص جيدًا. لا ترسل أموالًا أو مستندات شخصية أبدًا.',sendAnyway:'إرسال على أي حال',
+ phoneSent:'شاركت رقم هاتف. تأكد أنك تعرف هذا الشخص جيدًا قبل التواصل خارج ألفة.',phoneGot:'تحتوي هذه الرسالة على رقم هاتف. تعرّف على هذا الشخص جيدًا قبل التواصل خارج ألفة، وأبلغ عن أي أمر مريب.',
+ copy:'نسخ',copied:'تم النسخ',reportMsg:'الإبلاغ عن هذه الرسالة',reportMsgT:'الإبلاغ عن رسالة',reportMsgD:'سيطّلع فريقنا على هذه الرسالة، ولن يعرف الطرف الآخر من أبلغ عنها.',rmOff:'رسالة مسيئة أو غير لائقة',rmScam:'احتيال أو طلب أموال',rmSex:'محتوى جنسي',rmOther:'سبب آخر',sendReport:'إرسال البلاغ',reportedT:'تم إرسال البلاغ — شكرًا لك',
+ searchNM:'ابحث بالاسم أو نص الرسالة',sConvs:'المحادثات',sMsgs:'الرسائل',noRes:'لا نتائج لـ «{q}»',you:'أنت',
+ privServer:'تُطبَّق هذه الإعدادات من الخادم على كل من يراك.',showDisc:'الظهور في الاستكشاف',showDiscD:'عند الإيقاف لن يظهر ملفك لأحد، وتستمر محادثاتك الحالية',visV:'ملفك ظاهر لمن يناسبك',visH:'ملفك مخفي من الاستكشاف',visI:'تصفح خفي — يراك فقط من أعجبتَ بهم',
+ onlineD:'متبادل: إذا أخفيت حالتك لن ترى حالة الآخرين',readD:'متبادلة: إذا أوقفتها لن ترى إشعارات قراءة الآخرين',blurD:'تظهر صورك مموّهة حتى يحدث التوافق',incD:'يراك فقط من أعجبتَ بهم',
+ devicesT:'الأجهزة المتصلة',thisDev:'هذا الجهاز',lastAct:'آخر نشاط',signOutDev:'تسجيل الخروج',devNote:'جلسة واحدة لكل جهاز. سجّل الخروج من أي جهاز لا تعرفه.',devOut:'تم تسجيل الخروج من الجهاز',
+ blockedT:'المستخدمون المحظورون',blockedNote:'لا يستطيع المحظور رؤيتك أو الإعجاب بك أو مراسلتك.',unblock:'إلغاء الحظر',blockedOn:'حُظر في {d}',unblocked:'تم إلغاء الحظر',noBlocked:'لا يوجد مستخدمون محظورون',
+ freezeT:'خذ استراحة بدلًا من الحذف',freezeD:'جمّد حسابك مؤقتًا: يُخفى ملفك عن الجميع، وتبقى بياناتك وتوافقاتك ومحادثاتك كما هي، ويظل اشتراكك ساريًا. عُد متى شئت بتسجيل الدخول.',freezeBtn:'تجميد الحساب مؤقتًا',orDelete:'أو احذف حسابك نهائيًا',
+ frozenT:'حسابك مجمّد',frozenD:'ملفك مخفي عن الجميع. بياناتك ومحادثاتك واشتراكك محفوظة كما هي.',reactivate:'إعادة تفعيل الحساب',reactivated:'مرحبًا بعودتك — حسابك نشط',subKeeps:'اشتراكك يظل ساريًا ويتجدد من متجر التطبيقات ما لم تلغه.',
+ legalUpd:'آخر تحديث: نوفمبر 2026 · الإصدار 2026-11',
+ compl:'رسالة إطراء',complD:'تصل مع إعجابك وتظهر أولًا لدى الطرف الآخر مع اسمك.',complPh:'اكتب إطراءً لطيفًا ومحترمًا…',complLeft:'{n} متبقية هذا الشهر',complSend:'إرسال الإطراء مع الإعجاب',complSent:'تم إرسال الإطراء',complQuota:'المجاني 3 · بلس 10 · بريميوم 20 شهريًا',
+ tickPhoto:'صورة موثّقة',tickData:'بيانات موثّقة',newReview:'حساب جديد · قيد المراجعة',height:'الطول',weight:'الوزن',cm:'سم',kg:'كجم',any:'أي',
+ complFirst:'رسائل الإطراء',likeBack:'إعجاب',passL:'تجاوز',likesAll:'الكل',likesNear:'الأقرب',likesNew:'الأحدث',
+ mAll:'الكل',mNew:'جديدة',mChat:'لم تبدأ بعد',searchM:'ابحث في توافقاتك',paused:'في استراحة',
+ nAll:'الكل',nUnread:'غير مقروءة',nPeople:'الإعجابات والتوافقات',nMsgs:'الرسائل',nCons:'الاستشارات',nAcc:'الحساب',yesterday:'أمس',thisWeek:'هذا الأسبوع',swipeRm:'اسحب الإشعار لإزالته',sounds:'أصوات التطبيق',soundsD:'نغمة مميزة للرسائل وأخرى للإشعارات',playMsg:'نغمة الرسائل',playNotif:'نغمة الإشعارات',playMatch:'نغمة التوافق',
+ nc1:'رسالة إطراء من نور',nc1b:'«ابتسامتك جميلة وكلامك عن التطوع أعجبني»',nc2:'توافق جديد مع سارة',nc2b:'أعجب كلٌّ منكما بالآخر — ابدأ المحادثة',nc3:'لديك 3 إعجابات جديدة',nc3b:'اطّلع على من أعجب بك',nc4:'محادثة ستُحذف قريبًا',nc4b:'أرسل رسالة لتبقى المحادثة',nc5:'تم اعتماد ملفك وصورك',nc5b:'ملفك ظاهر الآن لمن يناسبك',nc6:'تم تأكيد استشارتك',nc6b:'يمكنك الآن التحدث مع الاستشاري',nc7:'أكمل ملفك',nc7b:'أضف الطول والاهتمامات وصورة ثالثة',
+ ob4t:'إرشاد عندما تحتاجه',ob4d:'استشاريون أسريون وأخصائيون نفسيون مرخّصون بلغتك — محادثة خاصة ودفع آمن.',pr1:'أعضاء جادّون بهدف الزواج',pr2:'رقم موثّق وحساب واحد',pr3:'ظهور متبادل فقط',pr4:'الأقرب أولًا',pr5:'مراجعة كل ملف',pr6:'توثيق الصورة والبيانات',pr7:'استشاريون مرخّصون',pr8:'خصوصية من الأساس',agreeC:'بالمتابعة فإنك توافق على',and:'و',
+ curPlan:'خطتك الحالية',subsT:'الاشتراكات',consT:'الاستشارات',receipt:'الإيصال',ref:'المرجع',paidVia:'طريقة الدفع',payFoot:'تتجدد اشتراكات المتجر تلقائيًا حتى تلغيها من حساب المتجر. لا نطّلع على رقم بطاقتك كاملًا.',
+ dReq:'الطلبات',dUp:'القادمة',dDone:'المكتملة',dRating:'التقييم',dMonth:'هذا الشهر',dLive:'منشور',dPrices:'أسعاري',confSched:'تأكيد وتحديد الموعد',dFoot:'التأكيد يفتح محادثة خاصة ويمكنك البدء بالكتابة. الاعتذار يعيد للعميل المبلغ كاملًا.'});
+Object.assign(T.en,{s_devices:'Signed-in devices',s_blocked:'Blocked users',s_terms:'Terms of Use',s_privpol:'Privacy Policy',s_frozen:'Account frozen',g7:'Account & legal',
+ addPhotos:'Add photos',addCaption:'Add a caption…',photos3:'Up to 3 photos per message',recording:'Recording',voiceLeft:'{n} voice messages left in this chat',voiceUnl:'Unlimited voice messages',
+ voiceLimT:'Voice message limit reached',voiceLimD:'Your plan includes {n} voice messages per conversation. Plus gives 30, Premium is unlimited.',photoMsg:'Photo',voiceMsg:'Voice message',
+ phoneT:'Sharing a phone number?',phoneD:'For your safety, share contact details only after you have got to know this person well. Never send money or personal documents.',sendAnyway:'Send anyway',
+ phoneSent:'You shared a phone number. Make sure you know this person well before continuing outside OLFA.',phoneGot:'This message contains a phone number. Get to know this person well before contacting them outside OLFA, and report anything suspicious.',
+ copy:'Copy',copied:'Copied',reportMsg:'Report this message',reportMsgT:'Report message',reportMsgD:'Our team will see this message. The other person won’t know who reported it.',rmOff:'Offensive or inappropriate',rmScam:'Scam or asking for money',rmSex:'Sexual content',rmOther:'Something else',sendReport:'Send report',reportedT:'Report sent — thank you',
+ searchNM:'Search names or messages',sConvs:'Conversations',sMsgs:'Messages',noRes:'No results for “{q}”',you:'You',
+ privServer:'These settings are enforced by the server for everyone who sees you.',showDisc:'Show me in discovery',showDiscD:'When off, nobody finds you; existing chats continue',visV:'Your profile is visible to compatible people',visH:'Your profile is hidden from discovery',visI:'Incognito — only people you liked can see you',
+ onlineD:'Reciprocal: hide yours and you won’t see others’',readD:'Reciprocal: turn off and you won’t see others’ read receipts',blurD:'Photos stay blurred until you match',incD:'Only people you liked can see you',
+ devicesT:'Signed-in devices',thisDev:'This device',lastAct:'Last active',signOutDev:'Sign out',devNote:'One session per device. Sign out any device you don’t recognise.',devOut:'Signed out of the device',
+ blockedT:'Blocked users',blockedNote:'Blocked people can’t see, like or message you.',unblock:'Unblock',blockedOn:'Blocked on {d}',unblocked:'Unblocked',noBlocked:'No blocked users',
+ freezeT:'Take a break instead of deleting',freezeD:'Freeze your account: your profile is hidden from everyone, your data, matches and chats stay exactly as they are, and your subscription stays active. Come back any time by signing in.',freezeBtn:'Freeze my account',orDelete:'Or delete permanently',
+ frozenT:'Your account is frozen',frozenD:'Your profile is hidden from everyone. Your data, chats and subscription are kept as they are.',reactivate:'Reactivate account',reactivated:'Welcome back — your account is active',subKeeps:'Your subscription stays active and renews through the store unless you cancel it.',
+ legalUpd:'Last updated: November 2026 · Version 2026-11',
+ compl:'Compliment',complD:'Sent with your like and shown first to the other person, with your name.',complPh:'Write a kind, respectful compliment…',complLeft:'{n} left this month',complSend:'Send compliment with like',complSent:'Compliment sent',complQuota:'Free 3 · Plus 10 · Premium 20 per month',
+ tickPhoto:'Photo verified',tickData:'Details verified',newReview:'New account · under review',height:'Height',weight:'Weight',cm:'cm',kg:'kg',any:'Any',
+ complFirst:'Compliments',likeBack:'Like',passL:'Pass',likesAll:'All',likesNear:'Nearest',likesNew:'Newest',
+ mAll:'All',mNew:'New',mChat:'Not started',searchM:'Search your matches',paused:'Taking a break',
+ nAll:'All',nUnread:'Unread',nPeople:'Likes & matches',nMsgs:'Messages',nCons:'Consultations',nAcc:'Account',yesterday:'Yesterday',thisWeek:'This week',swipeRm:'Swipe a notification to remove it',sounds:'In-app sounds',soundsD:'A distinct tone for messages and another for notifications',playMsg:'Message tone',playNotif:'Notification tone',playMatch:'Match tone',
+ nc1:'A compliment from Nour',nc1b:'“Lovely smile — I liked what you wrote about volunteering”',nc2:'New match with Sara',nc2b:'You both liked each other — say hello',nc3:'You have 3 new likes',nc3b:'See who liked you',nc4:'A chat expires soon',nc4b:'Send a message to keep it',nc5:'Your profile and photos were approved',nc5b:'Your profile is now live',nc6:'Consultation confirmed',nc6b:'You can now chat with your counselor',nc7:'Complete your profile',nc7b:'Add your height, interests and a third photo',
+ ob4t:'Guidance when you need it',ob4d:'Licensed family counselors and psychologists in your language — private chat, secure payment.',pr1:'Marriage-minded members',pr2:'One verified phone, one account',pr3:'Shown only when it’s mutual',pr4:'Nearest first',pr5:'Every profile reviewed',pr6:'Photo + details verified',pr7:'Licensed counselors',pr8:'Private by design',agreeC:'By continuing you agree to the',and:'and',
+ curPlan:'Current plan',subsT:'Subscriptions',consT:'Consultations',receipt:'Receipt',ref:'Reference',paidVia:'Paid via',payFoot:'Store subscriptions renew automatically until cancelled in your store account. We never see your full card number.',
+ dReq:'Requests',dUp:'Upcoming',dDone:'Completed',dRating:'Rating',dMonth:'This month',dLive:'Live',dPrices:'My prices',confSched:'Confirm & schedule',dFoot:'Confirming opens a private chat — you can write first. Declining refunds the client in full.'});
+
+/* ── state ── */
+S.chat.push({s:'th',k:'img',n:2,tm:'9:16'},{s:'th',k:'voice',d:18,tm:'9:17'},{s:'me',x:'تشرفت، هذا رقمي 050 123 4567',xe:'Nice — here is my number 050 123 4567',tm:'9:19',r:true,phone:true});
+Object.assign(S,{att:0,rec:false,recS:0,voiceUsed:3,q:'',msgSel:null,rmSel:null,priv2:{disc:true},devs:[{id:'s1',os:'ios',nm:'iPhone 15 Pro',cur:true,last:0},{id:'s2',os:'and',nm:'Galaxy Tab S9',cur:false,last:3}],
+ blocked:[{id:7,d:'02/11/2026'},{id:3,d:'28/10/2026'}],frozen:false,complUsed:1,complTo:null,likesTab:'all',mTab:'all',nTab:'all',nGone:[],nRead:[],sounds:true,payTab:'all',payOpen:null,deskTab:'req',heightCm:178,weightKg:76,fH:null,fW:null,sending:null});
+const VOICE_LIM=()=>({free:10,plus:30,premium:Infinity})[S.userPlan];
+const COMPL_LIM=()=>({free:3,plus:10,premium:20})[S.userPlan];
+const PHONE_RE=/(?:\+|00)?\(?[0-9٠-٩](?:[\s\-.()]{0,2}[0-9٠-٩]){7,14}/;
+const hasPhone=s=>{const m=(s||'').match(PHONE_RE);if(!m)return false;const d=m[0].replace(/[^0-9٠-٩]/g,'');return d.length>=8&&!/^(\d)\1+$/.test(d)};
+const HW={1:[165,58],2:[160,55],3:[158,52],4:[167,60],5:[180,78],6:[176,74],7:[183,85],8:[174,70]};
+PEOPLE.forEach(p=>{[p.h,p.w]=HW[p.id];p.dv=p.id%3!==0;p.isNew=p.id===4||p.id===8});
+
+/* ── shared UI bits ── */
+const css4=`<style>
+.ticks{display:inline-flex;gap:3px;vertical-align:middle}.ticks i{width:var(--s);height:var(--s);border-radius:50%;display:grid;place-items:center;color:#fff;font-style:normal}.ticks .a{background:var(--p)}.ticks .b{background:var(--k)}
+.newrev{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:12px;background:var(--k);color:var(--w)}
+.pgrid{display:grid;gap:3px;border-radius:16px;overflow:hidden;width:220px}.pgrid.n2,.pgrid.n3{grid-template-columns:1fr 1fr}.pgrid.n3 .pi:first-child{grid-column:1/-1;aspect-ratio:2/1}.pgrid .pi{background:var(--g);aspect-ratio:1/1;display:grid;place-items:center;color:var(--k40)}.pgrid.n1 .pi{aspect-ratio:4/3}
+.vbub{display:flex;align-items:center;gap:8px;min-width:210px}.vbub .pl{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;border:0;background:currentColor;flex:none}.vbub .pl svg{color:var(--w)}.bub.me .vbub .pl svg{color:var(--p)}.bub.me .vbub .pl{background:var(--w)}
+.wave{display:flex;align-items:center;gap:2px;height:26px;flex:1}.wave i{width:3px;border-radius:2px;background:currentColor;opacity:.4}.wave i.on{opacity:1}
+.pnote{display:flex;gap:7px;align-items:flex-start;max-width:80%;margin:4px 0 6px;padding:8px 10px;border-radius:12px;background:var(--p8);font-size:12px;line-height:1.5}.pnote.me{margin-inline-start:auto}
+.cmp2{display:flex;align-items:flex-end;gap:6px;padding:8px 10px;border-top:1px solid var(--g);background:var(--w)}.cmp2 input{flex:1;height:46px;border-radius:23px;border:0;background:var(--g);padding:0 16px;font:inherit}
+.cmp2 .rb{width:46px;height:46px;border-radius:50%;border:0;display:grid;place-items:center;position:relative;flex:none}.cmp2 .rb.f{background:var(--p);color:var(--w)}.cmp2 .rb.g{background:none;color:var(--k)}
+.cmp2 .vc{position:absolute;top:-4px;inset-inline-end:-4px;background:var(--k);color:#fff;font:700 10px Montserrat,sans-serif;border-radius:9px;padding:1px 5px;border:1.5px solid #fff}
+.tray{display:flex;gap:8px;padding:8px 12px 0;align-items:center}.tray .t{width:64px;height:64px;border-radius:12px;background:var(--g);position:relative;display:grid;place-items:center;color:var(--k40)}.tray .t b{position:absolute;top:3px;inset-inline-end:3px;width:18px;height:18px;border-radius:50%;background:var(--k);color:#fff;display:grid;place-items:center;font-size:11px}
+.recbar{display:flex;align-items:center;gap:10px;flex:1;height:46px}.recbar .dot{width:10px;height:10px;border-radius:50%;background:var(--p);animation:pulse 1s infinite}@keyframes pulse{50%{opacity:.3}}.recbar .mtr{flex:1;height:5px;border-radius:3px;background:var(--g);overflow:hidden}.recbar .mtr i{display:block;height:100%;background:var(--p)}
+.msgmenu{display:flex;gap:6px;margin:2px 0 6px}.msgmenu button{border:1.5px solid var(--g);background:var(--w);border-radius:16px;padding:5px 10px;font-size:12px;display:inline-flex;gap:5px;align-items:center}
+.sres .hl{color:var(--p);font-weight:700}
+.ncard{display:flex;gap:12px;margin:3px 12px;padding:12px;border-radius:16px;border:1px solid var(--g);background:var(--w);text-align:start;width:calc(100% - 24px)}.ncard.u{background:var(--p8);border-color:rgba(139,13,43,.18)}.ncard .ni{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;flex:none;background:var(--g)}.ncard .ni.s{background:var(--p);color:#fff}.ncard.u .ni:not(.s){background:#fff;color:var(--p)}
+.hscroll{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:8px 16px}
+.obart{height:300px;border-radius:32px;position:relative;overflow:hidden;display:grid;place-items:center}.obseg{display:flex;gap:4px;flex:1}.obseg i{flex:1;height:4px;border-radius:2px;background:var(--g)}.obseg i.on{background:var(--p)}
+.proof{display:inline-flex;gap:6px;align-items:center;padding:7px 12px;border:1.5px solid var(--g);border-radius:20px;font-size:13px;font-weight:600}.proof svg{color:var(--p)}
+.deskhd{background:var(--k);color:#fff;border-radius:22px;padding:16px}.deskhd .st{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}.deskhd .st b{display:block;font:700 18px Montserrat,Tajawal,sans-serif}.deskhd .st small{opacity:.65;font-size:11px}
+.seg{display:flex;background:var(--g);border-radius:14px;padding:3px}.seg button{flex:1;border:0;background:none;height:38px;border-radius:11px;font:600 13px inherit}.seg button.on{background:#fff;color:var(--p)}
+.legal h3{font-size:15px;margin:18px 0 6px}.legal p{font-size:13.5px;line-height:1.75;color:var(--k);white-space:pre-line}
+</style>`;
+document.head.insertAdjacentHTML('beforeend',css4);
+const ticks=(p,s=16)=>`<span class="ticks" style="--s:${s}px" title="${t('tickPhoto')} · ${t('tickData')}">${p.v?`<i class="a" title="${t('tickPhoto')}">${I('check',s*.62,3)}</i>`:''}${p.dv?`<i class="b" title="${t('tickData')}">${I('check',s*.62,3)}</i>`:''}</span>`;
+const wave=(n,on=0)=>`<span class="wave">${Array.from({length:28},(_,i)=>`<i class="${i/28<on?'on':''}" style="height:${6+((i*37)%17)+((i*13)%9)}px"></i>`).join('')}</span>`;
+const pick=(a,b)=>AR()?a:b;
+
+/* ── 19. Chat: photos, voice, phone safety notes, message menu, new composer ── */
+const _chat4=SC.chat;
+const bubble=(m,i)=>{
+ if(m.s==='sys')return `<div class="sysm">${t('matchedOn')}</div>`;
+ const tick=m.s==='me'?(m.r?I('check',13,2.4)+'<span style="margin-inline-start:-9px">'+I('check',13,2.4)+'</span>':I('check',13,2.4)):'';
+ const meta=`<div class="mt ltr">${m.tm}${tick}</div>`;
+ const body=m.k==='img'?`<div class="pgrid n${m.n}">${Array.from({length:m.n},()=>`<span class="pi">${I('image',28)}</span>`).join('')}</div>${m.x?`<div style="margin-top:6px">${pick(m.x,m.xe||m.x)}</div>`:''}`
+  :m.k==='voice'?`<div class="vbub"><button class="pl" data-act="playVoice" data-a="${i}" aria-label="play">${I(S.playing===i?'pause':'play',16)}</button>${wave(28,S.playing===i?.45:0)}<span class="cap ltr" style="color:inherit">0:${String(m.d).padStart(2,'0')}</span></div>`
+  :pick(m.x,m.xe||m.x);
+ const menu=S.msgSel===i?`<div class="msgmenu" style="justify-content:${m.s==='me'?'flex-end':'flex-start'}">${m.x?`<button data-act="copyMsg">${I('copy',14)} ${t('copy')}</button>`:''}${m.s==='th'?`<button data-act="sheet" data-a="reportMsg" style="color:var(--p)">${I('flag',14)} ${t('reportMsg')}</button>`:''}</div>`:'';
+ const note=m.phone?`<div class="pnote ${m.s==='me'?'me':''}">${I('shield',15)}<span>${m.s==='me'?t('phoneSent'):t('phoneGot')}</span></div>`:'';
+ return `<div class="bub ${m.s}" data-act="msgSel" data-a="${i}" style="${m.k==='img'?'padding:4px 4px 6px':''}">${body}${meta}</div>${note}${menu}`};
+SC.chat=()=>{const c=convs().find(x=>x.id===S.cid)||convs()[0];let html=_chat4();
+ const a=html.indexOf('<div class="msgs" id="msgs"'),mb=/<\/div>\n <(form class="composer"|div class="cpanel")/.exec(html),b=mb?mb.index:-1;
+ if(a>-1&&b>-1){const open=html.slice(a,html.indexOf('>',a)+1);html=html.slice(0,a)+open+`<div class="sysm">${t('today')}</div>${S.chat.map(bubble).join('')}${S.typing?'<div class="typing"><i></i><i></i><i></i></div>':''}`+html.slice(b)}
+ const vl=VOICE_LIM(),left=vl===Infinity?null:Math.max(0,vl-S.voiceUsed);
+ const tray=S.att?`<div class="tray">${Array.from({length:S.att},(_,i)=>`<span class="t">${I('image',22)}<b data-act="rmAtt">×</b></span>`).join('')}<span class="cap" style="margin-inline-start:auto">${S.att}/3 · ${t('photos3')}</span></div>`:'';
+ const comp=S.rec?`<div class="cmp2"><button type="button" class="rb g" data-act="recCancel" aria-label="cancel">${I('trash',20)}</button><div class="recbar"><span class="dot"></span><b class="ltr">0:${String(S.recS).padStart(2,'0')}</b><span class="mtr"><i style="width:${S.recS/60*100}%"></i></span><span class="cap ltr">${60-S.recS}s</span></div><button type="button" class="rb f" data-act="recSend" aria-label="send">${Ix('send',20,2.2)}</button></div>`
+  :`${tray}<form class="composer cmp2" data-act="sendMsg"><button type="button" class="rb g" data-act="addPhoto" aria-label="${t('addPhotos')}">${I('image',22)}</button><input id="msgIn" placeholder="${S.att?t('addCaption'):t('msgPh')}" autocomplete="off" data-in="msg"><button type="submit" class="rb f" aria-label="send" ${S.att?'':'id="sendBtn" style="display:none"'}>${Ix('send',20,2.2)}</button>${S.att?'':`<button type="button" class="rb f" id="micBtn" data-act="recStart" aria-label="${t('voiceMsg')}">${I('mic',21)}${left!==null?`<span class="vc ltr">${left}</span>`:''}</button>`}</form>`;
+ html=html.replace(/<form class="composer"[\s\S]*?<\/form>/,comp);
+ return html};
+let recT=null;
+Object.assign(ACT,{
+ msgSel:a=>{S.msgSel=S.msgSel===+a?null:+a;render()},
+ copyMsg:()=>{S.msgSel=null;toast(t('copied'));render()},
+ playVoice:a=>{S.playing=S.playing===+a?null:+a;render();if(S.playing!==null)setTimeout(()=>{S.playing=null;if(S.screen==='chat')render()},2500)},
+ addPhoto:()=>{if(S.att>=3){toast(t('photos3'));return}S.att++;render()},rmAtt:()=>{S.att=Math.max(0,S.att-1);render()},
+ recStart:()=>{const vl=VOICE_LIM();if(vl!==Infinity&&S.voiceUsed>=vl){S.sheet='voiceLim';render();return}S.rec=true;S.recS=0;render();recT=setInterval(()=>{S.recS++;if(S.recS>=60){ACT.recSend();return}if(S.screen==='chat')render()},1000)},
+ recCancel:()=>{clearInterval(recT);S.rec=false;render()},
+ recSend:()=>{clearInterval(recT);const d=Math.max(1,S.recS);S.rec=false;S.voiceUsed++;S.chat.push({s:'me',k:'voice',d,tm:nowTm()});render()},
+ doReportMsg:()=>{S.sheet=null;S.msgSel=null;toast(t('reportedT'));render()},rmPick:a=>{S.rmSel=a;render()},
+ sendAnyway:()=>{S.sheet=null;const v=S.sending;S.sending=null;pushMine(v,true)}
+});
+const nowTm=()=>{const n=new Date();return n.getHours()+':'+String(n.getMinutes()).padStart(2,'0')};
+function pushMine(v,phone){const tm=nowTm();if(S.att){S.chat.push({s:'me',k:'img',n:S.att,x:v,xe:v,tm});S.att=0}else S.chat.push({s:'me',x:v,xe:v,tm,phone});S.typing=true;render();
+ setTimeout(()=>{S.chat[S.chat.length-1].r=true;S.typing=false;S.chat.push({s:'th',x:'جميل، يسعدني التعرف عليك أكثر 😊',xe:'Lovely, happy to get to know you more 😊',tm});if(S.screen==='chat')render()},1600)}
+const _send4=ACT.sendMsg;ACT.sendMsg=()=>{const c=convs().find(x=>x.id===S.cid);if(c&&c.state==='unmatched')return;const i=$('#msgIn');const v=i?i.value.trim():'';if(!v&&!S.att)return;if(c)c.idle=0;
+ if(hasPhone(v)){S.sending=v;S.sheet='phoneWarn';render();return}pushMine(v,false)};
+SHEETS.phoneWarn=()=>`<div style="width:56px;height:56px;border-radius:18px;background:var(--p8);color:var(--p);display:grid;place-items:center;margin-bottom:14px">${I('shield',26)}</div><div class="h2">${t('phoneT')}</div><p class="bs mut" style="margin:8px 0 18px">${t('phoneD')}</p><button class="btn" data-act="sendAnyway">${t('sendAnyway')}</button><button class="btn ghost" style="margin-top:6px" data-act="closeSheet">${t('cancel')}</button>`;
+SHEETS.voiceLim=()=>`<div style="width:56px;height:56px;border-radius:18px;background:var(--p8);color:var(--p);display:grid;place-items:center;margin-bottom:14px">${I('mic',26)}</div><div class="h2">${t('voiceLimT')}</div><p class="bs mut" style="margin:8px 0 18px">${tf('voiceLimD',{n:VOICE_LIM()})}</p><button class="btn" data-go="plans">${t('upgrade')}</button><button class="btn ghost" style="margin-top:6px" data-act="closeSheet">${t('cancel')}</button>`;
+SHEETS.reportMsg=()=>{const m=S.chat[S.msgSel]||{};return `<div class="h2">${t('reportMsgT')}</div><div class="banner" style="margin:12px 0 6px">${m.k==='voice'?t('voiceMsg'):m.k==='img'?t('photoMsg'):pick(m.x,m.xe||m.x)}</div><p class="cap" style="margin-bottom:12px">${t('reportMsgD')}</p>
+ <div class="list">${[['off','rmOff'],['scam','rmScam'],['sex','rmSex'],['other','rmOther']].map(([k,l])=>`<button class="row" data-act="rmPick" data-a="${k}"><span class="ico ${S.rmSel===k?'p':''}">${I(S.rmSel===k?'check':'flag',18)}</span><span class="tx"><div class="t1">${t(l)}</div></span></button>`).join('')}</div>
+ <button class="btn" style="margin-top:14px" data-act="doReportMsg" ${S.rmSel?'':'disabled'}>${t('sendReport')}</button>`};
+document.addEventListener('input',e=>{const el=e.target;if(el.dataset.in==='msg'){const s=$('#sendBtn'),m=$('#micBtn');if(s&&m){const has=!!el.value.trim();s.style.display=has?'':'none';m.style.display=has?'none':''}}});
+
+/* ── 18. Messages: instant search across names and message text ── */
+const _convs4=SC.convs;let _convRest='';
+const SEARCH_MSGS=[{c:0,ar:'نلتقي في المكتبة العامة يوم الجمعة؟',en:'Shall we meet at the public library on Friday?',tm:'9:30'},{c:1,ar:'أحب السفر إلى المدن القديمة',en:'I love travelling to old cities',tm:pick('أمس','Yesterday')},{c:0,ar:'شكرًا على الحديث اللطيف',en:'Thanks for the lovely chat',tm:'8:02'}];
+const hl=(s,q)=>{const i=s.toLowerCase().indexOf(q.toLowerCase());return i<0?s:`${s.slice(0,i)}<span class="hl">${s.slice(i,i+q.length)}</span>${s.slice(i+q.length)}`};
+const searchRes=()=>{const q=S.q.trim();if(q.length<2)return _convRest;const all=convs().filter(c=>c.state==='active'&&!isLocked(c));
+ const names=all.filter(c=>convName(c).toLowerCase().includes(q.toLowerCase()));
+ const msgs=SEARCH_MSGS.map(m=>({...m,txt:pick(m.ar,m.en),conv:all[m.c]})).filter(m=>m.conv&&m.txt.toLowerCase().includes(q.toLowerCase()));
+ return `<div class="sres">${names.length?`<div class="sec pad" style="margin-top:4px">${t('sConvs')}</div>${names.map(c=>convRow(c)).join('')}`:''}
+ ${msgs.length?`<div class="sec pad">${t('sMsgs')}</div>${msgs.map(m=>`<button class="crow" style="width:100%;border:0;background:none;text-align:start" data-act="openConv" data-a="${m.conv.id}"><span style="color:var(--p)">${I('chat',20)}</span><span style="flex:1;min-width:0"><div style="display:flex;gap:8px"><b style="flex:1">${convName(m.conv)}</b><span class="cap">${m.tm}</span></div><div class="bs mut" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${hl(m.txt,q)}</div></span></button>`).join('')}`:''}
+ ${!names.length&&!msgs.length?`<p class="bm mut" style="text-align:center;padding:40px 20px">${tf('noRes',{q})}</p>`:''}</div>`};
+SC.convs=()=>{let h=_convs4();const k='<div class="sec pad" style="margin-top:0">';const i=h.indexOf(k);if(i<0)return h;
+ _convRest=h.slice(i,h.lastIndexOf('</div>'));
+ h=h.replace(`<input class="inp" placeholder="${t('searchConv')}">`,`<input class="inp" data-in="q" value="${S.q.replace(/"/g,'&quot;')}" placeholder="${t('searchNM')}" autocomplete="off">`);
+ return h.slice(0,i)+`<div id="cres">${searchRes()}</div></div>`};
+document.addEventListener('input',e=>{const el=e.target;if(el.dataset.in==='q'){S.q=el.value;const b=$('#cres');if(b)b.innerHTML=searchRes()}});
+if(!ACT.openConv)ACT.openConv=a=>{S.cid=a;go('chat')};
+
+/* ── Discover: tap anywhere on the card opens the profile; compliment instead of "i" ── */
+const _disc4=SC.discover;
+SC.discover=()=>{const list=opp(),cur=list[S.deck];let h=_disc4();if(!cur)return h;
+ h=h.replace(`<button class="s" data-act="openDetail" data-a="${cur.id}" aria-label="view profile">${I('info',22)}</button>`,`<button class="s" data-act="compl" data-a="${cur.id}" aria-label="${t('compl')}" style="color:var(--p);position:relative">${I('compl',23)}<span style="position:absolute;top:-4px;inset-inline-end:-4px;background:var(--p);color:#fff;font:700 10px Montserrat,sans-serif;border-radius:9px;padding:1px 5px;border:1.5px solid #fff" class="ltr">${Math.max(0,COMPL_LIM()-S.complUsed)}</span></button>`);
+ const pTicks=p=>ticks(p,20)+(p.isNew?` <span class="newrev">${I('clock',12)} ${t('newReview')}</span>`:'');
+ list.forEach(p=>{h=h.split(`${pn(p)}<span class="age">${p.age}</span>${p.v?vb(22):''}`).join(`${pn(p)}<span class="age">${p.age}</span>${pTicks(p)}`)});
+ return h};
+const _swipe4=swipe;swipe=function(){_swipe4();const c=$('#topcard');if(!c)return;const d=c.onpointerdown,u=c.onpointerup;let sx=0,sy=0;
+ c.onpointerdown=e=>{sx=e.clientX;sy=e.clientY;d(e)};c.onpointerup=e=>{const tap=Math.abs(e.clientX-sx)<6&&Math.abs(e.clientY-sy)<6;u(e);if(tap)ACT.openDetail(c.dataset.pid)}};
+ACT.compl=a=>{S.complTo=+a;S.sheet='compl';render()};
+ACT.sendCompl=()=>{if(S.complUsed>=COMPL_LIM()){S.sheet=null;go('plans');return}S.complUsed++;S.sheet=null;toast(t('complSent'));doSwipe('like')};
+SHEETS.compl=()=>{const p=byId(S.complTo)||opp()[0];const left=Math.max(0,COMPL_LIM()-S.complUsed);return `<div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">${av(p,48)}<div><div class="h3">${t('compl')} · ${pn(p)}</div><div class="cap">${t('complD')}</div></div></div>
+ <textarea class="inp" maxlength="300" placeholder="${t('complPh')}" style="height:96px"></textarea><div style="display:flex;justify-content:space-between;margin:8px 0 14px" class="cap"><span>${tf('complLeft',{n:left})}</span><span>${t('complQuota')}</span></div>
+ <button class="btn" data-act="sendCompl">${left?`${I('compl',18)} ${t('complSend')}`:t('upgrade')}</button>`};
+
+/* ── 13. Profile details: two ticks, new-account badge, height & weight, compliment ── */
+const _det4=SC.details;
+SC.details=()=>{const p=byId(S.detail)||opp()[0];let h=_det4();
+ h=h.replace(`<span class="h1">${pn(p)}, <span style="font-weight:500">${p.age}</span></span>${p.v?vb(24):''}`,`<span class="h1">${pn(p)}, <span style="font-weight:500">${p.age}</span></span>${ticks(p,22)}`);
+ h=h.replace(`<div class="sec">${t('about')}</div>`,`${p.isNew?`<div class="banner" style="margin-top:12px">${I('clock',18)}<span>${t('newReview')}</span></div>`:''}<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><span class="tag">${I('ruler',13)} ${t('height')} <b class="ltr">${p.h} ${t('cm')}</b></span><span class="tag">${t('weight')} <b class="ltr">${p.w} ${t('kg')}</b></span><span class="tag">${I('check',12,2.6)} ${t('tickPhoto')}</span>${p.dv?`<span class="tag">${I('check',12,2.6)} ${t('tickData')}</span>`:''}</div><div class="sec">${t('about')}</div>`);
+ return h};
+
+/* ── 8 / 21. Profile info & edit: height and weight ── */
+const hwFields=()=>`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px"><label><div class="lbl">${t('height')}</div><select class="inp">${[0,...Array.from({length:81},(_,i)=>140+i)].map(v=>`<option ${v===S.heightCm?'selected':''}>${v?v+' '+t('cm'):'—'}</option>`).join('')}</select></label><label><div class="lbl">${t('weight')}</div><select class="inp">${[0,...Array.from({length:121},(_,i)=>40+i)].map(v=>`<option ${v===S.weightKg?'selected':''}>${v?v+' '+t('kg'):'—'}</option>`).join('')}</select></label></div>`;
+for(const k of ['info','edit']){const f=SC[k];SC[k]=()=>{const h=f();const i=h.lastIndexOf('<div class="fld"><label class="lbl">');return i<0?h:h.slice(0,i)+hwFields()+h.slice(i)}}
+
+/* ── 12. Filters: height & weight ranges (every plan) ── */
+const _srch4=SC.search;
+SC.search=()=>{const h=_srch4();const rng=(lbl,key,unit,def)=>{const v=S[key];return `<div style="margin:14px 0"><div style="display:flex;align-items:center;gap:8px"><div class="lbl" style="flex:1;margin:0">${lbl}</div><b class="bs ltr">${v?`${v[0]}–${v[1]} ${unit}`:t('any')}</b>${tg(!!v,'rng:'+key)}</div>${v?`<div class="stepper" style="margin-top:8px;display:flex;gap:8px;align-items:center"><button class="ib soft" data-act="rstep" data-a="${key}:0:-1">−</button><span class="ltr bs">${v[0]}</span><span style="flex:1;height:4px;border-radius:2px;background:var(--p)"></span><span class="ltr bs">${v[1]}</span><button class="ib soft" data-act="rstep" data-a="${key}:1:1">+</button></div>`:''}</div>`};
+ const add=`<div class="sec">${t('height')} · ${t('weight')}</div>`+rng(t('height'),'fH',t('cm'),[155,185])+rng(t('weight'),'fW',t('kg'),[50,90]);const i=h.lastIndexOf('</div><div class="foot sticky-foot">');return i<0?h:h.slice(0,i)+add+h.slice(i)};
+ACT.rng=a=>{S[a]=S[a]?null:(a==='fH'?[155,185]:[50,90]);render()};ACT.rstep=a=>{const[k,i,d]=a.split(':');S[k][+i]+= +d*(k==='fH'?1:1);render()};
+
+/* ── 15. Likes: compliments first, filters, like back / pass in place ── */
+SC.likes=()=>{const paid=S.userPlan!=='free';const L=opp();const comp=[{p:L[2]||L[0],ar:'ابتسامتك جميلة وكلامك عن التطوع أعجبني',en:'Lovely smile — I liked what you wrote about volunteering'}];
+ const rest=(S.likesTab==='near'?[...L].sort((a,b)=>a.km-b.km):L);
+ return `<div>${bar(t('likesT'),{back:false})}<div class="pad">
+ <div class="sec" style="margin-top:0;display:flex;gap:6px;align-items:center">${I('compl',16)} ${t('complFirst')}</div>
+ ${comp.map(c=>`<div class="list" style="padding:14px;display:flex;gap:12px;align-items:flex-start;border:1.5px solid var(--p)"><button style="border:0;background:none;padding:0" data-act="openDetail" data-a="${c.p.id}">${av(c.p,54)}</button><div style="flex:1"><div style="font-weight:700;display:flex;gap:6px;align-items:center">${pn(c.p)}, ${c.p.age} ${ticks(c.p,15)}</div><p class="bs" style="margin:4px 0 10px">«${pick(c.ar,c.en)}»</p><div style="display:flex;gap:8px"><button class="btn sm out" data-act="toast" data-a="${t('passL')}">${I('close',16)} ${t('passL')}</button><button class="btn sm" data-act="startConv">${I('heartf',16)} ${t('likeBack')}</button></div></div></div>`).join('')}
+ <div style="display:flex;align-items:center;gap:10px;margin:18px 0 10px"><p class="bm mut" style="flex:1;margin:0"><b class="ltr" style="color:var(--k)">12</b> ${t('likesD')}</p></div>
+ ${chipRow([['all',t('likesAll')],['near',t('likesNear')],['new',t('likesNew')]],S.likesTab,'likesTab')}
+ ${paid?'':`<div class="banner p" style="margin:12px 0;align-items:center">${I('eye',20)}<span style="flex:1"><b>${t('seeWho')}</b><br><span class="cap">${t('seeWhoD')}</span></span><button class="btn sm" data-go="plans">${t('upgrade')}</button></div>`}
+ <div class="g2" style="margin-top:12px">${rest.map(p=>`<div class="lcard ${paid?'':'blur'}" style="position:relative">${paid?`<button style="border:0;padding:0;background:none;display:block;width:100%" data-act="openDetail" data-a="${p.id}">${ph()}</button>`:`<button style="border:0;padding:0;background:none;display:block;width:100%" data-go="plans">${ph()}</button><span class="lock"><span>${I('lock',22)}</span></span>`}<span class="lb">${paid?`${pn(p)}, ${p.age} ${ticks(p,15)}`:`<span class="sk" style="height:12px;width:70%"></span>`}</span>${paid?`<span style="position:absolute;bottom:40px;inset-inline:8px;display:flex;justify-content:space-between"><button class="ib wh" data-act="toast" data-a="${t('passL')}" aria-label="${t('passL')}">${I('close',18)}</button><button class="ib" style="background:var(--p);color:#fff" data-act="startConv" aria-label="${t('likeBack')}">${I('heartf',18)}</button></span>`:''}</div>`).join('')}</div></div></div>`};
+ACT.likesTab=a=>{S.likesTab=a;render()};
+
+/* ── 16. Matches: search, tabs, paused state ── */
+const _match4=SC.matches;
+SC.matches=()=>{let h=_match4();
+ h=h.replace(`<div class="sec">${t('newM')}</div>`,`<div style="position:relative;margin:8px 0 4px"><span style="position:absolute;top:15px;inset-inline-start:14px;color:var(--k40)">${I('search',19)}</span><input class="inp" style="padding-inline-start:44px" placeholder="${t('searchM')}"></div>${chipRow([['all',t('mAll')],['new',t('mNew')],['chat',t('mChat')]],S.mTab,'mTab')}<div class="sec">${t('newM')}</div>`);
+ opp().slice(0,4).forEach((p,i)=>{h=h.replace(`${pn(p)}, ${p.age} ${p.v?vb(16):''}</div><div class="t2">`,`${pn(p)}, ${p.age} ${ticks(p,15)}</div><div class="t2">${i===3?`<span class="tag" style="margin-inline-end:6px">${I('snow',11)} ${t('paused')}</span>`:''}`)});
+ return h};
+ACT.mTab=a=>{S.mTab=a;render()};
+
+/* ── 24. Privacy: server-enforced, visibility card, devices & blocked pages ── */
+SC.privacy=()=>{const v=S.priv,d=S.priv2.disc;const vis=!d?['pause',t('visH')]:v.inc?['moon',t('visI')]:['eye',t('visV')];
+ return `<div>${bar(t('privT'))}<div class="pad"><div class="banner ${d&&!v.inc?'':'p'}" style="margin-top:4px">${I(vis[0]==='pause'?'eye':vis[0],18)}<span><b>${vis[1]}</b><br><span class="cap">${t('privServer')}</span></span></div>
+ <div class="sec">${t('visibility')}</div><div class="list">
+ ${row('discover',t('showDisc'),t('showDiscD'),{right:tg(d,'disc')})}
+ ${row('moon',t('incognito'),t('incD'),{right:S.userPlan==='premium'?tg(v.inc,'priv:inc'):`<span class="tag k">${I('lock',12,2)} Premium</span>`})}
+ ${row('pin',t('showCity'),'',{right:tg(v.city,'priv:city')})}${row('eye',t('blurPhotos'),t('blurD'),{right:tg(v.blur,'priv:blur')})}</div>
+ <div class="sec">${pick('النشاط','Activity')}</div><div class="list">${row('user',t('showOnline'),t('onlineD'),{right:tg(v.online,'priv:online')})}${row('check',t('readRec'),t('readD'),{right:tg(v.read,'priv:read')})}</div>
+ <div class="sec">${t('security')}</div><div class="list">${row('block',t('blockedUsers'),`${S.blocked.length} ${pick('مستخدم','users')}`,{go:'blocked'})}${row('devices',t('devicesT'),`${S.devs.length} ${pick('أجهزة','devices')}`,{go:'devices'})}${row('download',t('myData'),pick('نسخة JSON من بياناتك','A JSON copy of your data'),{act:'toast',right:null})}</div><div style="height:24px"></div></div></div>`};
+ACT.disc=()=>{S.priv2.disc=!S.priv2.disc;render()};
+SC.devices=()=>`<div>${bar(t('devicesT'))}<div class="pad"><div class="banner" style="margin:4px 0 14px">${I('shield',18)}<span>${t('devNote')}</span></div><div class="list">${S.devs.map(d=>`<div class="row"><span class="ico ${d.cur?'p':''}">${I(d.os==='ios'?'phone':'devices',20)}</span><span class="tx"><div class="t1">${d.nm}</div><div class="t2">${d.cur?t('thisDev'):`${t('lastAct')} · ${pick(`قبل ${d.last} أيام`,`${d.last} days ago`)}`}</div></span>${d.cur?`<span class="tag p">${t('thisDev')}</span>`:`<button class="btn sm out" data-act="devOut" data-a="${d.id}">${t('signOutDev')}</button>`}</div>`).join('')}</div></div></div>`;
+ACT.devOut=a=>{S.devs=S.devs.filter(d=>d.id!==a);toast(t('devOut'));render()};
+SC.blocked=()=>`<div>${bar(t('blockedT'))}<div class="pad">${S.blocked.length?`<div class="banner" style="margin:4px 0 14px">${I('block',18)}<span>${t('blockedNote')}</span></div><div class="list">${S.blocked.map(b=>{const p=byId(b.id);return `<div class="row">${av(p,44)}<span class="tx"><div class="t1">${pn(p)}</div><div class="t2">${tf('blockedOn',{d:b.d})}</div></span><button class="btn sm out" data-act="unblock" data-a="${b.id}">${t('unblock')}</button></div>`}).join('')}</div>`:`<div class="empty"><div class="eic">${I('block',34)}</div><div class="h3">${t('noBlocked')}</div></div>`}</div></div>`;
+ACT.unblock=a=>{S.blocked=S.blocked.filter(b=>b.id!==+a);toast(t('unblocked'));render()};
+
+/* ── 26. Settings: legal pages, sounds, freeze before delete ── */
+const _set4=SC.settings;
+SC.settings=()=>{let h=_set4();
+ h=h.replace(`${row('doc',t('terms'))}${row('shield',t('privPol'))}`,`${row('doc',t('terms'),'',{go:'terms'})}${row('shield',t('privPol'),'',{go:'privpol'})}`);
+ h=h.replace(`${row('heart',t('nLikesN'),'',{right:tg(S.nset.l,'nset:l')})}</div>`,`${row('heart',t('nLikesN'),'',{right:tg(S.nset.l,'nset:l')})}${row('vol',t('sounds'),t('soundsD'),{right:tg(S.sounds,'snd')})}</div><div class="list" style="margin-top:10px">${row('chat',t('playMsg'),'',{act:'tone',right:`<span style="color:var(--p)">${I('play',18)}</span>`}).replace('data-act="tone"','data-act="tone" data-a="message"')}${row('bell',t('playNotif'),'',{act:'tone',right:`<span style="color:var(--p)">${I('play',18)}</span>`}).replace('data-act="tone"','data-act="tone" data-a="notification"')}${row('heartf',t('playMatch'),'',{act:'tone',right:`<span style="color:var(--p)">${I('play',18)}</span>`}).replace('data-act="tone"','data-act="tone" data-a="match"')}</div>`);
+ h=h.replace(`${row('trash',t('delAcc'),'',{act:'sheet',danger:true})}`.replace('data-act="sheet"','data-act="sheet" data-a="delete"'),`${row('snow',t('freezeBtn'),'',{act:'sheet',p:true}).replace('data-act="sheet"','data-act="sheet" data-a="freeze"')}${row('trash',t('delAcc'),'',{act:'sheet',danger:true}).replace('data-act="sheet"','data-act="sheet" data-a="freeze"')}`);
+ return h};
+ACT.snd=()=>{S.sounds=!S.sounds;render()};
+/* OLFA's own tones, synthesised like tools/make_sounds.py (bell-like sine + soft partials) */
+let AC=null;ACT.tone=a=>{if(!S.sounds){toast(t('sounds')+' ✕');return}try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const notes={message:[[1318.5,0],[987.8,.11]],notification:[[784,0],[1046.5,.14],[1318.5,.28]],match:[[659.3,0],[880,.13],[1046.5,.26],[1318.5,.42]]}[a||'notification'];
+ notes.forEach(([f,t0])=>{const o=AC.createOscillator(),g=AC.createGain(),o2=AC.createOscillator(),g2=AC.createGain();o.frequency.value=f;o2.frequency.value=f*2.01;const st=AC.currentTime+t0;g.gain.setValueAtTime(0,st);g.gain.linearRampToValueAtTime(.22,st+.006);g.gain.exponentialRampToValueAtTime(.0008,st+.6);g2.gain.setValueAtTime(.07,st);g2.gain.exponentialRampToValueAtTime(.0005,st+.25);o.connect(g).connect(AC.destination);o2.connect(g2).connect(AC.destination);o.start(st);o2.start(st);o.stop(st+.65);o2.stop(st+.3)})}catch(e){}};
+SHEETS.freeze=()=>`<div style="width:56px;height:56px;border-radius:18px;background:var(--p8);color:var(--p);display:grid;place-items:center;margin-bottom:14px">${I('snow',26)}</div><div class="h2">${t('freezeT')}</div><p class="bs mut" style="margin:8px 0 10px">${t('freezeD')}</p><div class="banner" style="margin-bottom:16px">${I('crown',18)}<span>${t('subKeeps')}</span></div><button class="btn" data-act="doFreeze">${I('snow',18)} ${t('freezeBtn')}</button><button class="btn ghost" style="margin-top:6px;color:var(--p)" data-act="sheet" data-a="delete">${t('orDelete')}</button>`;
+ACT.doFreeze=()=>{S.frozen=true;S.sheet=null;go('frozen')};
+SC.frozen=()=>`<div class="full"><div class="safe-top"></div><div class="empty grow" style="justify-content:center"><div class="eic">${I('snow',38)}</div><div class="h2">${t('frozenT')}</div><p class="bm mut">${t('frozenD')}</p><div class="banner" style="margin:14px 0;text-align:start">${I('crown',18)}<span>${t('subKeeps')}</span></div><button class="btn" data-act="unfreeze">${t('reactivate')}</button></div></div>`;
+ACT.unfreeze=()=>{S.frozen=false;toast(t('reactivated'));S.hist=[];go('discover',false)};
+
+/* ── Legal: Terms of Use and Privacy Policy (summary of the in-app documents) ── */
+const LEGAL={terms:[[pick('من يمكنه استخدام ألفة','Who can use OLFA'),pick('18 عامًا فأكثر، حساب واحد لكل شخص برقم هاتف تملكه، والجدية في البحث عن زواج.','18+, one account per person on a phone number you own, looking for marriage.')],
+ [pick('قواعد المجتمع — عدم التسامح مطلقًا','Community rules — zero tolerance'),pick('يُمنع التحرش والمحتوى الجنسي أو المسيء والملفات المزيفة وطلب المال ومشاركة بيانات التواصل في النبذة. تُراجع كل الملفات والصور، ويمكنك الإبلاغ أو الحظر من أي ملف أو محادثة أو رسالة، ونراجع البلاغات خلال 24 ساعة.','No harassment, sexual or abusive content, fake profiles, asking for money or contact details in bios. Every profile and photo is reviewed; you can report or block from any profile, chat or message; we review reports within 24 hours.')],
+ [pick('الاشتراكات','Subscriptions'),pick('بلس وبريميوم اشتراكات تتجدد تلقائيًا عبر App Store أو Google Play ما لم يُوقف التجديد قبل 24 ساعة من نهاية الفترة. الإدارة والإلغاء من إعدادات المتجر، وحذف التطبيق لا يلغي الاشتراك.','Plus and Premium auto-renew via the App Store or Google Play unless turned off 24 hours before the period ends. Manage or cancel in your store settings; deleting the app does not cancel.')],
+ [pick('الاستشارات','Consultations'),pick('خدمة مباشرة مع استشاري مرخّص مستقل، تُدفع قبل الإرسال وتُسترد كاملة عند الاعتذار أو الإلغاء قبل التأكيد. ليست رعاية طارئة.','A 1:1 service with an independent licensed counselor, paid before sending, fully refunded if declined or cancelled before confirmation. Not emergency care.')],
+ [pick('التجميد والحذف','Freezing and deleting'),pick('التجميد يُخفي ملفك ويحتفظ بكل شيء مع اشتراكك. الحذف من داخل التطبيق: يُخفى فورًا ويُحذف نهائيًا بعد 30 يومًا.','Freezing hides you and keeps everything, including your subscription. Deletion is in the app: hidden at once, permanently deleted after 30 days.')]],
+ privpol:[[pick('ما نجمعه','What we collect'),pick('رقم الهاتف، بيانات الملف (ومنها الطول والوزن إن أضفتهما)، الصور بعد المراجعة، الموقع التقريبي (≈1 كم) بإذنك، النشاط والرسائل والصور والرسائل الصوتية التي ترسلها، وحالة المدفوعات دون أرقام البطاقات.','Phone number, profile details (including height and weight if you add them), reviewed photos, approximate location (≈1 km) with your permission, activity and the messages, photos and voice notes you send, and payment status — never card numbers.')],
+ [pick('لماذا','Why'),pick('لتشغيل التوافق والمحادثة والاستشارات، وتطبيق حدود الخطط، والحفاظ على سلامة المجتمع، ومنع الاحتيال. لا نبيع بياناتك ولا نستخدمها للإعلانات الخارجية.','To run matching, chat and consultations, enforce plan limits, keep the community safe and prevent fraud. We never sell your data or use it for third-party ads.')],
+ [pick('ما يراه الآخرون','What others see'),pick('ملفك العام فقط — لا رقم هاتفك ولا موقعك الدقيق. تتحكم بالظهور والتصفح الخفي وتمويه الصور وحالة الاتصال وإشعارات القراءة.','Only your public profile — never your phone number or exact location. You control visibility, incognito, blurred photos, online status and read receipts.')],
+ [pick('الاحتفاظ والحذف','Retention and deletion'),pick('المحادثات غير النشطة 15 يومًا، والأرشيف 30 يومًا، وإلغاء التطابق 30 يومًا. الحساب المحذوف يُمحى بعد 30 يومًا عدا ما يلزم قانونًا.','Inactive chats 15 days, archive 30 days, unmatched 30 days. Deleted accounts are erased after 30 days except what the law requires.')],
+ [pick('حقوقك','Your rights'),pick('تنزيل بياناتك، التصحيح، الحذف من داخل التطبيق، التجميد بدل الحذف، وسحب إذن الموقع أو الإشعارات.','Download your data, correct it, delete in the app, freeze instead of deleting, withdraw location or notification permission.')]]};
+const legalPage=(k,title)=>`<div>${bar(title)}<div class="pad legal"><p class="cap">${t('legalUpd')}</p>${LEGAL[k].map(([h,p])=>`<h3>${h}</h3><p>${p}</p>`).join('')}<div style="height:24px"></div></div></div>`;
+SC.terms=()=>legalPage('terms',t('s_terms'));SC.privpol=()=>legalPage('privpol',t('s_privpol'));
+
+/* ── 20. Notifications: filters, day groups, tap-through, swipe to remove ── */
+SC.notifs=()=>{const N=[['n0','compl','nc1','1m',1,'people',1,'likes'],['n1','heartf','nc2','2m',1,'people',1,'chat'],['n2','heart','nc3','1h',1,'people',0,'likes'],['n3','clock','nc4','2h',0,'msgs',0,'convs'],['n4','shield','nc5',pick('أمس','1d'),0,'acc',0,'me'],['n5','counsel','nc6',pick('أمس','1d'),0,'cons',0,'myconsult'],['n6','info','nc7','4d',0,'acc',0,'edit']]
+  .filter(n=>!S.nGone.includes(n[0])).map(n=>{n[4]=n[4]&&!S.nRead.includes(n[0])?1:0;return n});
+ const f=S.nTab,list=N.filter(n=>f==='all'||(f==='unread'?n[4]:n[5]===f));const un=N.filter(n=>n[4]).length;
+ const grp=(lbl,arr)=>arr.length?`<div class="sec pad">${lbl}</div>${arr.map(([id,ic,k,tm,u,,s,to])=>`<button class="ncard ${u?'u':''}" data-act="nOpen" data-a="${id}:${to}"><span class="ni ${s?'s':''}">${I(ic,20)}</span><span style="flex:1;min-width:0"><span style="display:flex;gap:8px"><b style="flex:1;font-weight:${u?700:500}">${t(k)}</b><span class="cap ltr">${tm}</span></span><span class="bs mut" style="display:block;margin-top:3px">${t(k+'b')}</span></span>${u?'<span style="width:9px;height:9px;border-radius:50%;background:var(--p);margin-top:6px;flex:none"></span>':''}</button>`).join('')}`:'';
+ return `<div>${bar(t('notifsT'),{right:un?`<button class="btn sm ghost" data-act="nAll">${t('markAll')}</button>`:`<button class="ib" data-go="settings" aria-label="settings">${I('settings',20)}</button>`})}
+ <div class="hscroll">${[['all','nAll'],['unread','nUnread'],['people','nPeople'],['msgs','nMsgs'],['cons','nCons'],['acc','nAcc']].map(([k,l])=>`<button class="chip sm ${f===k?'on':''}" data-act="nTab" data-a="${k}">${t(l)}${k==='unread'&&un?` · <span class="ltr">${un}</span>`:''}</button>`).join('')}</div>
+ ${list.length?grp(t('today'),list.slice(0,4).filter(n=>['1m','2m','1h','2h'].includes(n[3])))+grp(t('yesterday'),list.filter(n=>n[3]===pick('أمس','1d')))+grp(t('thisWeek'),list.filter(n=>n[3]==='4d'))+`<p class="cap" style="text-align:center;margin:14px 0 24px">${t('swipeRm')}</p>`:`<div class="empty"><div class="eic">${I('bell',34)}</div><div class="h3">${pick('لا يوجد شيء هنا','Nothing here')}</div></div>`}</div>`};
+Object.assign(ACT,{nTab:a=>{S.nTab=a;render()},nAll:()=>{S.nRead=['n0','n1','n2'];render()},nOpen:a=>{const[id,to]=a.split(':');if(!S.nRead.includes(id))S.nRead.push(id);ACT.tone(id==='n1'?'match':'notification');if(to==='chat'){S.cid=convs()[0].id}go(to)}});
+document.addEventListener('pointerdown',e=>{const c=e.target.closest('.ncard');if(!c)return;const x0=e.clientX;const mv=ev=>{const dx=ev.clientX-x0;c.style.transform=`translateX(${dx}px)`;c.style.opacity=1-Math.min(.7,Math.abs(dx)/260)};const up=ev=>{document.removeEventListener('pointermove',mv);document.removeEventListener('pointerup',up);if(Math.abs(ev.clientX-x0)>110){S.nGone.push(c.dataset.a.split(':')[0]);render()}else{c.style.transform='';c.style.opacity=''}};document.addEventListener('pointermove',mv);document.addEventListener('pointerup',up)});
+
+/* ── 2. Onboarding: four illustrated slides (flat brand shapes), progress, proof, legal links ── */
+SC.onboarding=()=>{const i=S.ob;const ring=(d,c,w=0)=>`<span style="position:absolute;width:${d}px;height:${d}px;border-radius:50%;${w?`border:${w}px solid ${c}`:`background:${c}`}"></span>`;
+ const card=(r,hd,bd)=>`<span style="width:112px;height:150px;background:#fff;border-radius:20px;padding:10px;display:flex;flex-direction:column;gap:6px;transform:rotate(${r}deg)"><span style="flex:1;border-radius:14px;background:${hd}"></span><span style="height:8px;width:66px;border-radius:4px;background:${bd}"></span><span style="height:8px;width:42px;border-radius:4px;background:var(--g)"></span></span>`;
+ const tickRow=(ic,l)=>`<span style="display:inline-flex;gap:8px;align-items:center;background:#fff;border-radius:20px;padding:8px 14px 8px 10px;font-weight:600;font-size:13px;color:var(--k)"><span style="width:24px;height:24px;border-radius:50%;background:var(--p);color:#fff;display:grid;place-items:center">${I('check',14,3)}</span>${I(ic,17)}${l}</span>`;
+ const S4=[
+  ['var(--p)',`<span style="position:relative;width:100%;height:100%;display:grid;place-items:center">${ring(200,'rgba(255,255,255,.08)')}<span style="display:flex"><span style="width:92px;height:92px;border-radius:50%;border:10px solid #fff"></span><span style="width:92px;height:92px;border-radius:50%;border:10px solid rgba(255,255,255,.75);margin-inline-start:-26px"></span></span><span style="position:absolute;bottom:22px;color:#fff">${LOGO(30)}</span></span>`,['pr1','pr2']],
+  ['var(--g)',`<span style="display:flex;gap:16px;align-items:center;position:relative">${card(-6,'var(--p)','var(--k)')}${card(6,'var(--k)','var(--p)')}<span style="position:absolute;inset:0;display:grid;place-items:center"><span style="background:var(--p);color:#fff;border:3px solid #fff;border-radius:22px;padding:8px 14px;font:700 16px Montserrat,sans-serif;display:flex;gap:6px;align-items:center">${I('heartf',16)} 92%</span></span></span>`,['pr3','pr4']],
+  ['var(--k)',`<span style="display:flex;flex-direction:column;align-items:center;gap:10px"><span style="width:104px;height:104px;border-radius:34px;background:var(--p);color:#fff;display:grid;place-items:center">${I('shield',56,1.6)}</span>${tickRow('camera',t('tickPhoto'))}${tickRow('user',t('tickData'))}</span>`,['pr5','pr6']],
+  ['var(--g)',`<span style="width:78%;display:flex;flex-direction:column;gap:9px;position:relative">${[[160,'#fff','start'],[120,'var(--p)','end'],[180,'#fff','start'],[100,'var(--p)','end']].map(([w,c,a])=>`<span style="width:${w}px;height:38px;border-radius:19px;background:${c};align-self:flex-${a}"></span>`).join('')}<span style="position:absolute;top:-14px;inset-inline-end:-6px;width:54px;height:54px;border-radius:18px;background:var(--k);color:#fff;display:grid;place-items:center">${I('counsel',28)}</span><span style="position:absolute;bottom:-14px;inset-inline-start:-6px;width:44px;height:44px;border-radius:50%;background:#fff;border:3px solid var(--p);color:var(--p);display:grid;place-items:center">${I('lock',20)}</span></span>`,['pr7','pr8']]][i];
+ return `<div class="full"><div class="safe-top"></div><div style="display:flex;align-items:center;gap:12px;padding:6px 14px 0 20px">${LOGO(28)}<span class="obseg">${[0,1,2,3].map(j=>`<i class="${j<=i?'on':''}"></i>`).join('')}</span><button class="btn ghost sm" data-go="language">${t('skip')}</button></div>
+ <div class="pad fade" key="${i}" style="margin-top:14px"><div class="obart" style="background:${S4[0]}">${S4[1]}</div><div class="h1" style="margin-top:24px">${t('ob'+(i+1)+'t')}</div><p class="bl mut" style="margin-top:10px">${t('ob'+(i+1)+'d')}</p><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">${S4[2].map(k=>`<span class="proof">${I('check',15,2.6)}${t(k)}</span>`).join('')}</div></div>
+ <div class="grow"></div><div class="foot" style="display:flex;gap:10px">${i?`<button class="ib soft" style="width:52px;height:52px" data-act="obPrev" aria-label="back">${Ix('back')}</button>`:''}${i<3?`<button class="btn" data-act="obNext">${t('next')}</button>`:`<button class="btn" data-go="language">${t('start')}</button>`}</div>
+ <p class="cap" style="text-align:center;margin:-6px 20px 14px">${t('agreeC')} <button class="lnk" data-go="terms" style="border:0;background:none;color:var(--p);font:inherit;font-weight:600">${t('terms')}</button> ${t('and')} <button class="lnk" data-go="privpol" style="border:0;background:none;color:var(--p);font:inherit;font-weight:600">${t('privPol')}</button></p></div>`};
+ACT.obNext=()=>{S.ob=Math.min(3,S.ob+1);render()};ACT.obPrev=()=>{S.ob=Math.max(0,S.ob-1);render()};
+
+/* ── 23. Payment history: current plan, subscriptions + consultations, receipts ── */
+SC.payments=()=>{const P2=[{id:'p1',k:'sub',t:S.userPlan==='premium'?'Premium':'Plus',st:'App Store',d:'14/11/2026',a:S.userPlan==='premium'?79.99:39.99,s:'paid',ref:'MZ4X2K9Q7T1A'},{id:'p2',k:'cons',t:pick('د. هدى المنصوري · 60′','Dr. Huda Al Mansoori · 60′'),st:pick('بطاقة','Card'),d:'12/11/2026',a:280,s:'paid',ref:'pi_3QF8…2Lx'},{id:'p3',k:'cons',t:pick('د. سارة بنعلي · 30′','Dr. Sara Benali · 30′'),st:pick('بطاقة','Card'),d:'02/10/2026',a:120,s:'refund',ref:'pi_3PZ1…8Kc'}].filter(p=>S.payTab==='all'||p.k===S.payTab);
+ const plan=S.userPlan==='free'?t('free'):S.userPlan==='plus'?'Plus':'Premium';
+ return `<div>${bar(t('payT'))}<div class="pad"><div style="background:var(--k);color:#fff;border-radius:22px;padding:16px;display:flex;gap:12px;align-items:center">${I('crown',30)}<span style="flex:1"><span class="cap" style="color:rgba(255,255,255,.7)">${t('curPlan')}</span><div class="h2" style="color:#fff">${plan}</div></span><button class="btn sm" style="background:#fff;color:var(--k)" data-go="plans">${S.userPlan==='premium'?t('plansT'):t('upgrade')}</button></div>
+ <div style="margin:14px 0 4px">${chipRow([['all',t('all')],['sub',t('subsT')],['cons',t('consT')]],S.payTab,'payTab')}</div>
+ <div class="sec">${pick('نوفمبر 2026','November 2026')}</div><div class="list">${P2.filter(p=>p.d.includes('/11/')).map(payRow).join('')}</div>
+ ${P2.some(p=>p.d.includes('/10/'))?`<div class="sec">${pick('أكتوبر 2026','October 2026')}</div><div class="list">${P2.filter(p=>p.d.includes('/10/')).map(payRow).join('')}</div>`:''}
+ ${S.payOpen?(()=>{const p=[...P2].find(x=>x.id===S.payOpen);return p?`<div class="list" style="margin-top:14px;padding:14px 16px"><div class="h3" style="margin-bottom:8px">${I('receipt',18)} ${t('receipt')}</div>${[[t('paidVia'),p.st],[t('ref'),`<span class="ltr">${p.ref}</span>`],[pick('التاريخ','Date'),`<span class="ltr">${p.d}</span>`]].map(([a,b])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--g)" class="bs"><span class="mut">${a}</span><b>${b}</b></div>`).join('')}</div>`:''})():''}
+ <div class="list" style="margin-top:14px">${row('doc',t('manageStore'),pick('التغيير أو الإلغاء من App Store أو Google Play','Change or cancel in the App Store / Google Play'))}${row('download',t('restore'))}</div><p class="cap" style="margin:12px 2px 24px">${t('payFoot')}</p></div></div>`};
+const payRow=p=>`<button class="row" data-act="payOpen" data-a="${p.id}"><span class="ico ${p.k==='sub'?'p':''}">${I(p.k==='sub'?'crown':'counsel',20)}</span><span class="tx"><div class="t1">${p.k==='sub'?p.t+' · '+t('month'):t('consT')}</div><div class="t2">${p.k==='sub'?p.st:p.t} · <span class="ltr">${p.d}</span></div></span><span style="text-align:end"><b class="ltr" style="display:block;${p.s==='refund'?'text-decoration:line-through':''}">${money(p.a)}</b><span class="tag ${p.s==='paid'?'p':''}">${p.s==='paid'?t('paid'):t('st_refund')}</span></span></button>`;
+Object.assign(ACT,{payTab:a=>{S.payTab=a;S.payOpen=null;render()},payOpen:a=>{S.payOpen=S.payOpen===a?null:a;render()}});
+
+/* ── C6. Counselor desk: stats, tabs, cards, prices strip ── */
+SC.cdesk=()=>{const inc=S.desk.filter(d=>d.st==='paid'),up=S.desk.filter(d=>d.st==='conf'),dn=S.desk.filter(d=>d.st==='done');const tab=S.deskTab,L=tab==='req'?inc:tab==='up'?up:dn;
+ const cardD=d=>`<div class="list" style="padding:14px;margin-bottom:10px"><div style="display:flex;gap:10px;align-items:center"><span style="width:42px;height:42px;border-radius:50%;background:var(--p8);color:var(--p);display:grid;place-items:center;font-weight:700">${(AR()?d.cl[0]:d.cl[1]).replace(/[ .]/g,'').slice(0,2)}</span><span style="flex:1"><b>${AR()?d.cl[0]:d.cl[1]}</b><div class="cap">${t('sv_'+d.svc)} · ${d.dur} ${t('min')} · ${t('l_'+d.lang)}</div></span><span style="text-align:end"><b class="ltr" style="display:block">${money(d.price)}</b><span class="tag ${d.st==='conf'?'p':''}">${stL(d.st)}</span></span></div>
+  <div class="bs" style="margin-top:10px;display:flex;gap:6px;align-items:center">${I(d.st==='paid'?'card':'cal',16)} ${d.st==='paid'?pick('دُفعت اليوم 10:24','Paid today 10:24'):pick('غدًا 7:00 م','Tomorrow 7:00 pm')}</div>
+  ${d.st==='paid'?`<div style="background:var(--g);border-radius:12px;padding:10px;margin-top:10px" class="bs">${pick('نرغب في تحسين أسلوب الحوار بيننا.','We would like to improve how we communicate.')}</div><div style="display:flex;gap:10px;margin-top:12px"><button class="btn out" data-act="deskDecline" data-a="${d.id}">${t('declineBtn')}</button><button class="btn" data-act="deskConfirm" data-a="${d.id}">${I('cal',17)} ${t('confSched')}</button></div>`
+  :d.st==='conf'?`<div style="display:flex;gap:10px;margin-top:12px"><button class="btn out" data-act="deskDone" data-a="${d.id}">${t('markDone')}</button><button class="btn" data-act="deskChat">${I('chat',17)} ${t('startChat2')}</button></div>`:''}</div>`;
+ return `<div>${bar(t('deskT'))}<div class="pad"><div class="deskhd"><div style="display:flex;gap:12px;align-items:center">${av(null,48)}<span style="flex:1"><b style="font-size:16px">${AR()?COUNSELORS[0].ar:COUNSELORS[0].en}</b><div style="opacity:.7;font-size:12px">${t('kFamily')}</div></span><span class="tag" style="background:var(--p);color:#fff">● ${t('dLive')}</span></div>
+ <div class="st"><span><b class="ltr">${inc.length}</b><small>${t('dReq')}</small></span><span><b class="ltr">${up.length}</b><small>${t('dUp')}</small></span><span><b class="ltr">4.9</b><small>${t('dRating')}</small></span><span><b class="ltr" style="font-size:14px">${money(1680)}</b><small>${t('dMonth')}</small></span></div></div>
+ <div class="list" style="margin-top:12px;padding:10px 12px;display:flex;gap:8px;align-items:center"><span style="color:var(--p)">${I('card',18)}</span><span style="flex:1;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none">${Object.entries(S.capp.price).map(([m,p])=>`<span class="tag">${t('sv_MARITAL')} · ${m}′ · ${money(p)}</span>`).join('')}</span><button class="btn sm ghost">${pick('تعديل','Edit')}</button></div>
+ <div class="seg" style="margin:16px 0 14px">${[['req','dReq',inc.length],['up','dUp'],['done','dDone']].map(([k,l,n])=>`<button class="${tab===k?'on':''}" data-act="deskTab" data-a="${k}">${t(l)}${n?` · <span class="ltr">${n}</span>`:''}</button>`).join('')}</div>
+ ${L.length?L.map(cardD).join(''):`<div class="empty" style="padding:30px 0"><div class="eic">${I(tab==='req'?'card':'cal',30)}</div><p class="bm mut">${tab==='req'?t('deskEmpty'):pick('لا يوجد شيء هنا','Nothing here')}</p></div>`}
+ <p class="cap" style="margin:8px 2px 24px">${t('dFoot')}</p></div></div>`};
+Object.assign(ACT,{deskTab:a=>{S.deskTab=a;render()},deskConfirm:a=>{S.desk.find(d=>d.id===a).st='conf';S.deskTab='up';toast(t('confToast'));render()},deskDecline:a=>{S.desk=S.desk.filter(d=>d.id!==a);toast(t('st_declined'));render()},deskDone:a=>{S.desk.find(d=>d.id===a).st='done';S.deskTab='done';render()},deskChat:()=>{S.cid='k1';go('chat')}});
+if(!ACT.toast)ACT.toast=a=>toast(a);
+
+/* ── screen map ── */
+GROUPS.push(['g7',['devices','blocked','frozen','terms','privpol']]);
+ORDER=GROUPS.flatMap(g=>g[1]);
 
 try{const q=new URLSearchParams(location.hash.slice(1));if(q.get('lang'))S.lang=q.get('lang');if(SC[q.get('s')])S.screen=q.get('s');if(q.get('mode'))S.mode=q.get('mode');if(q.get('dev')&&DEVICES[q.get('dev')])S.dev=q.get('dev');if(q.get('view'))S.view=q.get('view');if(q.get('adm'))S.adm=q.get('adm');if(q.get('adev'))S.adev=q.get('adev')}catch(e){}
 render();

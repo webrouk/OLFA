@@ -95,9 +95,35 @@ Realtime — Socket.IO namespace **`/chat`**, connect with `{ auth: { token: <ac
 
 Messages consume quota per `chat.messagesConsumeCredit` (`start_only` default; or `every_message`) and a per-conversation anti-spam limit (`chat.continuationDailyLimit`). Blocked pairs cannot exchange messages.
 
+### Photos, voice notes, phone safety, search (Nov 2026)
+
+| method | path | notes |
+|---|---|---|
+| POST | `/conversations/:id/attachments {kind: IMAGE\|VOICE, mime, bytes, durationMs?, waveform?}` | returns a presigned S3 POST (private bucket). Photos ≤ 3 per message, compressed on device (≤2048 px, q86, EXIF stripped) and re-sanitised by the `chat-image` worker job. Voice ≤ 60 s, AAC-LC. |
+| POST | `/conversations/:id/messages {clientMessageId, body?, attachmentIds?}` | `body` may be empty when attachments exist. DB trigger `olfa_attachment_guard` rejects >3 photos, more than one voice, or mixing (SQLSTATE P0020). |
+| GET | `/conversations/:id/voice-quota` | `{used, limit}` — entitlement `voice_notes_per_conversation`: Free 10, Plus 30, Premium unlimited (-1). |
+| GET | `/conversations/search?q=` | one field: matches partner names and message text (pg_trgm indexes); returns `{conversations[], messages[]}` with highlights. |
+
+Messages carry `containsPhone` (server-side detection, Arabic-Indic digits included). Clients show a safety note to both sides; the sender is warned before sending. Attachment URLs are short-lived signed GETs. Read receipts respect the reader's privacy setting (reciprocal).
+
 ## Safety & notifications
 
-`GET/POST /blocks`, `DELETE /blocks/:userId`, `POST /reports {userId, reason, targetType?, targetId?, details?, block?}` (prioritised queue), `GET /notifications`, `POST /notifications/read-all`.
+`GET/POST /blocks`, `DELETE /blocks/:userId`, `POST /reports {userId, reason, targetType?, targetId?, details?, block?}` (prioritised queue; `targetType: MESSAGE` stores a snapshot of the reported message for moderators), `GET /notifications`, `GET /notifications/unread-count`, `POST /notifications/:id/read`, `POST /notifications/read-all`, `DELETE /notifications/:id`.
+
+Push sounds: APNs `sound` and Android channels `olfa_messages` / `olfa_matches` / `olfa_general` use OLFA's own tones (`message.wav`, `match.wav`, `notification.wav`).
+
+## Account, privacy & payments
+
+| method | path | notes |
+|---|---|---|
+| GET/PUT | `/me/privacy` | visibility, incognito (Premium), online status and read receipts (both reciprocal), blur photos, show city — enforced by the server in discovery, presence and receipts. |
+| GET | `/auth/sessions` · DELETE `/auth/sessions/:id` | signed-in devices (one session per device). |
+| POST | `/me/freeze` · `/me/unfreeze` | hides the account everywhere; data, matches, chats and the store subscription are kept. |
+| GET | `/me/export` | JSON copy of the user's data. |
+| GET | `/me/payments?cursor=` | subscriptions and consultation payments/refunds, newest first. |
+| POST | `/likes {toUserId, compliment?}` | compliment ≤ 300 chars; entitlement `monthly_compliments`: Free 3, Plus 10, Premium 20. |
+
+Discovery filters accept `heightMin/heightMax` (cm) and `weightMin/weightMax` (kg).
 
 ## Admin (RBAC)
 
