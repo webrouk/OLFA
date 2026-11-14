@@ -590,8 +590,8 @@ BEGIN
   -- Serialise all like activity for this pair (both directions).
   PERFORM pg_advisory_xact_lock(hashtextextended(v_a::text || ':' || v_b::text, 0));
 
-  IF NOT EXISTS (SELECT 1 FROM users u WHERE u.id = p_from AND u.status = 'ACTIVE' AND u.deleted_at IS NULL)
-     OR NOT EXISTS (SELECT 1 FROM users u WHERE u.id = p_to AND u.status = 'ACTIVE' AND u.deleted_at IS NULL) THEN
+  IF NOT EXISTS (SELECT 1 FROM users u WHERE u.id = p_from AND u.status = 'ACTIVE' AND u.deleted_at IS NULL AND u.deletion_requested_at IS NULL)
+     OR NOT EXISTS (SELECT 1 FROM users u WHERE u.id = p_to AND u.status = 'ACTIVE' AND u.deleted_at IS NULL AND u.deletion_requested_at IS NULL) THEN
     RAISE EXCEPTION 'not eligible' USING ERRCODE = 'OLL02';
   END IF;
   IF EXISTS (SELECT 1 FROM blocked_users b WHERE (b.blocker_id = p_from AND b.blocked_id = p_to)

@@ -18,6 +18,7 @@ LEFT JOIN user_interests ui ON ui.user_id = u.id
 LEFT JOIN interests i       ON i.id = ui.interest_id
 WHERE u.status = 'ACTIVE'
   AND u.deleted_at IS NULL
+  AND u.deletion_requested_at IS NULL
   AND u.id <> $1::uuid
   AND p.gender <> $2::gender
   AND p.birth_date BETWEEN $3::date AND $4::date

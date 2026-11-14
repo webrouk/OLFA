@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Inject, Injectable, Module, Param, ParseUUIDPipe, Patch, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Inject, Injectable, Module, Param, ParseUUIDPipe, Patch, Post, Put } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
 import { ENV, Env } from '../../config/env';
@@ -7,7 +7,7 @@ import { AllowPending, AuthUser, CurrentUser, Public, RateLimit } from '../../co
 import { AuditService, PrismaService, SettingsService } from '../../common/infra';
 import { ageOn, profileCompleteness } from '../../domain/security';
 import { profileInclude, toOwnProfile, toPublicProfile } from './profile.mapper';
-import { CreateProfileDto, PreferencesDto, UpdateProfileDto } from './profiles.dto';
+import { CreateProfileDto, DeleteAccountDto, PreferencesDto, UpdateProfileDto } from './profiles.dto';
 
 @Injectable()
 export class ProfilesService {
@@ -154,6 +154,15 @@ export class ProfilesService {
     });
   }
 
+  /** Hide now, purge after 30 days (worker job, Phase 4). Signing in within 30 days restores. */
+  async requestDeletion(userId: string, reason?: string) {
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: userId }, data: { deletionRequestedAt: new Date() } }),
+      this.prisma.userSession.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date(), revokedReason: 'account_deletion' } }),
+    ]);
+    await this.audit.record({ actorType: 'USER', actorId: userId, action: 'user.delete_request', entityType: 'user', entityId: userId, reason });
+  }
+
   listInterests() {
     return this.prisma.interest.findMany({ where: { isActive: true }, select: { key: true, nameAr: true, nameEn: true, category: true, isBasic: true }, orderBy: { id: 'asc' } });
   }
@@ -194,6 +203,11 @@ export class ProfilesController {
   @RateLimit(300, 3600) @Get('profiles/:id')
   profile(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.profiles.publicProfile(u.id, id);
+  }
+
+  @AllowPending() @Delete('me') @HttpCode(204)
+  async deleteMe(@CurrentUser() u: AuthUser, @Body() body: DeleteAccountDto) {
+    await this.profiles.requestDeletion(u.id, body?.reason);
   }
 
   @Public() @Get('interests')

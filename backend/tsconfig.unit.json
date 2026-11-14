@@ -9,5 +9,5 @@
     "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["src/domain/**/*.ts", "test/unit/**/*.ts"]
+  "include": ["src/domain/**/*.ts", "src/modules/media/image-pipeline.ts", "test/unit/**/*.ts"]
 }

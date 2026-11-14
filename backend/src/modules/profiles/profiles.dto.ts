@@ -60,3 +60,7 @@ export class PreferencesDto {
   @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @ArrayMaxSize(10) @IsString({ each: true }) @MaxLength(80, { each: true }) occupations?: string[];
   @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsBoolean() wantsChildren?: boolean | null;
 }
+
+export class DeleteAccountDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(40) reason?: string;
+}
