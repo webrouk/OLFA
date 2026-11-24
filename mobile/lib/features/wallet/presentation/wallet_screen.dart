@@ -37,7 +37,7 @@ String withdrawalStatusLabel(AppLocalizations l, WithdrawalStatus s) => switch (
       WithdrawalStatus.cancelled => l.wdCancelled,
     };
 
-/// Counselor wallet: withdrawable balance, earnings still in the hold period,
+/// Counselor wallet: withdrawable balance, fees held until clients confirm and rate (escrow),
 /// how the 15% commission works, payout accounts and the full ledger.
 class WalletScreen extends ConsumerWidget {
   const WalletScreen({super.key});
@@ -67,6 +67,8 @@ class WalletScreen extends ConsumerWidget {
                 for (final b in s.balances) ...[_BalanceCard(balance: b, holdDays: s.holdDays, canWithdraw: !s.payoutsOnHold && b.availableMinor >= b.minimumMinor && s.openWithdrawals.every((w) => w.currency != b.currency)), const SizedBox(height: 12)],
               for (final w in s.openWithdrawals) _OpenWithdrawal(w: w),
               const SizedBox(height: 6),
+              _EscrowSteps(autoReleaseDays: s.escrowAutoReleaseDays),
+              const SizedBox(height: 12),
               _CommissionCard(percent: s.commissionPercent, balance: s.balances.isEmpty ? null : s.balances.first),
               const SizedBox(height: 14),
               TileGroup(children: [
@@ -95,6 +97,21 @@ class _BalanceCard extends ConsumerWidget {
     final l = AppLocalizations.of(context);
     final t = context.type;
     final b = balance;
+    final soon = b.pendingMinor; // released, still in the (optional) hold period
+    final total = b.availableMinor + soon + b.heldMinor + b.disputedMinor;
+    final white70 = OlfaColors.white.withValues(alpha: 0.7);
+    Widget part(String label, int amount, Color dot, {String? sub}) => Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Container(width: 8, height: 8, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
+              const SizedBox(width: 6),
+              Flexible(child: Text(label, style: t.caption.copyWith(color: white70), maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ]),
+            const SizedBox(height: 3),
+            Text(money(context, amount, b.currency), style: t.bodyMedium.copyWith(color: OlfaColors.white, fontWeight: FontWeight.w700), textDirection: TextDirection.ltr),
+            if (sub != null) Text(sub, style: t.caption.copyWith(color: white70)),
+          ]),
+        );
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(color: OlfaColors.black, borderRadius: OlfaRadius.all(24)),
@@ -102,18 +119,37 @@ class _BalanceCard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            Expanded(child: Text(l.walletAvailable, style: t.caption.copyWith(color: OlfaColors.white.withValues(alpha: 0.7)))),
+            Expanded(child: Text(l.walletAvailable, style: t.caption.copyWith(color: white70))),
             OlfaTag(b.currency, style: OlfaTagStyle.onImage),
           ]),
           const SizedBox(height: 6),
-          Text(money(context, b.availableMinor, b.currency), style: t.h1.copyWith(color: OlfaColors.white, fontSize: 32), textDirection: TextDirection.ltr),
-          const SizedBox(height: 14),
-          Row(children: [
-            const Icon(Icons.schedule_rounded, size: 16, color: OlfaColors.white),
-            const SizedBox(width: 6),
-            Expanded(child: Text(l.walletPending(money(context, b.pendingMinor, b.currency), holdDays), style: t.bodySmall.copyWith(color: OlfaColors.white.withValues(alpha: 0.8)))),
-          ]),
+          Text(money(context, b.availableMinor, b.currency), style: t.h1.copyWith(color: OlfaColors.white, fontSize: 34), textDirection: TextDirection.ltr),
           const SizedBox(height: 16),
+          // where the money is: available · held until clients confirm · under review
+          if (total > 0)
+            Semantics(
+              excludeSemantics: true,
+              label: l.walletBreakdownA11y(money(context, b.availableMinor + soon, b.currency), money(context, b.heldMinor, b.currency), money(context, b.disputedMinor, b.currency)),
+              child: ClipRRect(
+                borderRadius: OlfaRadius.all(6),
+                child: SizedBox(
+                  height: 8,
+                  child: Row(children: [
+                    if (b.availableMinor + soon > 0) Expanded(flex: b.availableMinor + soon, child: const ColoredBox(color: OlfaColors.white)),
+                    if (b.heldMinor > 0) Expanded(flex: b.heldMinor, child: const ColoredBox(color: OlfaColors.primary)),
+                    if (b.disputedMinor > 0) Expanded(flex: b.disputedMinor, child: ColoredBox(color: OlfaColors.white.withValues(alpha: 0.3))),
+                  ]),
+                ),
+              ),
+            ),
+          const SizedBox(height: 14),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            part(l.walletHeld, b.heldMinor, OlfaColors.primary, sub: b.heldSessions > 0 ? l.walletSessionsCount(b.heldSessions) : null),
+            const SizedBox(width: 10),
+            part(l.walletUnderReview, b.disputedMinor, OlfaColors.white.withValues(alpha: 0.3), sub: b.disputedSessions > 0 ? l.walletSessionsCount(b.disputedSessions) : null),
+            if (soon > 0) ...[const SizedBox(width: 10), part(l.walletSoon, soon, OlfaColors.white, sub: l.walletSoonDays(holdDays))],
+          ]),
+          const SizedBox(height: 18),
           PrimaryButton(
             label: l.withdraw,
             icon: Icons.south_west_rounded,
@@ -122,10 +158,61 @@ class _BalanceCard extends ConsumerWidget {
           ),
           if (!canWithdraw && b.availableMinor < b.minimumMinor) ...[
             const SizedBox(height: 8),
-            Text(l.walletMinimum(money(context, b.minimumMinor, b.currency)), style: t.caption.copyWith(color: OlfaColors.white.withValues(alpha: 0.7))),
+            Text(l.walletMinimum(money(context, b.minimumMinor, b.currency)), style: t.caption.copyWith(color: white70)),
           ],
         ],
       ),
+    );
+  }
+}
+
+/// How a consultation fee reaches the wallet (escrow).
+class _EscrowSteps extends StatelessWidget {
+  const _EscrowSteps({required this.autoReleaseDays});
+  final int autoReleaseDays;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final t = context.type;
+    final steps = [
+      (Icons.lock_outline_rounded, l.escrowStep1Title, l.escrowStep1Body),
+      (Icons.video_call_outlined, l.escrowStep2Title, l.escrowStep2Body),
+      (Icons.star_outline_rounded, l.escrowStep3Title, l.escrowStep3Body),
+      (Icons.account_balance_wallet_outlined, l.escrowStep4Title, l.escrowStep4Body),
+    ];
+    return OlfaCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(l.escrowHowTitle, style: t.h3),
+        const SizedBox(height: 12),
+        for (final (i, (icon, title, body)) in steps.indexed)
+          IntrinsicHeight(
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Column(children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(color: i == steps.length - 1 ? OlfaColors.primary : OlfaColors.primaryTint(), shape: BoxShape.circle),
+                  child: Icon(icon, size: 18, color: i == steps.length - 1 ? OlfaColors.white : OlfaColors.primary),
+                ),
+                if (i < steps.length - 1) Expanded(child: Container(width: 2, margin: const EdgeInsets.symmetric(vertical: 2), color: OlfaColors.gray)),
+              ]),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 14, top: 6),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(title, style: t.bodyMedium.copyWith(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text(body, style: t.bodySmall.copyWith(color: OlfaColors.textMuted)),
+                  ]),
+                ),
+              ),
+            ]),
+          ),
+        InfoBanner(text: autoReleaseDays > 0 ? l.escrowAutoRelease(autoReleaseDays) : l.escrowNoAutoRelease, icon: Icons.info_outline_rounded),
+      ]),
     );
   }
 }

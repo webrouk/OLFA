@@ -218,7 +218,9 @@ class _BookConsultationScreenState extends ConsumerState<BookConsultationScreen>
   ConsultationService? _svc;
   String? _lang;
   int? _dur;
-  DateTime? _time;
+  DateTime? _time; // free-text wish (counselor without published hours)
+  DateTime? _slot; // one of the counselor's offered times
+  DateTime? _day;
   final _note = TextEditingController();
   bool _busy = false;
   BookingIntent? _intent;
@@ -256,7 +258,7 @@ class _BookConsultationScreenState extends ConsumerState<BookConsultationScreen>
     setState(() => _busy = true);
     final repo = ref.read(consultationsRepositoryProvider);
     try {
-      _intent ??= await repo.book(offeringId: o.id, note: _note.text, preferredTime: _time);
+      _intent ??= await repo.book(offeringId: o.id, note: _note.text, preferredTime: _slot == null ? _time : null, slot: _slot);
       await repo.pay(_intent!);
       ref.invalidate(myConsultationsProvider);
       if (!mounted) return;
@@ -268,12 +270,19 @@ class _BookConsultationScreenState extends ConsumerState<BookConsultationScreen>
       if (mounted) showToast(context, l.errReviewRequired);
       if (pending.isNotEmpty) router.push(Routes.reviewConsultation(pending.first.consultationId), extra: pending.first.counselorName);
     } on Failure catch (e) {
+      if (e is SlotUnavailableFailure) {
+        // someone booked it a moment ago: refresh the times
+        _intent = null;
+        setState(() => _slot = null);
+        ref.invalidate(slotsProvider((widget.counselorId, o.id)));
+      }
       if (mounted) {
         showToast(
           context,
           switch (e) {
             ServerFailure(code: 'payment_cancelled') => l.paymentCancelled,
             ServerFailure(code: 'conflict') => l.bookingOpenExists,
+            SlotUnavailableFailure() => l.slotTaken,
             ServerFailure(code: 'payments_not_configured' || 'payment_failed') => l.paymentFailed,
             _ => failureMessage(context, e),
           },
@@ -329,15 +338,32 @@ class _BookConsultationScreenState extends ConsumerState<BookConsultationScreen>
                   onTap: (x) => setState(() { _dur = x.durationMinutes; _intent = null; }),
                 ),
                 const SizedBox(height: 16),
-                Text(l.preferredTime, style: t.inputLabel),
-                const SizedBox(height: 8),
-                OlfaChoice(
-                  label: _time == null ? l.choosePreferredTime : DateFormat.yMMMEd(langOf(context)).add_Hm().format(_time!),
-                  selected: _time != null,
-                  onTap: _pickTime,
+                _SlotPicker(
+                  slots: ref.watch(slotsProvider((widget.counselorId, o.id))),
+                  day: _day,
+                  slot: _slot,
+                  onDay: (d) => setState(() {
+                    _day = d;
+                    _slot = null;
+                    _intent = null;
+                  }),
+                  onSlot: (s) => setState(() {
+                    _slot = s;
+                    _intent = null;
+                  }),
+                  onRetry: () => ref.invalidate(slotsProvider((widget.counselorId, o.id))),
+                  fallback: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(l.preferredTime, style: t.inputLabel),
+                    const SizedBox(height: 8),
+                    OlfaChoice(
+                      label: _time == null ? l.choosePreferredTime : DateFormat.yMMMEd(langOf(context)).add_Hm().format(_time!),
+                      selected: _time != null,
+                      onTap: _pickTime,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(l.preferredTimeNote, style: t.caption),
+                  ]),
                 ),
-                const SizedBox(height: 6),
-                Text(l.preferredTimeNote, style: t.caption),
                 const SizedBox(height: 16),
                 OlfaTextField(label: l.noteForCounselor, hint: l.noteForCounselorHint, controller: _note, maxLines: 3, maxLength: 1000),
                 OlfaCard(
@@ -346,6 +372,7 @@ class _BookConsultationScreenState extends ConsumerState<BookConsultationScreen>
                     Text(l.summary, style: t.caption),
                     const SizedBox(height: 4),
                     Text('${serviceLabel(l, o.service)} · ${languageName(context, o.language)} · ${l.minutesShort(o.durationMinutes)}', style: t.bodyMedium),
+                    if (_slot != null) Text(DateFormat.yMMMMEEEEd(langOf(context)).add_Hm().format(_slot!), style: t.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
                     const Divider(height: 20),
                     Row(children: [Text(l.total, style: t.bodyMedium.copyWith(fontWeight: FontWeight.w700)), const Spacer(), Text(money(context, o.priceMinor, o.currency), style: t.h3)]),
                   ]),
@@ -358,7 +385,13 @@ class _BookConsultationScreenState extends ConsumerState<BookConsultationScreen>
               top: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-                child: PrimaryButton(label: l.payAndRequest(money(context, o.priceMinor, o.currency)), icon: Icons.lock_outline_rounded, loading: _busy, onPressed: _busy ? null : () => _payNow(o)),
+                child: PrimaryButton(
+                  label: l.payAndRequest(money(context, o.priceMinor, o.currency)),
+                  icon: Icons.lock_outline_rounded,
+                  loading: _busy,
+                  // a counselor with published hours is booked on one of them
+                  onPressed: _busy || (ref.watch(slotsProvider((widget.counselorId, o.id))).valueOrNull?.scheduled == true && _slot == null) ? null : () => _payNow(o),
+                ),
               ),
             ),
           ]);
@@ -661,6 +694,36 @@ class _CounselorDeskScreenState extends ConsumerState<CounselorDeskScreen> {
   }
 
   Future<void> _confirm(Consultation k) async {
+    final l = AppLocalizations.of(context);
+    // The client picked one of your published times: confirm it in one tap (or propose another).
+    if (k.preferredTime != null && k.preferredTime!.isAfter(DateTime.now())) {
+      final at = DateFormat.yMMMMEEEEd(langOf(context)).add_Hm().format(k.preferredTime!);
+      final choice = await showModalBottomSheet<String>(
+        context: context,
+        showDragHandle: true,
+        builder: (c) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text(l.confirmPickedTime, style: c.type.h3),
+              const SizedBox(height: 6),
+              Text(at, style: c.type.bodyLarge),
+              const SizedBox(height: 16),
+              PrimaryButton(label: l.confirmBooking, onPressed: () => Navigator.pop(c, 'ok')),
+              const SizedBox(height: 8),
+              SecondaryButton(label: l.proposeOtherTime, onPressed: () => Navigator.pop(c, 'other')),
+            ]),
+          ),
+        ),
+      );
+      if (choice == null || !mounted) return;
+      if (choice == 'ok') {
+        String? conv;
+        await _act(() async => conv = await ref.read(consultationsRepositoryProvider).confirm(k.id, k.preferredTime!));
+        if (conv != null && mounted) context.push(Routes.chatWith(conv!));
+        return;
+      }
+    }
     final now = DateTime.now();
     final d = await showDatePicker(context: context, firstDate: now, lastDate: now.add(const Duration(days: 60)), initialDate: now.add(const Duration(days: 1)));
     if (d == null || !mounted) return;
@@ -712,15 +775,24 @@ class _CounselorDeskScreenState extends ConsumerState<CounselorDeskScreen> {
                           Text(me == null ? '' : kindLabel(l, me.kind), style: t.caption.copyWith(color: OlfaColors.white.withValues(alpha: 0.7))),
                         ]),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(color: OlfaColors.primary, borderRadius: OlfaRadius.all(12)),
-                        child: Row(mainAxisSize: MainAxisSize.min, children: [
-                          const Icon(Icons.circle, size: 8, color: OlfaColors.white),
-                          const SizedBox(width: 6),
-                          Text(l.counselorLive, style: t.caption.copyWith(color: OlfaColors.white, fontWeight: FontWeight.w700)),
-                        ]),
-                      ),
+                      // live = taking bookings on published hours (tap to manage)
+                      Builder(builder: (_) {
+                        final sch = ref.watch(myScheduleProvider).valueOrNull;
+                        final live = sch == null || (sch.published && sch.settings.accepting);
+                        return InkWell(
+                          onTap: () => context.push(Routes.counselorSchedule),
+                          borderRadius: OlfaRadius.all(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(color: live ? OlfaColors.primary : OlfaColors.white.withValues(alpha: 0.15), borderRadius: OlfaRadius.all(12)),
+                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              Icon(live ? Icons.circle : Icons.pause_rounded, size: 8, color: OlfaColors.white),
+                              const SizedBox(width: 6),
+                              Text(live ? l.counselorLive : l.bookingsPaused, style: t.caption.copyWith(color: OlfaColors.white, fontWeight: FontWeight.w700)),
+                            ]),
+                          ),
+                        );
+                      }),
                     ]),
                     const SizedBox(height: 16),
                     Row(children: [
@@ -731,6 +803,19 @@ class _CounselorDeskScreenState extends ConsumerState<CounselorDeskScreen> {
                     ]),
                   ]),
                 ),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(child: _DeskShortcut(icon: Icons.event_available_outlined, label: l.myHours, sub: _hoursSummary(context, ref), onTap: () => context.push(Routes.counselorSchedule))),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _DeskShortcut(
+                      icon: Icons.star_outline_rounded,
+                      label: l.ratingsAndReviews,
+                      sub: me == null || me.ratingCount == 0 ? l.noRatingsYet : '${me.ratingAvg.toStringAsFixed(1)} · ${l.reviewsCount(me.ratingCount)}',
+                      onTap: () => context.push(Routes.counselorReviews),
+                    ),
+                  ),
+                ]),
                 const SizedBox(height: 12),
                 if (integrity != null && (integrity.isOpen || integrity.status == IntegrityCaseStatus.warned)) ...[
                   IntegrityBanner(c: integrity),
@@ -786,6 +871,41 @@ class _CounselorDeskScreenState extends ConsumerState<CounselorDeskScreen> {
       ),
     );
   }
+}
+
+String _hoursSummary(BuildContext context, WidgetRef ref) {
+  final l = AppLocalizations.of(context);
+  final s = ref.watch(myScheduleProvider).valueOrNull;
+  if (s == null) return '…';
+  if (!s.published) return l.hoursNotSet;
+  if (!s.settings.accepting) return l.bookingsPaused;
+  return l.hoursDaysCount(s.windows.map((w) => w.weekday).toSet().length);
+}
+
+class _DeskShortcut extends StatelessWidget {
+  const _DeskShortcut({required this.icon, required this.label, required this.sub, required this.onTap});
+  final IconData icon;
+  final String label;
+  final String sub;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Material(
+        color: OlfaColors.white,
+        shape: RoundedRectangleBorder(borderRadius: OlfaRadius.all(OlfaRadius.card), side: const BorderSide(color: OlfaColors.gray)),
+        child: InkWell(
+          onTap: onTap,
+          customBorder: RoundedRectangleBorder(borderRadius: OlfaRadius.all(OlfaRadius.card)),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(icon, color: OlfaColors.primary),
+              const SizedBox(height: 8),
+              Text(label, style: context.type.bodyMedium.copyWith(fontWeight: FontWeight.w700)),
+              Text(sub, style: context.type.caption, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ]),
+          ),
+        ),
+      );
 }
 
 class _DeskStat extends StatelessWidget {
@@ -884,6 +1004,25 @@ class _DeskCard extends StatelessWidget {
               style: t.bodySmall,
             ),
           ]),
+          if (k.scheduledAt == null && k.preferredTime != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Row(children: [
+                const Icon(Icons.schedule_rounded, size: 16, color: OlfaColors.primary),
+                const SizedBox(width: 6),
+                Text('${l.clientPicked}: ${DateFormat.yMMMEd(langOf(context)).add_Hm().format(k.preferredTime!)}', style: t.bodySmall.copyWith(fontWeight: FontWeight.w600)),
+              ]),
+            ),
+          // escrow: the fee waits for the client's confirmation + rating
+          if (k.status == ConsultationStatus.completed && k.escrow != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: OlfaTag(
+                switch (k.escrow) { 'RELEASED' => l.escrowReleasedTag, 'DISPUTED' => l.escrowDisputedTag, 'REFUNDED' => l.escrowRefundedTag, _ => l.escrowHeldTag },
+                style: k.escrow == 'RELEASED' ? OlfaTagStyle.accent : OlfaTagStyle.neutral,
+                icon: k.escrow == 'RELEASED' ? Icons.check_rounded : Icons.lock_clock_outlined,
+              ),
+            ),
           // what the counselor receives: price − 15% platform commission
           Builder(builder: (_) {
             final fee = (k.priceMinor * kPlatformFeePercent + 50) ~/ 100;
@@ -1089,6 +1228,81 @@ class _IntegrityBannerState extends ConsumerState<IntegrityBanner> {
           if (c.needsResponse) PrimaryButton(label: l.respond, expand: false, onPressed: _respond),
         ]),
       ]),
+    );
+  }
+}
+
+
+/// Day chips, then the free times of that day (shown in the phone's time zone).
+class _SlotPicker extends StatelessWidget {
+  const _SlotPicker({required this.slots, required this.day, required this.slot, required this.onDay, required this.onSlot, required this.onRetry, required this.fallback});
+  final AsyncValue<SlotList> slots;
+  final DateTime? day;
+  final DateTime? slot;
+  final ValueChanged<DateTime> onDay;
+  final ValueChanged<DateTime> onSlot;
+  final VoidCallback onRetry;
+  final Widget fallback;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final t = context.type;
+    final lang = langOf(context);
+    return slots.when(
+      loading: () => const OlfaSkeleton(height: 96),
+      error: (e, _) => InfoBanner(text: failureMessage(context, e), trailing: TextButton(onPressed: onRetry, child: Text(l.retry))),
+      data: (s) {
+        if (!s.scheduled) return fallback;
+        if (s.slots.isEmpty) return InfoBanner(text: l.noSlots, icon: Icons.event_busy_outlined, accent: true);
+        final days = <DateTime>[];
+        for (final x in s.slots) {
+          final d = DateTime(x.year, x.month, x.day);
+          if (days.isEmpty || days.last != d) days.add(d);
+        }
+        final selDay = day != null && days.contains(day) ? day! : days.first;
+        final times = s.slots.where((x) => DateTime(x.year, x.month, x.day) == selDay).toList();
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(l.chooseTime, style: t.inputLabel),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 64,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: days.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (_, i) {
+                final d = days[i];
+                final on = d == selDay;
+                return Semantics(
+                  button: true,
+                  selected: on,
+                  label: DateFormat.yMMMMEEEEd(lang).format(d),
+                  excludeSemantics: true,
+                  child: InkWell(
+                    onTap: () => onDay(d),
+                    borderRadius: OlfaRadius.all(14),
+                    child: Container(
+                      width: 58,
+                      decoration: BoxDecoration(color: on ? OlfaColors.primary : OlfaColors.white, borderRadius: OlfaRadius.all(14), border: Border.all(color: on ? OlfaColors.primary : OlfaColors.gray)),
+                      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Text(DateFormat.E(lang).format(d), style: t.caption.copyWith(color: on ? OlfaColors.white : OlfaColors.textMuted)),
+                        Text(DateFormat.d(lang).format(d), style: t.h3.copyWith(color: on ? OlfaColors.white : OlfaColors.black)),
+                      ]),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            for (final x in times) OlfaChoice(label: DateFormat.Hm(lang).format(x), selected: x == slot, onTap: () => onSlot(x)),
+          ]),
+          const SizedBox(height: 6),
+          Text(l.slotsTimezoneNote, style: t.caption),
+        ]);
+      },
     );
   }
 }

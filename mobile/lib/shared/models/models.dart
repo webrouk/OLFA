@@ -693,9 +693,17 @@ class Consultation {
     this.conversationId,
     this.myRating,
     this.declineReason,
+    this.preferredTime,
+    this.escrow,
   });
   final String id;
   final String counselorId;
+
+  /// The time the client picked from the counselor's hours (or proposed).
+  final DateTime? preferredTime;
+
+  /// HELD · RELEASED · DISPUTED · REFUNDED (null before payment).
+  final String? escrow;
   final String counselorName;
   final String? clientName; // counselor desk only
   final ConsultationService service;
@@ -920,8 +928,20 @@ class WalletBalance {
     required this.netEarnedMinor,
     required this.withdrawnMinor,
     required this.minimumMinor,
+    this.heldMinor = 0,
+    this.heldSessions = 0,
+    this.disputedMinor = 0,
+    this.disputedSessions = 0,
   });
   final String currency;
+
+  /// Escrow: paid by clients, released only after the client confirms the session and rates it.
+  final int heldMinor;
+  final int heldSessions;
+
+  /// The client said the session did not happen — support decides (release or refund).
+  final int disputedMinor;
+  final int disputedSessions;
   final int availableMinor; // withdrawable now
   final int pendingMinor; // still in the hold period
   final int completedSessions;
@@ -933,7 +953,10 @@ class WalletBalance {
 }
 
 class WalletSummary {
-  const WalletSummary({required this.commissionPercent, required this.holdDays, required this.balances, this.openWithdrawals = const [], this.payoutsOnHold = false});
+  const WalletSummary({required this.commissionPercent, required this.holdDays, required this.balances, this.openWithdrawals = const [], this.payoutsOnHold = false, this.escrowAutoReleaseDays = 0});
+
+  /// 0 = a held fee is released only by the client's confirmation + rating (or support).
+  final int escrowAutoReleaseDays;
   final int commissionPercent;
   final int holdDays;
   final List<WalletBalance> balances;

@@ -1,4 +1,7 @@
 import '../../../shared/models/models.dart';
+import 'schedule.dart';
+
+export 'schedule.dart';
 
 /// Filters for the counselor directory (all optional).
 class CounselorQuery {
@@ -67,7 +70,11 @@ abstract interface class ConsultationsRepository {
 
   /// Creates the booking (price snapshot) and the payment intent. The
   /// counselor only sees it after the payment succeeds.
-  Future<BookingIntent> book({required String offeringId, String? note, DateTime? preferredTime});
+  /// [slot]: one of [slots] when the counselor publishes hours; otherwise [preferredTime] is a wish.
+  Future<BookingIntent> book({required String offeringId, String? note, DateTime? preferredTime, DateTime? slot});
+
+  /// Bookable times for one offering (from the counselor's weekly hours, time off and bookings).
+  Future<SlotList> slots(String counselorId, String offeringId);
 
   /// Completes payment for [intent] (payment sheet or, outside production, the test gateway).
   Future<void> pay(BookingIntent intent);
@@ -75,6 +82,9 @@ abstract interface class ConsultationsRepository {
   Future<void> cancel(String consultationId);
   /// Mandatory questionnaire after a completed consultation.
   Future<void> review(String consultationId, ReviewAnswers answers);
+
+  /// "The consultation did not take place": the held fee waits for support (refund or release).
+  Future<void> reportNotHappened(String consultationId, String reason);
 
   /// Completed consultations still waiting for the questionnaire.
   Future<List<PendingReview>> pendingReviews();
@@ -92,4 +102,13 @@ abstract interface class ConsultationsRepository {
   Future<String> confirm(String consultationId, DateTime scheduledAt); // → conversation id
   Future<void> decline(String consultationId, {String? reason});
   Future<void> complete(String consultationId);
+
+  // counselor schedule + ratings (controlled from the counselor's own account)
+  Future<CounselorSchedule> mySchedule();
+  Future<CounselorSchedule> saveSchedule(ScheduleSettings s);
+  Future<CounselorSchedule> saveAvailability(List<WeeklyWindow> windows);
+  Future<void> addTimeOff(DateTime startsAt, DateTime endsAt, {String? note});
+  Future<void> removeTimeOff(String id);
+  Future<MyReviews> myReviews();
+  Future<void> replyToReview(String consultationId, String reply);
 }

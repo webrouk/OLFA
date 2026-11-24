@@ -29,3 +29,9 @@ final pendingReviewsProvider = FutureProvider.autoDispose<List<PendingReview>>((
 final integrityCaseProvider = FutureProvider.autoDispose<IntegrityCase?>((ref) => ref.watch(consultationsRepositoryProvider).integrityCase());
 
 final counselorDeskProvider = FutureProvider.autoDispose<List<Consultation>>((ref) => ref.watch(consultationsRepositoryProvider).desk());
+
+/// Bookable times for (counselorId, offeringId).
+final slotsProvider = FutureProvider.autoDispose.family<SlotList, (String, String)>((ref, k) => ref.watch(consultationsRepositoryProvider).slots(k.$1, k.$2));
+
+final myScheduleProvider = FutureProvider.autoDispose<CounselorSchedule>((ref) => ref.watch(consultationsRepositoryProvider).mySchedule());
+final myReviewsProvider = FutureProvider.autoDispose<MyReviews>((ref) => ref.watch(consultationsRepositoryProvider).myReviews());

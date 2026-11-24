@@ -51,6 +51,7 @@ class ApiWalletRepository implements WalletRepository {
         return WalletSummary(
           commissionPercent: _i(j['commissionPercent']),
           holdDays: _i(j['holdDays']),
+          escrowAutoReleaseDays: _i(j['escrowAutoReleaseDays']),
           payoutsOnHold: j['payoutsOnHold'] == true,
           openWithdrawals: [for (final w in j['openWithdrawals'] as List? ?? const []) _withdrawal(Map<String, dynamic>.from(w as Map))],
           balances: [
@@ -65,6 +66,10 @@ class ApiWalletRepository implements WalletRepository {
                 netEarnedMinor: _i(b['netEarnedMinor']),
                 withdrawnMinor: _i(b['withdrawnMinor']),
                 minimumMinor: _i(mins[b['currency']]),
+                heldMinor: _i(b['heldMinor']),
+                heldSessions: _i(b['heldSessions']),
+                disputedMinor: _i(b['disputedMinor']),
+                disputedSessions: _i(b['disputedSessions']),
               ),
           ],
         );

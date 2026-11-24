@@ -29,15 +29,45 @@ class ConsultationReviewScreen extends ConsumerStatefulWidget {
 class _ConsultationReviewScreenState extends ConsumerState<ConsultationReviewScreen> {
   ReviewAnswers _a = const ReviewAnswers();
   final _comment = TextEditingController();
+  final _reason = TextEditingController();
+  bool? _happened; // "did the consultation take place?" — first question
   bool _busy = false, _submitted = false;
 
   @override
   void dispose() {
     _comment.dispose();
+    _reason.dispose();
     super.dispose();
   }
 
+  Future<void> _report() async {
+    final l = AppLocalizations.of(context);
+    if (_reason.text.trim().length < 3) {
+      setState(() => _submitted = true);
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await ref.read(consultationsRepositoryProvider).reportNotHappened(widget.consultationId, _reason.text.trim());
+      ref.invalidate(myConsultationsProvider);
+      ref.invalidate(pendingReviewsProvider);
+      if (!mounted) return;
+      showToast(context, l.notHappenedSent);
+      context.pop();
+    } on Failure catch (e) {
+      if (mounted) showToast(context, failureMessage(context, e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _submit() async {
+    if (_happened == false) return _report();
+    if (_happened == null) {
+      setState(() => _submitted = true);
+      showToast(context, AppLocalizations.of(context).answerAllQuestions);
+      return;
+    }
     setState(() => _submitted = true);
     if (!_a.complete) {
       showToast(context, AppLocalizations.of(context).answerAllQuestions);
@@ -105,9 +135,31 @@ class _ConsultationReviewScreenState extends ConsumerState<ConsultationReviewScr
       canPop: true,
       child: FormPage(
         title: l.reviewTitle,
-        action: PrimaryButton(label: l.submitReview, loading: _busy, onPressed: _busy ? null : _submit),
+        action: PrimaryButton(label: _happened == false ? l.reportNotHappened : l.submitReview, loading: _busy, onPressed: _busy ? null : _submit),
         children: [
           PageHeading(widget.counselorName == null ? l.reviewHeading : l.reviewHeadingNamed(widget.counselorName!), body: l.reviewIntro),
+          InfoBanner(text: l.escrowReviewNote, icon: Icons.account_balance_wallet_outlined, accent: true),
+          SectionLabel(l.qSessionHappened, top: 18),
+          ChoiceWrap<bool>(
+            options: const [true, false],
+            label: (v) => v ? l.sessionHappenedYes : l.sessionHappenedNo,
+            isSelected: (v) => _happened == v,
+            onTap: (v) => setState(() => _happened = v),
+          ),
+          if (_submitted && _happened == null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(l.answerAllQuestions, style: t.caption.copyWith(color: OlfaColors.primary))),
+          if (_happened == false) ...[
+            const SizedBox(height: 16),
+            OlfaTextField(
+              label: l.notHappenedReason,
+              hint: l.notHappenedHint,
+              controller: _reason,
+              maxLines: 4,
+              maxLength: 500,
+              error: _submitted && _reason.text.trim().length < 3 ? l.errorMessageShort : null,
+            ),
+            InfoBanner(text: l.notHappenedNote, icon: Icons.shield_outlined),
+          ],
+          if (_happened == true) ...[
           OlfaCard(
             padding: const EdgeInsets.all(14),
             color: OlfaColors.primaryTint(),
@@ -151,6 +203,7 @@ class _ConsultationReviewScreenState extends ConsumerState<ConsultationReviewScr
           choice<YesNoUnsure>(l.qExternalChannel, YesNoUnsure.values, yn, _a.externalChannel, (v) => setState(() => _a = _a.copyWith(externalChannel: v)), hint: l.qExternalChannelHint),
           OlfaTextField(label: l.reviewComment, hint: l.reviewCommentHint, controller: _comment, maxLines: 3, maxLength: 1000),
           InfoBanner(text: l.reviewWhyOlfa, icon: Icons.shield_outlined),
+          ],
           const SizedBox(height: 8),
         ],
       ),

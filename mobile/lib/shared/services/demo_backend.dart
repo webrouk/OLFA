@@ -743,7 +743,8 @@ class DemoBackend {
         _seedWallet();
         final k = _desk.firstWhere((x) => x.id == id);
         final fee = (k.priceMinor * commissionPercent + 50) ~/ 100;
-        _wallet.add(WalletEntry(id: 'e$id', kind: WalletEntryKind.earning, amountMinor: k.priceMinor - fee, currency: k.currency, createdAt: DateTime.now(), availableAt: DateTime.now().add(const Duration(days: holdDays)), pending: true, grossMinor: k.priceMinor, feeMinor: fee, feePercent: commissionPercent, service: k.service, durationMinutes: k.durationMinutes));
+        // held until the client confirms the session and rates it
+        _escrow.add((id: id, net: k.priceMinor - fee, disputed: false));
       });
 
 
@@ -764,6 +765,15 @@ class DemoBackend {
         ];
       }, ms: 200);
 
+  /// "The session did not take place": no rating; the fee stays held for support.
+  Future<void> reportNotHappened(String id, String reason) => _call(() {
+        if (reason.trim().length < 3) throw const ValidationFailure('disputeReason');
+        _setBooking(id, (k) {
+          if (k.status != ConsultationStatus.completed) throw const ServerFailure('invalid_state');
+          return _with(k, myRating: 0);
+        });
+      }, ms: 700);
+
   Future<void> submitReview(String id, ReviewAnswers a) => _call(() {
         if (!a.complete) throw const ValidationFailure('questionnaire');
         _setBooking(id, (k) {
@@ -775,8 +785,10 @@ class DemoBackend {
 
   // ───────────── counselor wallet (demo ledger) ─────────────
 
-  static const commissionPercent = 15, holdDays = 7;
+  static const commissionPercent = 15, holdDays = 0;
   final _wallet = <WalletEntry>[];
+  // escrow: net amounts paid by clients, not yet confirmed + rated (disputed = "did not happen")
+  final _escrow = <({String id, int net, bool disputed})>[];
   final _payoutMethods = <PayoutMethod>[];
   final _withdrawals = <Withdrawal>[];
   IntegrityCase? integrityCase;
@@ -799,6 +811,7 @@ class DemoBackend {
     ]);
     _withdrawals.add(Withdrawal(id: 'wd1', amountMinor: 40000, currency: 'AED', status: WithdrawalStatus.paid, requestedAt: now.subtract(const Duration(days: 20)), processedAt: now.subtract(const Duration(days: 18)), reference: 'FT26110412', methodMask: 'AE07 •••• 3456', methodKind: PayoutKind.bankIban));
     _wallet.add(WalletEntry(id: 'w0', kind: WalletEntryKind.withdrawal, amountMinor: -40000, currency: 'AED', createdAt: now.subtract(const Duration(days: 20)), availableAt: now.subtract(const Duration(days: 20))));
+    _escrow.addAll([(id: 'k-held-1', net: 25500, disputed: false), (id: 'k-held-2', net: 21250, disputed: false), (id: 'k-disp-1', net: 15300, disputed: true)]);
     _payoutMethods.add(const PayoutMethod(id: 'pm1', kind: PayoutKind.bankIban, holderName: 'Huda Al Mansoori', countryIso: 'AE', currency: 'AED', mask: 'AE07 •••• 3456', isDefault: true));
   }
 
@@ -823,7 +836,15 @@ class DemoBackend {
     return WalletSummary(
       commissionPercent: commissionPercent,
       holdDays: holdDays,
-      balances: [WalletBalance(currency: 'AED', availableMinor: avail, pendingMinor: pending, completedSessions: sessions, grossMinor: gross, platformFeeMinor: fee, netEarnedMinor: net, withdrawnMinor: withdrawn, minimumMinor: 5000)],
+      balances: [
+        WalletBalance(
+          currency: 'AED', availableMinor: avail, pendingMinor: pending, completedSessions: sessions, grossMinor: gross, platformFeeMinor: fee, netEarnedMinor: net, withdrawnMinor: withdrawn, minimumMinor: 5000,
+          heldMinor: _escrow.where((e) => !e.disputed).fold(0, (a, e) => a + e.net),
+          heldSessions: _escrow.where((e) => !e.disputed).length,
+          disputedMinor: _escrow.where((e) => e.disputed).fold(0, (a, e) => a + e.net),
+          disputedSessions: _escrow.where((e) => e.disputed).length,
+        ),
+      ],
       openWithdrawals: _withdrawals.where((w) => w.open).toList(),
       payoutsOnHold: integrityCase?.isOpen ?? false,
     );
@@ -993,14 +1014,20 @@ class DemoBackend {
   Future<void> requestDeletion(String? reason) => _call(() => deletionScheduled = true, ms: 800);
 
   Future<List<FaqEntry>> faq() => _call(() {
-        final ar = lang == 'ar';
-        return [
-          FaqEntry(id: 'f1', category: 'account', question: ar ? 'كيف تتم مراجعة الملفات؟' : 'How are profiles reviewed?', answer: ar ? 'يراجع فريقنا كل ملف وصوره قبل ظهوره للآخرين، مع فحص تلقائي للصور. تتم المراجعة عادةً خلال 24 ساعة.' : 'Our team reviews every profile and its photos before it is shown to others, alongside automated photo checks. Reviews usually take under 24 hours.'),
-          FaqEntry(id: 'f2', category: 'account', question: ar ? 'متى يمكنني بدء محادثة؟' : 'When can I start a conversation?', answer: ar ? 'بعد حدوث إعجاب متبادل فقط. يُستخدم رصيد الرسائل اليومي لبدء محادثات جديدة، ويمكنك متابعة المحادثات القائمة بحرية.' : 'Only after a mutual like. Daily message credits start new conversations; continuing existing ones is free.'),
-          FaqEntry(id: 'f3', category: 'payment', question: ar ? 'هل تتجدد الحصص اليومية؟' : 'Do daily limits reset?', answer: ar ? 'نعم، تتجدد يوميًا حسب منطقتك الزمنية، ولا يُرحَّل الرصيد غير المستخدم.' : 'Yes, daily in your time zone. Unused credits do not roll over.'),
-          FaqEntry(id: 'f4', category: 'verification', question: ar ? 'ما الفرق بين مراجعة الصور وتوثيق الهوية؟' : 'Photo review vs. identity verification?', answer: ar ? 'شارة "صور مُراجَعة" تعني أن فريقنا راجع الصور. توثيق الهوية خطوة منفصلة تتم عبر وثيقة رسمية.' : '"Photos reviewed" means our team checked the photos. Identity verification is a separate step using an official document.'),
-          FaqEntry(id: 'f5', category: 'account', question: ar ? 'كيف أحذف حسابي؟' : 'How do I delete my account?', answer: ar ? 'من الإعدادات ← حذف الحساب. يُخفى حسابك فورًا ويُحذف نهائيًا بعد 30 يومًا.' : 'Settings → Delete account. It is hidden immediately and permanently deleted after 30 days.'),
+        final l = lang == 'ar' || lang == 'fr' ? lang : 'en';
+        // same entries as backend/prisma/seed.sql
+        const rows = <(String, Map<String, String>, Map<String, String>)>[
+          ('account', {"ar": "لماذا أحتاج إلى التحقق من رقم هاتفي؟", "en": "Why do I need to verify my phone number?", "fr": "Pourquoi dois-je vérifier mon numéro de téléphone ?"}, {"ar": "التحقق برمز يُرسل إلى هاتفك يضمن أن كل حساب يعود لشخص حقيقي ويحمي المجتمع من الحسابات الوهمية. لا نعرض رقمك لأي مستخدم.", "en": "A code sent to your phone makes sure every account belongs to a real person and keeps fake accounts out. Your number is never shown to other members.", "fr": "Un code envoyé sur votre téléphone garantit que chaque compte appartient à une personne réelle. Votre numéro n’est jamais montré aux autres membres."}),
+          ('account', {"ar": "ما الفرق بين تجميد الحساب وحذفه؟", "en": "What is the difference between freezing and deleting my account?", "fr": "Quelle différence entre geler et supprimer mon compte ?"}, {"ar": "التجميد يخفي ملفك مؤقتاً ويمكنك إعادة تفعيله في أي وقت. الحذف يزيل حسابك وبياناتك نهائياً بعد مهلة الاسترجاع الموضحة في الإعدادات.", "en": "Freezing hides your profile for now and you can reactivate any time. Deleting removes your account and data for good after the recovery period shown in Settings.", "fr": "Le gel masque votre profil temporairement ; vous pouvez le réactiver à tout moment. La suppression efface définitivement votre compte après le délai indiqué dans les Réglages."}),
+          ('account', {"ar": "لماذا يظهر لي أن حسابي مغلق؟", "en": "Why does it say my account is closed?", "fr": "Pourquoi mon compte apparaît-il comme fermé ?"}, {"ar": "تُغلق الحسابات التي تخالف سياسة المجتمع إما لمدة محددة (وتُفتح تلقائياً عند انتهائها) أو نهائياً. يظهر لك السبب والمدة على شاشة الحساب المغلق، ويمكنك التواصل مع الدعم.", "en": "Accounts that break the community policy are closed either for a set period (they reopen by themselves when it ends) or permanently. The closed-account screen shows the reason and the period, and you can contact support.", "fr": "Les comptes qui enfreignent la charte sont fermés pour une durée déterminée (réouverture automatique ensuite) ou définitivement. L’écran indique le motif et la durée ; vous pouvez contacter le support."}),
+          ('verification', {"ar": "كيف تحمي ألفة صوري الشخصية؟", "en": "How does OLFA protect my photos?", "fr": "Comment OLFA protège-t-elle mes photos ?"}, {"ar": "تُراجع الصور قبل ظهورها، ويمنع التطبيق لقطات الشاشة وتسجيلها على أندرويد، ويخفي المحتوى عند التسجيل أو في قائمة التطبيقات على iOS. لا يمكن لأي تطبيق منع تصوير الشاشة بكاميرا أخرى، لذا شارك ما ترتاح له فقط.", "en": "Photos are reviewed before they appear. On Android the app blocks screenshots and screen recording; on iOS it hides content while the screen is recorded and in the app switcher. No app can stop someone photographing the screen with another camera, so share only what you are comfortable with.", "fr": "Les photos sont vérifiées avant publication. Sur Android, l’app bloque captures et enregistrements d’écran ; sur iOS, elle masque le contenu pendant un enregistrement et dans le sélecteur d’apps. Aucune app ne peut empêcher de photographier l’écran avec un autre appareil : ne partagez que ce qui vous convient."}),
+          ('verification', {"ar": "لماذا يُطلب مني سيلفي عند التسجيل؟", "en": "Why do I need to take a selfie when I sign up?", "fr": "Pourquoi dois-je prendre un selfie à l’inscription ?"}, {"ar": "بعد رفع صورك نطلب سيلفي مباشرة مع إشارة يد عشوائية ليتأكد فريق التحقق أن الصور لك وأنك شخص حقيقي. السيلفي خاصة ولا تظهر في ملفك، وتُحذف بعد القرار. يمكنك طلب أن تراجعها موظفة.", "en": "After your photos we ask for a live selfie with a random hand gesture, so the verification team can confirm the photos are you and that you are a real person. The selfie is private, never shown on your profile, and deleted after the decision. You can ask that a woman from the team reviews it.", "fr": "Après vos photos, nous demandons un selfie en direct avec un geste aléatoire, afin que l’équipe confirme que les photos sont bien vous et que vous êtes une vraie personne. Le selfie est privé, n’apparaît jamais sur votre profil et est supprimé après la décision. Vous pouvez demander qu’une femme de l’équipe le vérifie."}),
+          ('payment', {"ar": "متى يحصل المستشار على أجر الاستشارة؟", "en": "When does the counselor get paid for a consultation?", "fr": "Quand le conseiller est-il payé ?"}, {"ar": "يُحتجز المبلغ عند الدفع، ولا يُحوَّل إلى محفظة المستشار إلا بعد أن تؤكد أن الجلسة تمت وتقيّم المستشار. إن لم تتم الجلسة اختر «لم تتم» وسيراجع الدعم الحالة ويعيد المبلغ عند الاقتضاء.", "en": "The fee is held when you pay and only goes to the counselor’s wallet after you confirm the session took place and rate the counselor. If it did not happen, choose “It didn’t happen” and support will review it and refund you where appropriate.", "fr": "Le montant est retenu au paiement et n’est versé au conseiller qu’après votre confirmation que la séance a eu lieu et votre note. Si elle n’a pas eu lieu, choisissez « Elle n’a pas eu lieu » : le support examinera et remboursera si nécessaire."}),
+          ('payment', {"ar": "كيف أستعيد اشتراكي على جهاز جديد؟", "en": "How do I restore my subscription on a new phone?", "fr": "Comment restaurer mon abonnement sur un nouveau téléphone ?"}, {"ar": "سجّل الدخول بنفس رقم الهاتف ثم افتح «الاشتراكات» واضغط «استعادة المشتريات». يُدار الاشتراك وإلغاؤه من متجر التطبيقات.", "en": "Sign in with the same phone number, open Subscriptions and tap “Restore purchases”. Billing and cancellation are managed by the app store.", "fr": "Connectez-vous avec le même numéro, ouvrez Abonnements et touchez « Restaurer les achats ». La facturation et la résiliation se gèrent dans le store."}),
+          ('technical', {"ar": "لا تصلني الإشعارات، ماذا أفعل؟", "en": "I am not getting notifications — what can I do?", "fr": "Je ne reçois pas les notifications, que faire ?"}, {"ar": "تأكد من السماح بإشعارات ألفة في إعدادات الهاتف ومن تفعيلها في «الإشعارات» داخل التطبيق، ثم أعد فتح التطبيق.", "en": "Make sure OLFA notifications are allowed in your phone settings and switched on under Notifications in the app, then reopen the app.", "fr": "Vérifiez que les notifications d’OLFA sont autorisées dans les réglages du téléphone et activées dans l’app, puis rouvrez l’app."}),
+          ('other', {"ar": "كيف أتواصل مع الدعم؟", "en": "How do I contact support?", "fr": "Comment contacter le support ?"}, {"ar": "من «المساعدة والدعم» اضغط «طلب جديد»، اكتب رسالتك وأرفق صورة أو ملف PDF إن لزم. تصلك ردود الفريق في نفس الصفحة وبإشعار.", "en": "In Help & Support tap “New request”, write your message and attach an image or a PDF if needed. Replies arrive on the same page and as a notification.", "fr": "Dans Aide et support, touchez « Nouvelle demande », écrivez votre message et joignez une image ou un PDF si besoin. Les réponses arrivent sur la même page et par notification."}),
         ];
+        return [for (final (i, r) in rows.indexed) FaqEntry(id: 'f$i', category: r.$1, question: r.$2[l]!, answer: r.$3[l]!)];
       });
 
   Future<String> submitTicket(String category, String message) => _call(() {

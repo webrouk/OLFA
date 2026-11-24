@@ -419,7 +419,7 @@
   "catPayment": "Payment",
   "catTechnical": "Technical",
   "contactSupport": "Contact support",
-  "contactSupportBody": "We usually reply within one business day.",
+  "contactSupportBody": "Replies arrive on this page and as a notification.",
   "ticketCreated": "Ticket {number} created. We'll get back to you soon.",
   "@ticketCreated": {
     "placeholders": {
@@ -1142,7 +1142,7 @@
   },
   "yourShare": "Your net earnings",
   "commissionTitle": "What the 15% fee pays for",
-  "commissionBody": "OLFA keeps {percent}% of each consultation. The rest is yours and goes to your wallet when the session is completed.",
+  "commissionBody": "OLFA keeps {percent}% of each consultation. The rest is yours and reaches your wallet once the client confirms the session and rates it.",
   "@commissionBody": {
     "placeholders": {
       "percent": {
@@ -1451,5 +1451,183 @@
   "selfieStatusApproved": "Selfie verified — real person.",
   "selfieStatusRejected": "The team asked for a new selfie.",
   "selfieStatusMissing": "A verification selfie is needed.",
-  "selfieNextNote": "Next: a quick verification selfie. It stays private and is only used to confirm the photos are you."
+  "selfieNextNote": "Next: a quick verification selfie. It stays private and is only used to confirm the photos are you.",
+  "catOther": "Other",
+  "ticketOpen": "Open",
+  "ticketAwaitingYou": "Replied — awaiting you",
+  "ticketResolved": "Resolved",
+  "ticketClosed": "Closed",
+  "newRequest": "New request",
+  "myRequests": "My requests",
+  "faqTitle": "Frequently asked questions",
+  "askSupport": "Ask support",
+  "subject": "Subject",
+  "errorSubjectShort": "Please add a short subject.",
+  "attachFile": "Attach",
+  "attachHint": "Images or PDF · up to 3 · 10 MB each",
+  "attachPhoto": "Photo from gallery",
+  "attachCamera": "Take a photo",
+  "attachPdf": "PDF file",
+  "supportMaxFiles": "Up to {count} files per message",
+  "@supportMaxFiles": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "supportFileTooLarge": "This file is larger than 10 MB.",
+  "supportPrivacy": "Only the OLFA support team can see your request and files. Never send passwords or card numbers.",
+  "supportThreadNote": "Replies from the support team appear on this page and as a notification.",
+  "supportTeam": "OLFA support",
+  "sending": "Sending…",
+  "closeRequest": "Mark as solved",
+  "closeRequestTitle": "Close this request?",
+  "closeRequestBody": "You can open a new request at any time.",
+  "requestClosedNote": "This request is closed.",
+  "escrowReviewNote": "Your payment is held safely. It reaches the counselor only after you confirm the consultation took place and rate it.",
+  "qSessionHappened": "Did the consultation take place?",
+  "sessionHappenedYes": "Yes, it took place",
+  "sessionHappenedNo": "No, it didn't happen",
+  "notHappenedReason": "What happened?",
+  "notHappenedHint": "e.g. the counselor did not join, the call kept failing…",
+  "notHappenedNote": "The fee stays held. Our support team reviews what happened and refunds you if the consultation did not take place.",
+  "reportNotHappened": "Report to support",
+  "notHappenedSent": "Thanks — support will review it. Your payment stays held meanwhile.",
+  "walletHeld": "Held",
+  "walletUnderReview": "Under review",
+  "walletSoon": "Available soon",
+  "walletSoonDays": "within {days} days",
+  "@walletSoonDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "walletSessionsCount": "{count, plural, =1{1 session} other{{count} sessions}}",
+  "@walletSessionsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "walletBreakdownA11y": "Available {available}, held until clients confirm {held}, under review {review}",
+  "@walletBreakdownA11y": {
+    "placeholders": {
+      "available": {
+        "type": "String"
+      },
+      "held": {
+        "type": "String"
+      },
+      "review": {
+        "type": "String"
+      }
+    }
+  },
+  "escrowHowTitle": "How fees reach your wallet",
+  "escrowStep1Title": "The client pays — the fee is held",
+  "escrowStep1Body": "OLFA keeps the payment safe; neither side can lose it.",
+  "escrowStep2Title": "The consultation takes place",
+  "escrowStep2Body": "At the confirmed time, in OLFA.",
+  "escrowStep3Title": "The client confirms and rates",
+  "escrowStep3Body": "If the client reports it did not happen, support reviews it before any decision.",
+  "escrowStep4Title": "Your share is released",
+  "escrowStep4Body": "Your share after OLFA's commission becomes withdrawable.",
+  "escrowNoAutoRelease": "Fees are released only by the client's confirmation and rating, or by a support decision.",
+  "escrowAutoRelease": "If a client does not respond, the fee is released automatically {days} days after the session.",
+  "@escrowAutoRelease": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "chooseTime": "Choose a time",
+  "noSlots": "No free times in the coming days. Please check again later.",
+  "slotsTimezoneNote": "Times are shown in your phone's time zone.",
+  "confirmPickedTime": "The client chose this time",
+  "proposeOtherTime": "Propose another time",
+  "clientPicked": "Client's choice",
+  "bookingsPaused": "Paused",
+  "myHours": "My hours",
+  "ratingsAndReviews": "Ratings & reviews",
+  "noRatingsYet": "No ratings yet",
+  "noRatingsBody": "Clients rate you after each completed consultation.",
+  "hoursNotSet": "Not set — add your hours",
+  "hoursDaysCount": "{count, plural, =1{1 day a week} other{{count} days a week}}",
+  "@hoursDaysCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "acceptingBookings": "Accepting bookings",
+  "acceptingBookingsOn": "Clients can book your free times.",
+  "acceptingBookingsOff": "Paused — no new bookings. Existing ones stay.",
+  "bookingsOpened": "Bookings are open",
+  "bookingsPausedToast": "Bookings paused",
+  "weeklyHours": "Weekly hours",
+  "timezoneLabel": "Time zone: {tz}",
+  "@timezoneLabel": {
+    "placeholders": {
+      "tz": {
+        "type": "String"
+      }
+    }
+  },
+  "unavailable": "Unavailable",
+  "more": "More",
+  "addPeriod": "Add a period",
+  "copyToAllDays": "Copy to every day",
+  "periodStart": "Starts at",
+  "periodEnd": "Ends at",
+  "periodEndAfterStart": "The end must be after the start.",
+  "hoursOverlap": "This period overlaps another one on the same day.",
+  "saveHours": "Save hours",
+  "bookingRules": "Booking rules",
+  "ruleBuffer": "Break between sessions",
+  "ruleNotice": "Minimum notice",
+  "ruleHorizon": "Book up to",
+  "hoursShort": "{h} h",
+  "@hoursShort": {
+    "placeholders": {
+      "h": {
+        "type": "int"
+      }
+    }
+  },
+  "daysShort": "{d} days",
+  "@daysShort": {
+    "placeholders": {
+      "d": {
+        "type": "int"
+      }
+    }
+  },
+  "saveRules": "Save rules",
+  "timeOff": "Time off",
+  "timeOffPick": "Choose the days you're away",
+  "noTimeOff": "No time off planned.",
+  "scheduleNote": "Clients only see times inside your hours that are free, after the break and the minimum notice. Two clients can never book the same time.",
+  "replyToReview": "Reply publicly",
+  "replyToReviewHint": "Shown under the review on your profile. Contact details are not allowed.",
+  "yourReply": "Your reply",
+  "publishReply": "Publish reply",
+  "reply": "Reply",
+  "editReply": "Edit reply",
+  "latestReviews": "Latest reviews",
+  "escrowHeldTag": "Fee held — waiting for the client's rating",
+  "escrowReleasedTag": "Released to your wallet",
+  "escrowDisputedTag": "Under review by support",
+  "escrowRefundedTag": "Refunded to the client",
+  "recordVoiceHint": "Hold to record, release to send — or tap to record hands-free",
+  "slideToCancel": "Slide to cancel",
+  "voiceTooShort": "Hold a little longer to record a voice message.",
+  "deleteRecording": "Delete recording",
+  "listenBeforeSending": "Listen before sending",
+  "stopAndListen": "Stop and listen"
 }

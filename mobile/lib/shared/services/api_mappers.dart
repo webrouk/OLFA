@@ -225,6 +225,8 @@ abstract final class ApiMappers {
       conversationId: (j['conversation'] as Map?)?['id'] as String?,
       myRating: ((j['review'] as Map?)?['rating'] as num?)?.toInt(),
       declineReason: j['declineReason'] as String?,
+      preferredTime: _date(j['preferredTime']),
+      escrow: j['escrowStatus'] as String?,
     );
   }
 }

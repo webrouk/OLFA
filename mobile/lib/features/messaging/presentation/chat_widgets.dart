@@ -24,9 +24,20 @@ String _mmss(int ms) {
   return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
 }
 
-/// Composer: text, up to 3 photos (preview tray with captions), and voice
-/// notes (tap the mic to record, up to one minute; counter shows what the
-/// plan has left in this conversation). Warns before sending a phone number.
+/// Unsent text per conversation, kept while the app runs (leaving a chat and
+/// coming back keeps what you were typing).
+final chatDraftsProvider = StateProvider<Map<String, String>>((_) => const {});
+
+enum _Voice { idle, holding, locked, review }
+
+/// Composer: text (draft kept per conversation), up to 3 photos from the
+/// gallery or camera (preview tray, the text becomes the caption), and voice
+/// notes up to one minute:
+///  - hold the mic to record, release to send; slide toward the start to cancel,
+///    slide up to lock and keep recording hands-free;
+///  - or tap the mic: records locked (accessible without holding);
+///  - locked recordings can be stopped and listened to before sending.
+/// Warns before sending a phone number.
 class ChatComposer extends ConsumerStatefulWidget {
   const ChatComposer({super.key, required this.conversationId, required this.onSent, this.peerName});
   final String conversationId;
@@ -40,19 +51,30 @@ class _ChatComposerState extends ConsumerState<ChatComposer> {
   final _input = TextEditingController();
   final _photos = <PreparedPhoto>[];
   VoiceRecorder? _rec;
+  _Voice _voice = _Voice.idle;
+  VoiceClip? _clip; // recorded, waiting in review
+  double _dx = 0, _dy = 0; // finger travel while holding
   Duration _elapsed = Duration.zero;
   StreamSubscription<Duration>? _tick;
   bool _preparing = false;
   bool _sending = false; // guards double taps while the phone check / send runs
+
+  static const _cancelAt = 110.0, _lockAt = 70.0;
 
   ChatController get _chat => ref.read(chatControllerProvider(widget.conversationId).notifier);
 
   @override
   void initState() {
     super.initState();
+    _input.text = ref.read(chatDraftsProvider)[widget.conversationId] ?? '';
     _input.addListener(() {
       setState(() {});
       _chat.onInput(_input.text);
+      final drafts = ref.read(chatDraftsProvider.notifier);
+      final t = _input.text;
+      if ((drafts.state[widget.conversationId] ?? '') != t) {
+        drafts.state = {...drafts.state, widget.conversationId: t}..removeWhere((_, v) => v.isEmpty);
+      }
     });
   }
 
@@ -62,6 +84,20 @@ class _ChatComposerState extends ConsumerState<ChatComposer> {
     _rec?.dispose();
     _input.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickSource() async {
+    final l = AppLocalizations.of(context);
+    final camera = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (c) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(leading: const Icon(Icons.photo_library_outlined), title: Text(l.attachPhoto), onTap: () => Navigator.pop(c, false)),
+          ListTile(leading: const Icon(Icons.photo_camera_outlined), title: Text(l.attachCamera), onTap: () => Navigator.pop(c, true)),
+        ]),
+      ),
+    );
+    if (camera != null) await _addPhotos(camera: camera);
   }
 
   Future<void> _addPhotos({bool camera = false}) async {
@@ -108,22 +144,34 @@ class _ChatComposerState extends ConsumerState<ChatComposer> {
     }
   }
 
-  Future<void> _startVoice() async {
+  Future<void> _startVoice({required bool locked}) async {
+    if (_rec != null || _voice != _Voice.idle) return;
     final l = AppLocalizations.of(context);
     final q = ref.read(voiceQuotaProvider(widget.conversationId)).valueOrNull;
     if (q?.remaining == 0) return _voiceLimit(q!.limit);
-    final rec = VoiceRecorder()..onAutoStop = _finishVoice;
+    final rec = VoiceRecorder()..onAutoStop = () => _voice == _Voice.locked ? _stopToReview() : _finishVoice();
+    // shown immediately so the gesture feels instant; reset if the mic is refused
+    setState(() {
+      _voice = locked ? _Voice.locked : _Voice.holding;
+      _dx = _dy = 0;
+      _elapsed = Duration.zero;
+    });
     if (!await rec.start()) {
       await rec.dispose();
-      if (mounted) showToast(context, l.micAccessNeeded);
+      if (mounted) {
+        setState(() => _voice = _Voice.idle);
+        showToast(context, l.micAccessNeeded);
+      }
+      return;
+    }
+    if (!mounted || _voice == _Voice.idle) {
+      // released before the recorder started
+      await rec.dispose();
       return;
     }
     HapticFeedback.mediumImpact();
     _tick = rec.elapsed.listen((d) => setState(() => _elapsed = d));
-    setState(() {
-      _rec = rec;
-      _elapsed = Duration.zero;
-    });
+    setState(() => _rec = rec);
   }
 
   void _voiceLimit(int limit) {
@@ -133,16 +181,28 @@ class _ChatComposerState extends ConsumerState<ChatComposer> {
     });
   }
 
-  Future<void> _finishVoice() async {
+  Future<VoiceClip?> _stopRecorder() async {
     final rec = _rec;
-    if (rec == null) return;
-    // Clear first: the 60 s auto-stop and a tap on "send" can arrive together.
-    setState(() => _rec = null);
+    _rec = null;
+    if (rec == null) return null;
     final clip = await rec.stop();
     await _tick?.cancel();
     await rec.dispose();
+    return clip;
+  }
+
+  /// Release while holding, or "send" while locked / reviewing.
+  Future<void> _finishVoice() async {
+    final clip = _clip ?? await _stopRecorder();
+    setState(() {
+      _voice = _Voice.idle;
+      _clip = null;
+    });
     if (!mounted) return;
-    if (clip == null) return;
+    if (clip == null) {
+      showToast(context, AppLocalizations.of(context).voiceTooShort);
+      return;
+    }
     HapticFeedback.lightImpact();
     final err = await _chat.send('', media: OutgoingMedia.voice(clip));
     widget.onSent();
@@ -153,11 +213,48 @@ class _ChatComposerState extends ConsumerState<ChatComposer> {
     }
   }
 
+  /// Locked recording → stop and listen before sending.
+  Future<void> _stopToReview() async {
+    final clip = await _stopRecorder();
+    if (!mounted) return;
+    setState(() {
+      _clip = clip;
+      _voice = clip == null ? _Voice.idle : _Voice.review;
+    });
+    if (clip == null) showToast(context, AppLocalizations.of(context).voiceTooShort);
+  }
+
   Future<void> _cancelVoice() async {
     final rec = _rec;
-    setState(() => _rec = null);
+    _rec = null;
+    setState(() {
+      _voice = _Voice.idle;
+      _clip = null;
+    });
     await _tick?.cancel();
     await rec?.dispose();
+    HapticFeedback.selectionClick();
+  }
+
+  void _onHoldMove(LongPressMoveUpdateDetails d) {
+    if (_voice != _Voice.holding) return;
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    // "toward the start": left in LTR, right in RTL
+    final toStart = rtl ? d.offsetFromOrigin.dx : -d.offsetFromOrigin.dx;
+    setState(() {
+      _dx = toStart.clamp(0, _cancelAt + 20).toDouble();
+      _dy = (-d.offsetFromOrigin.dy).clamp(0, _lockAt + 20).toDouble();
+    });
+    if (toStart > _cancelAt) {
+      _cancelVoice();
+    } else if (-d.offsetFromOrigin.dy > _lockAt) {
+      HapticFeedback.mediumImpact();
+      setState(() => _voice = _Voice.locked);
+    }
+  }
+
+  void _onHoldEnd() {
+    if (_voice == _Voice.holding) _finishVoice();
   }
 
   @override
@@ -165,6 +262,46 @@ class _ChatComposerState extends ConsumerState<ChatComposer> {
     final l = AppLocalizations.of(context);
     final quota = ref.watch(voiceQuotaProvider(widget.conversationId)).valueOrNull;
     final canSend = _input.text.trim().isNotEmpty || _photos.isNotEmpty;
+    final mic = GestureDetector(
+      onLongPressStart: (_) => _startVoice(locked: false),
+      onLongPressMoveUpdate: _onHoldMove,
+      onLongPressEnd: (_) => _onHoldEnd(),
+      onLongPressCancel: _onHoldEnd,
+      child: Stack(clipBehavior: Clip.none, children: [
+        AnimatedScale(
+          scale: _voice == _Voice.holding ? 1.25 : 1,
+          duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 120),
+          child: OlfaIconButton(icon: Icons.mic_none_rounded, tooltip: l.recordVoiceHint, style: OlfaIconStyle.filled, circle: true, size: 48, onPressed: () => _startVoice(locked: true)),
+        ),
+        if (quota?.remaining != null && _voice == _Voice.idle)
+          PositionedDirectional(
+            top: -4,
+            end: -4,
+            child: Semantics(
+              label: l.voiceLeft(quota!.remaining!),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(color: OlfaColors.black, borderRadius: OlfaRadius.all(9), border: Border.all(color: OlfaColors.white, width: 1.5)),
+                child: Text('${quota.remaining}', style: const TextStyle(color: OlfaColors.white, fontSize: 10, fontWeight: FontWeight.w700, fontFamily: 'Montserrat')),
+              ),
+            ),
+          ),
+        // slide up to lock
+        if (_voice == _Voice.holding)
+          PositionedDirectional(
+            bottom: 56 + _dy,
+            end: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+              decoration: BoxDecoration(color: OlfaColors.white, borderRadius: OlfaRadius.all(18), border: Border.all(color: OlfaColors.gray)),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Icon(_dy > _lockAt * 0.6 ? Icons.lock_rounded : Icons.lock_open_rounded, size: 18, color: OlfaColors.primary),
+                const Icon(Icons.keyboard_arrow_up_rounded, size: 18, color: OlfaColors.textMuted),
+              ]),
+            ),
+          ),
+      ]),
+    );
     return DecoratedBox(
       decoration: const BoxDecoration(color: OlfaColors.white, border: Border(top: BorderSide(color: OlfaColors.gray))),
       child: SafeArea(
@@ -173,54 +310,156 @@ class _ChatComposerState extends ConsumerState<ChatComposer> {
           padding: const EdgeInsets.fromLTRB(8, 8, 10, 8),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             if (_photos.isNotEmpty || _preparing) _PhotoTray(photos: _photos, preparing: _preparing, onRemove: (i) => setState(() => _photos.removeAt(i))),
-            if (_rec != null)
-              _RecordingBar(elapsed: _elapsed, onCancel: _cancelVoice, onSend: _finishVoice)
-            else
-              Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                OlfaIconButton(icon: Icons.add_photo_alternate_outlined, tooltip: l.addPhotos, size: 44, onPressed: _preparing ? null : () => _addPhotos()),
-                Expanded(
-                  child: TextField(
-                    controller: _input,
-                    minLines: 1,
-                    maxLines: 5,
-                    maxLength: 2000,
-                    textInputAction: TextInputAction.newline,
-                    decoration: InputDecoration(
-                      hintText: _photos.isEmpty ? l.messageHint : l.addCaption,
-                      counterText: '',
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                      border: OutlineInputBorder(borderRadius: OlfaRadius.all(24), borderSide: BorderSide.none),
-                      enabledBorder: OutlineInputBorder(borderRadius: OlfaRadius.all(24), borderSide: BorderSide.none),
-                      focusedBorder: OutlineInputBorder(borderRadius: OlfaRadius.all(24), borderSide: const BorderSide(color: OlfaColors.primary, width: 1.5)),
-                    ),
+            switch (_voice) {
+              _Voice.review => _VoiceReview(clip: _clip!, onDelete: _cancelVoice, onSend: _finishVoice),
+              _Voice.locked => _RecordingBar(elapsed: _elapsed, onCancel: _cancelVoice, onSend: _finishVoice, onStop: _stopToReview),
+              // idle and holding share one row so the mic keeps its place in the tree:
+              // the press that starts a hold must survive the switch to the holding bar.
+              _ => Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Expanded(
+                    child: _voice == _Voice.holding
+                        ? _HoldingBar(elapsed: _elapsed, slide: _dx / _cancelAt)
+                        : Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                            OlfaIconButton(icon: Icons.add_photo_alternate_outlined, tooltip: l.addPhotos, size: 44, onPressed: _preparing ? null : _pickSource),
+                            Expanded(
+                              child: TextField(
+                                controller: _input,
+                                minLines: 1,
+                                maxLines: 5,
+                                maxLength: 2000,
+                                textCapitalization: TextCapitalization.sentences,
+                                textInputAction: TextInputAction.newline,
+                                decoration: InputDecoration(
+                                  hintText: _photos.isEmpty ? l.messageHint : l.addCaption,
+                                  counterText: '',
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                                  border: OutlineInputBorder(borderRadius: OlfaRadius.all(24), borderSide: BorderSide.none),
+                                  enabledBorder: OutlineInputBorder(borderRadius: OlfaRadius.all(24), borderSide: BorderSide.none),
+                                  focusedBorder: OutlineInputBorder(borderRadius: OlfaRadius.all(24), borderSide: const BorderSide(color: OlfaColors.primary, width: 1.5)),
+                                ),
+                              ),
+                            ),
+                          ]),
                   ),
-                ),
-                const SizedBox(width: 6),
-                if (canSend)
-                  // arrow_forward mirrors automatically in RTL.
-                  OlfaIconButton(icon: Icons.arrow_forward_rounded, tooltip: l.send, style: OlfaIconStyle.filled, circle: true, size: 48, onPressed: _send)
-                else
-                  Stack(clipBehavior: Clip.none, children: [
-                    OlfaIconButton(icon: Icons.mic_none_rounded, tooltip: l.recordVoice, style: OlfaIconStyle.filled, circle: true, size: 48, onPressed: _startVoice),
-                    if (quota?.remaining != null)
-                      PositionedDirectional(
-                        top: -4,
-                        end: -4,
-                        child: Semantics(
-                          label: l.voiceLeft(quota!.remaining!),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                            decoration: BoxDecoration(color: OlfaColors.black, borderRadius: OlfaRadius.all(9), border: Border.all(color: OlfaColors.white, width: 1.5)),
-                            child: Text('${quota.remaining}', style: const TextStyle(color: OlfaColors.white, fontSize: 10, fontWeight: FontWeight.w700, fontFamily: 'Montserrat')),
-                          ),
-                        ),
-                      ),
-                  ]),
-              ]),
+                  const SizedBox(width: 6),
+                  if (canSend && _voice == _Voice.idle)
+                    // arrow_forward mirrors automatically in RTL.
+                    OlfaIconButton(icon: Icons.arrow_forward_rounded, tooltip: l.send, style: OlfaIconStyle.filled, circle: true, size: 48, onPressed: _send)
+                  else
+                    mic,
+                ]),
+            },
+            if (_input.text.length > 1800 && _voice == _Voice.idle)
+              Align(alignment: AlignmentDirectional.centerEnd, child: Padding(padding: const EdgeInsetsDirectional.only(end: 60, top: 2), child: Text('${_input.text.length}/2000', style: context.type.caption))),
           ]),
         ),
       ),
     );
+  }
+}
+
+/// While holding the mic: timer + "slide to cancel" that fades as the finger moves.
+class _HoldingBar extends StatelessWidget {
+  const _HoldingBar({required this.elapsed, required this.slide});
+  final Duration elapsed;
+  final double slide; // 0..1 toward cancelling
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return Semantics(
+      liveRegion: true,
+      label: l.recording,
+      child: SizedBox(
+        height: 48,
+        child: Row(children: [
+          const SizedBox(width: 10),
+          Container(width: 10, height: 10, decoration: const BoxDecoration(color: OlfaColors.primary, shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          Text(_mmss(elapsed.inMilliseconds), style: context.type.bodyMedium.copyWith(fontFamily: 'Montserrat', fontWeight: FontWeight.w600)),
+          const Spacer(),
+          Opacity(
+            opacity: (1 - slide).clamp(0.2, 1.0).toDouble(),
+            child: Row(children: [
+              const Icon(Icons.chevron_left_rounded, color: OlfaColors.textMuted), // mirrors in RTL
+              Text(l.slideToCancel, style: context.type.bodySmall.copyWith(color: OlfaColors.textMuted)),
+            ]),
+          ),
+          const SizedBox(width: 6),
+        ]),
+      ),
+    );
+  }
+}
+
+/// A stopped recording: listen, then delete or send.
+class _VoiceReview extends StatefulWidget {
+  const _VoiceReview({required this.clip, required this.onDelete, required this.onSend});
+  final VoiceClip clip;
+  final VoidCallback onDelete;
+  final VoidCallback onSend;
+  @override
+  State<_VoiceReview> createState() => _VoiceReviewState();
+}
+
+class _VoiceReviewState extends State<_VoiceReview> {
+  final _player = AudioPlayer();
+  bool _ready = false;
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggle() async {
+    if (!_ready) {
+      await _player.setFilePath(widget.clip.path);
+      _ready = true;
+    }
+    if (_player.playing) {
+      await _player.pause();
+    } else {
+      if (_player.processingState == ProcessingState.completed) await _player.seek(Duration.zero);
+      unawaited(_player.play());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final total = widget.clip.durationMs;
+    return Row(children: [
+      OlfaIconButton(icon: Icons.delete_outline_rounded, tooltip: l.deleteRecording, size: 44, onPressed: widget.onDelete),
+      Expanded(
+        child: Container(
+          height: 48,
+          padding: const EdgeInsetsDirectional.only(end: 12),
+          decoration: BoxDecoration(color: OlfaColors.gray, borderRadius: OlfaRadius.all(24)),
+          child: StreamBuilder<Duration>(
+            stream: _player.positionStream,
+            builder: (context, snap) {
+              final pos = snap.data?.inMilliseconds ?? 0;
+              final progress = total == 0 ? 0.0 : (pos / total).clamp(0.0, 1.0).toDouble();
+              return Row(children: [
+                StreamBuilder<bool>(
+                  stream: _player.playingStream,
+                  builder: (_, p) => IconButton(
+                    tooltip: (p.data ?? false) ? l.pause : l.listenBeforeSending,
+                    onPressed: _toggle,
+                    icon: Icon((p.data ?? false) ? Icons.pause_rounded : Icons.play_arrow_rounded, color: OlfaColors.primary),
+                  ),
+                ),
+                Expanded(child: SizedBox(height: 28, child: CustomPaint(painter: _WavePainter(widget.clip.waveform, progress, OlfaColors.black, Directionality.of(context))))),
+                const SizedBox(width: 8),
+                Text(_mmss(pos > 0 ? pos : total), style: const TextStyle(fontSize: 12, fontFamily: 'Montserrat', fontWeight: FontWeight.w600)),
+              ]);
+            },
+          ),
+        ),
+      ),
+      const SizedBox(width: 6),
+      OlfaIconButton(icon: Icons.arrow_forward_rounded, tooltip: l.send, style: OlfaIconStyle.filled, circle: true, size: 48, onPressed: widget.onSend),
+    ]);
   }
 }
 
@@ -272,10 +511,11 @@ class _PhotoTray extends StatelessWidget {
 }
 
 class _RecordingBar extends StatelessWidget {
-  const _RecordingBar({required this.elapsed, required this.onCancel, required this.onSend});
+  const _RecordingBar({required this.elapsed, required this.onCancel, required this.onSend, required this.onStop});
   final Duration elapsed;
   final VoidCallback onCancel;
   final VoidCallback onSend;
+  final VoidCallback onStop; // stop and listen before sending
 
   @override
   Widget build(BuildContext context) {
@@ -299,8 +539,9 @@ class _RecordingBar extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         Text(l.secondsLeft(left.inSeconds.clamp(0, 60).toInt()), style: context.type.caption),
-        const SizedBox(width: 6),
-        OlfaIconButton(icon: Icons.arrow_upward_rounded, tooltip: l.send, style: OlfaIconStyle.filled, circle: true, size: 48, onPressed: onSend),
+        const SizedBox(width: 4),
+        OlfaIconButton(icon: Icons.stop_circle_outlined, tooltip: l.stopAndListen, size: 44, onPressed: onStop),
+        OlfaIconButton(icon: Icons.arrow_forward_rounded, tooltip: l.send, style: OlfaIconStyle.filled, circle: true, size: 48, onPressed: onSend),
       ]),
     );
   }
