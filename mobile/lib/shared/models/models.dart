@@ -16,6 +16,19 @@ enum VerificationStatus { pending, rejected, approved }
 
 enum PlanCode { free, plus, premium }
 
+/// Chosen once during sign-up. Members look for marriage; professionals
+/// (psychologist / family counselor) get the counselor workspace and never
+/// appear in discovery. The server enforces it on every route.
+enum AccountType {
+  member,
+  psychologist,
+  familyCounselor;
+
+  bool get isProfessional => this != member;
+  String get api => switch (this) { member => 'MEMBER', psychologist => 'PSYCHOLOGIST', familyCounselor => 'FAMILY_COUNSELOR' };
+  static AccountType? fromApi(String? s) => switch (s) { 'MEMBER' => member, 'PSYCHOLOGIST' => psychologist, 'FAMILY_COUNSELOR' => familyCounselor, _ => null };
+}
+
 T _enum<T extends Enum>(List<T> values, Object? name, T fallback) =>
     values.firstWhere((e) => e.name == name, orElse: () => fallback);
 
@@ -94,7 +107,13 @@ class UserProfile {
     this.heightCm,
     this.weightKg,
     this.underReview = false,
+    this.religion,
+    this.sect,
   });
+
+  /// Keys from shared/reference/religions.tsv; null when not shared ("prefer not to say").
+  final String? religion;
+  final String? sect;
 
   /// New account awaiting moderation: shown with basics only.
   final bool underReview;
@@ -259,6 +278,14 @@ class PlanInfo {
   final String? localizedPrice; // from StoreKit / Play Billing, never hard-coded
 }
 
+/// One store product from the server's catalogue (`GET /subscriptions/products`).
+class StoreProductRef {
+  const StoreProductRef({required this.plan, required this.provider, required this.productId});
+  final PlanCode plan;
+  final String provider; // APPLE | GOOGLE
+  final String productId;
+}
+
 /// Where discovery looks. Nearest first is always the order; outside the
 /// user's current country requires Plus or Premium (enforced by the server).
 enum DiscoveryScope { nearby, myCountry, otherCountry }
@@ -278,7 +305,13 @@ class DiscoverFilters {
     this.minCompatibility,
     this.height,
     this.weight,
+    this.religions = const {},
+    this.sects = const {},
   });
+
+  /// Free for every plan. Sects are "religion.sect" and narrow only their own religion.
+  final Set<String> religions;
+  final Set<String> sects;
 
   /// Inclusive ranges; null = any. Members who left the value empty are not shown when a range is set.
   final (int, int)? height; // cm
@@ -319,6 +352,8 @@ class DiscoverFilters {
     int? Function()? minCompatibility,
     (int, int)? Function()? height,
     (int, int)? Function()? weight,
+    Set<String>? religions,
+    Set<String>? sects,
   }) =>
       DiscoverFilters(
         scope: scope ?? this.scope,
@@ -334,6 +369,8 @@ class DiscoverFilters {
         minCompatibility: minCompatibility != null ? minCompatibility() : this.minCompatibility,
         height: height != null ? height() : this.height,
         weight: weight != null ? weight() : this.weight,
+        religions: religions ?? this.religions,
+        sects: sects ?? this.sects,
       );
 
   Map<String, dynamic> toQuery() => {
@@ -845,4 +882,221 @@ class ChatEvent {
   final bool? typing;
   final String? readClientId;
   final ConversationSection? movedTo;
+}
+
+
+// ───────────── counselor wallet ─────────────
+
+/// Balance in one currency (amounts in integer minor units).
+class WalletBalance {
+  const WalletBalance({
+    required this.currency,
+    required this.availableMinor,
+    required this.pendingMinor,
+    required this.completedSessions,
+    required this.grossMinor,
+    required this.platformFeeMinor,
+    required this.netEarnedMinor,
+    required this.withdrawnMinor,
+    required this.minimumMinor,
+  });
+  final String currency;
+  final int availableMinor; // withdrawable now
+  final int pendingMinor; // still in the hold period
+  final int completedSessions;
+  final int grossMinor; // what clients paid
+  final int platformFeeMinor; // 15% commission
+  final int netEarnedMinor; // the counselor's share
+  final int withdrawnMinor;
+  final int minimumMinor;
+}
+
+class WalletSummary {
+  const WalletSummary({required this.commissionPercent, required this.holdDays, required this.balances, this.openWithdrawals = const [], this.payoutsOnHold = false});
+  final int commissionPercent;
+  final int holdDays;
+  final List<WalletBalance> balances;
+  final List<Withdrawal> openWithdrawals;
+
+  /// True while an integrity review is open: requests are kept but not paid out.
+  final bool payoutsOnHold;
+}
+
+enum WalletEntryKind { earning, earningReversal, withdrawal, withdrawalReturn, adjustment }
+
+class WalletEntry {
+  const WalletEntry({required this.id, required this.kind, required this.amountMinor, required this.currency, required this.createdAt, required this.availableAt, this.pending = false, this.memo, this.grossMinor, this.feeMinor, this.feePercent, this.service, this.durationMinutes});
+  final String id;
+  final WalletEntryKind kind;
+  final int amountMinor; // signed
+  final String currency;
+  final DateTime createdAt;
+  final DateTime availableAt;
+  final bool pending;
+  final String? memo;
+  // for earnings: the consultation's split
+  final int? grossMinor;
+  final int? feeMinor;
+  final int? feePercent;
+  final ConsultationService? service;
+  final int? durationMinutes;
+}
+
+enum PayoutKind { bankIban, bankSwift, wise, paypal, payoneer }
+
+class PayoutMethod {
+  const PayoutMethod({required this.id, required this.kind, required this.holderName, required this.countryIso, required this.currency, required this.mask, this.isDefault = false});
+  final String id;
+  final PayoutKind kind;
+  final String holderName;
+  final String countryIso;
+  final String currency;
+  final String mask; // e.g. AE07 •••• 3456 — the full number never comes back
+  final bool isDefault;
+}
+
+/// What the counselor types when adding a payout method (sent once, sealed on the server).
+class PayoutMethodDraft {
+  const PayoutMethodDraft({required this.kind, required this.holderName, required this.countryIso, required this.currency, this.iban, this.accountNumber, this.bic, this.bankName, this.email, this.makeDefault = false});
+  final PayoutKind kind;
+  final String holderName;
+  final String countryIso;
+  final String currency;
+  final String? iban;
+  final String? accountNumber;
+  final String? bic;
+  final String? bankName;
+  final String? email;
+  final bool makeDefault;
+}
+
+enum WithdrawalStatus { requested, processing, paid, rejected, failed, cancelled }
+
+class Withdrawal {
+  const Withdrawal({required this.id, required this.amountMinor, required this.currency, required this.status, required this.requestedAt, this.processedAt, this.reference, this.failureReason, this.methodMask, this.methodKind});
+  final String id;
+  final int amountMinor;
+  final String currency;
+  final WithdrawalStatus status;
+  final DateTime requestedAt;
+  final DateTime? processedAt;
+  final String? reference;
+  final String? failureReason;
+  final String? methodMask;
+  final PayoutKind? methodKind;
+  bool get open => status == WithdrawalStatus.requested || status == WithdrawalStatus.processing;
+}
+
+// ───────────── mandatory post-consultation questionnaire ─────────────
+
+enum NextSession { bookedInApp, planInApp, agreedOutside, notDiscussed, no }
+
+enum NextChannel { olfa, direct, otherApp, undecided }
+
+enum YesNoUnsure { no, yes, unsure }
+
+/// Quality questions plus direct and indirect questions about moving the
+/// relationship outside OLFA. Counselors never see who answered what.
+class ReviewAnswers {
+  const ReviewAnswers({
+    this.rating = 0,
+    this.quality = 0,
+    this.commitment = 0,
+    this.effectiveness = 0,
+    this.outcome = 0,
+    this.nextSession,
+    this.nextChannel,
+    this.contactShared,
+    this.offPlatformPayment,
+    this.externalChannel,
+    this.comment = '',
+  });
+  final int rating;
+  final int quality;
+  final int commitment;
+  final int effectiveness;
+  final int outcome;
+  final NextSession? nextSession;
+  final NextChannel? nextChannel;
+  final YesNoUnsure? contactShared;
+  final YesNoUnsure? offPlatformPayment;
+  final YesNoUnsure? externalChannel;
+  final String comment;
+
+  bool get complete =>
+      [rating, quality, commitment, effectiveness, outcome].every((v) => v >= 1 && v <= 5) &&
+      nextSession != null && nextChannel != null && contactShared != null && offPlatformPayment != null && externalChannel != null;
+
+  ReviewAnswers copyWith({int? rating, int? quality, int? commitment, int? effectiveness, int? outcome, NextSession? nextSession, NextChannel? nextChannel, YesNoUnsure? contactShared, YesNoUnsure? offPlatformPayment, YesNoUnsure? externalChannel, String? comment}) => ReviewAnswers(
+        rating: rating ?? this.rating,
+        quality: quality ?? this.quality,
+        commitment: commitment ?? this.commitment,
+        effectiveness: effectiveness ?? this.effectiveness,
+        outcome: outcome ?? this.outcome,
+        nextSession: nextSession ?? this.nextSession,
+        nextChannel: nextChannel ?? this.nextChannel,
+        contactShared: contactShared ?? this.contactShared,
+        offPlatformPayment: offPlatformPayment ?? this.offPlatformPayment,
+        externalChannel: externalChannel ?? this.externalChannel,
+        comment: comment ?? this.comment,
+      );
+
+  static String _snake(String camel) => camel.replaceAllMapped(RegExp('[A-Z]'), (m) => '_${m[0]}').toUpperCase();
+
+  Map<String, dynamic> toJson() => {
+        'rating': rating,
+        'quality': quality,
+        'commitment': commitment,
+        'effectiveness': effectiveness,
+        'outcome': outcome,
+        'nextSession': _snake(nextSession!.name),
+        'nextChannel': _snake(nextChannel!.name),
+        'contactShared': contactShared!.name.toUpperCase(),
+        'offPlatformPayment': offPlatformPayment!.name.toUpperCase(),
+        'externalChannel': externalChannel!.name.toUpperCase(),
+        if (comment.trim().isNotEmpty) 'comment': comment.trim(),
+      };
+}
+
+/// A completed consultation still waiting for the client's questionnaire.
+class PendingReview {
+  const PendingReview({required this.consultationId, required this.counselorName, required this.service, required this.durationMinutes, this.completedAt});
+  final String consultationId;
+  final String counselorName;
+  final ConsultationService service;
+  final int durationMinutes;
+  final DateTime? completedAt;
+}
+
+/// Integrity review of a counselor, as the counselor sees it (never who reported what).
+enum IntegrityCaseStatus { open, awaitingResponse, underReview, cleared, warned, suspended, banned }
+
+class IntegrityCase {
+  const IntegrityCase({required this.id, required this.status, required this.openedAt, this.responseDueAt, this.response, this.decisionReason});
+  final String id;
+  final IntegrityCaseStatus status;
+  final DateTime openedAt;
+  final DateTime? responseDueAt;
+  final String? response;
+  final String? decisionReason;
+  bool get needsResponse => status == IntegrityCaseStatus.awaitingResponse || status == IntegrityCaseStatus.open;
+  bool get isOpen => needsResponse || status == IntegrityCaseStatus.underReview;
+}
+
+// ───────────── store subscription state ─────────────
+
+enum StoreSubStatus { active, gracePeriod, billingRetry, onHold, paused, cancelled, expired, refunded, revoked, pending }
+
+/// The store subscription as the server last verified it with Apple / Google.
+class StoreSubscription {
+  const StoreSubscription({required this.plan, required this.status, required this.autoRenew, this.expiresAt, this.graceUntil, this.pendingPlan, this.isApple = true, this.manageUrl});
+  final PlanCode plan;
+  final StoreSubStatus status;
+  final bool autoRenew;
+  final DateTime? expiresAt;
+  final DateTime? graceUntil; // features stay on until then while the store retries the payment
+  final PlanCode? pendingPlan; // downgrade that starts at the next renewal
+  final bool isApple;
+  final String? manageUrl;
+  bool get billingIssue => status == StoreSubStatus.gracePeriod || status == StoreSubStatus.billingRetry || status == StoreSubStatus.onHold;
 }

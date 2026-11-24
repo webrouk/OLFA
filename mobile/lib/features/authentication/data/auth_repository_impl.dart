@@ -46,7 +46,12 @@ class ApiAuthRepository implements AuthRepository {
         );
         final d = r.data!;
         await _store.saveTokens(access: d['accessToken'] as String, refresh: d['refreshToken'] as String);
-        return AuthResult(isNewUser: d['isNewUser'] as bool, accountStatus: d['accountStatus'] as String, profileComplete: d['profileComplete'] as bool);
+        return AuthResult(
+          isNewUser: d['isNewUser'] as bool,
+          accountStatus: d['accountStatus'] as String,
+          profileComplete: d['profileComplete'] as bool,
+          accountType: AccountType.fromApi(d['accountType'] as String?),
+        );
       });
 
   Future<String?> _timezone() async {

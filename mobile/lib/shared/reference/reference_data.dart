@@ -640,6 +640,55 @@ const kOccupations = <Occupation>[
   Occupation('other', 'other', 'Other', 'أخرى'),
 ];
 
+class Religion {
+  const Religion(this.key, this.en, this.ar);
+  final String key;
+  final String en;
+  final String ar;
+  String label(String lang) => lang == 'ar' ? ar : en;
+  List<Sect> get sects => [for (final s in kSects) if (s.religion == key) s];
+}
+
+class Sect {
+  const Sect(this.religion, this.key, this.en, this.ar);
+  final String religion;
+  final String key;
+  final String en;
+  final String ar;
+  String label(String lang) => lang == 'ar' ? ar : en;
+}
+
+const kReligions = <Religion>[
+  Religion('islam', 'Islam', 'الإسلام'),
+  Religion('christianity', 'Christianity', 'المسيحية'),
+  Religion('druze', 'Druze', 'الدرزية'),
+  Religion('judaism', 'Judaism', 'اليهودية'),
+  Religion('other', 'Other', 'ديانة أخرى'),
+  Religion('undisclosed', 'Prefer not to say', 'أفضّل عدم الإفصاح'),
+];
+
+const kSects = <Sect>[
+  Sect('islam', 'sunni', 'Sunni', 'سنّي'),
+  Sect('islam', 'shia', 'Shia', 'شيعي'),
+  Sect('islam', 'ibadi', 'Ibadi', 'إباضي'),
+  Sect('islam', 'other', 'Other / prefer not to say', 'أخرى / أفضّل عدم التحديد'),
+  Sect('christianity', 'coptic_orthodox', 'Coptic Orthodox', 'قبطي أرثوذكسي'),
+  Sect('christianity', 'greek_orthodox', 'Greek Orthodox', 'روم أرثوذكس'),
+  Sect('christianity', 'syriac_orthodox', 'Syriac Orthodox', 'سرياني أرثوذكسي'),
+  Sect('christianity', 'armenian_orthodox', 'Armenian Orthodox', 'أرمني أرثوذكسي'),
+  Sect('christianity', 'catholic', 'Catholic', 'كاثوليكي'),
+  Sect('christianity', 'maronite', 'Maronite', 'ماروني'),
+  Sect('christianity', 'melkite', 'Melkite Greek Catholic', 'روم كاثوليك'),
+  Sect('christianity', 'protestant', 'Protestant', 'بروتستانتي'),
+  Sect('christianity', 'evangelical', 'Evangelical', 'إنجيلي'),
+  Sect('christianity', 'other', 'Other / prefer not to say', 'أخرى / أفضّل عدم التحديد'),
+];
+
+Religion? religionByKey(String? key) => key == null ? null : _religionIndex[key];
+Sect? sectOf(String? religion, String? key) => religion == null || key == null ? null : _sectIndex['$religion.$key'];
+final _religionIndex = {for (final r in kReligions) r.key: r};
+final _sectIndex = {for (final s in kSects) '${s.religion}.${s.key}': s};
+
 final _countryIndex = {for (final c in kCountries) c.iso: c};
 final _nationalityIndex = {for (final n in kNationalities) n.iso: n};
 final _occupationIndex = {for (final o in kOccupations) o.key: o};

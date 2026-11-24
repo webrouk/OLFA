@@ -21,6 +21,9 @@ class CounselorQuery {
   int get hashCode => Object.hash(kind, service, language, durationMinutes);
 }
 
+/// Version of the professional policy shown at sign-up (server setting counselor.policyVersion).
+const kProfessionalPolicyVersion = '2026-11';
+
 /// What a professional submits to become a counselor (reviewed by moderators).
 class CounselorApplication {
   const CounselorApplication({
@@ -35,7 +38,20 @@ class CounselorApplication {
     required this.languages,
     required this.services,
     required this.credentialKeys,
+    this.gender,
+    this.countryIso,
+    this.city,
+    this.policyVersion = kProfessionalPolicyVersion,
   });
+
+  /// Clients may prefer a counselor of a given gender (from the sign-up gender step).
+  final Gender? gender;
+  final String? countryIso;
+  final String? city;
+
+  /// The professional policy the counselor accepted (15% commission, no
+  /// off-platform dealings, fair review, permanent ban for circumvention).
+  final String policyVersion;
   final CounselorKind kind;
   final String displayName, headline, bio, licenseNumber, licenseAuthority, licenseCountry;
   final int yearsExperience;
@@ -57,7 +73,15 @@ abstract interface class ConsultationsRepository {
   Future<void> pay(BookingIntent intent);
   Future<List<Consultation>> mine();
   Future<void> cancel(String consultationId);
-  Future<void> review(String consultationId, {required int rating, String? comment});
+  /// Mandatory questionnaire after a completed consultation.
+  Future<void> review(String consultationId, ReviewAnswers answers);
+
+  /// Completed consultations still waiting for the questionnaire.
+  Future<List<PendingReview>> pendingReviews();
+
+  /// The counselor's latest integrity case (null when none).
+  Future<IntegrityCase?> integrityCase();
+  Future<IntegrityCase?> respondIntegrity(String caseId, String response);
 
   // counselor
   Future<Counselor?> myCounselorProfile();

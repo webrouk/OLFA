@@ -850,5 +850,37 @@
 "retired",
 "job_seeker",
 "other"
-]
+],
+"religions": [
+"islam",
+"christianity",
+"druze",
+"judaism",
+"other",
+"undisclosed"
+],
+"sects": {
+"islam": [
+"sunni",
+"shia",
+"ibadi",
+"other"
+],
+"christianity": [
+"coptic_orthodox",
+"greek_orthodox",
+"syriac_orthodox",
+"armenian_orthodox",
+"catholic",
+"maronite",
+"melkite",
+"protestant",
+"evangelical",
+"other"
+],
+"druze": [],
+"judaism": [],
+"other": [],
+"undisclosed": []
+}
 }

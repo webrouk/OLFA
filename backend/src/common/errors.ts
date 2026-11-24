@@ -26,6 +26,12 @@ export enum ErrorCode {
   REMATCH_USED = 'REMATCH_USED',
   INVALID_STATE = 'INVALID_STATE',
   NOT_PAID = 'NOT_PAID',
+  ACCOUNT_TYPE_LOCKED = 'ACCOUNT_TYPE_LOCKED',
+  WRONG_ACCOUNT_TYPE = 'WRONG_ACCOUNT_TYPE',
+  ACCOUNT_BANNED = 'ACCOUNT_BANNED',
+  INSUFFICIENT_BALANCE = 'INSUFFICIENT_BALANCE',
+  REVIEW_REQUIRED = 'REVIEW_REQUIRED',
+  STORE_VERIFICATION_FAILED = 'STORE_VERIFICATION_FAILED',
   INTERNAL = 'INTERNAL',
 }
 
@@ -54,6 +60,12 @@ const STATUS: Record<ErrorCode, HttpStatus> = {
   REMATCH_USED: HttpStatus.CONFLICT,
   INVALID_STATE: HttpStatus.CONFLICT,
   NOT_PAID: HttpStatus.PAYMENT_REQUIRED,
+  ACCOUNT_TYPE_LOCKED: HttpStatus.CONFLICT,
+  WRONG_ACCOUNT_TYPE: HttpStatus.FORBIDDEN,
+  ACCOUNT_BANNED: HttpStatus.FORBIDDEN,
+  INSUFFICIENT_BALANCE: HttpStatus.UNPROCESSABLE_ENTITY,
+  REVIEW_REQUIRED: HttpStatus.CONFLICT,
+  STORE_VERIFICATION_FAILED: HttpStatus.UNPROCESSABLE_ENTITY,
   INTERNAL: HttpStatus.INTERNAL_SERVER_ERROR,
 };
 
@@ -101,6 +113,18 @@ export function fromPgError(e: unknown): AppError | null {
       return new AppError(ErrorCode.NOT_PAID);
     case 'P0003':
       return new AppError(ErrorCode.FORBIDDEN);
+    // account types, wallet, reviews (migration 20261114180000)
+    case 'P0030':
+      return new AppError(ErrorCode.ACCOUNT_TYPE_LOCKED);
+    case 'P0031':
+      return new AppError(ErrorCode.WRONG_ACCOUNT_TYPE);
+    case 'P0040':
+    case 'P0042':
+      return new AppError(ErrorCode.INVALID_STATE);
+    case 'P0041':
+      return new AppError(ErrorCode.INSUFFICIENT_BALANCE);
+    case 'P0050':
+      return new AppError(ErrorCode.REVIEW_REQUIRED);
     case '23505':
     case 'P2002':
       return new AppError(ErrorCode.CONFLICT);

@@ -34,6 +34,8 @@ abstract final class ApiMappers {
         occupation: j['occupation'] as String? ?? '',
         heightCm: (j['heightCm'] as num?)?.toInt(),
         weightKg: (j['weightKg'] as num?)?.toInt(),
+        religion: j['religion'] as String?,
+        sect: j['sect'] as String?,
         timeline: fromApiEnum(MarriageTimeline.values, j['marriageTimeline'], MarriageTimeline.notSure),
         bio: j['bio'] as String? ?? '',
         interests: (j['interests'] as List? ?? const []).cast<String>(),

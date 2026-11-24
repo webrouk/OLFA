@@ -23,4 +23,9 @@ final myConsultationsProvider = FutureProvider.autoDispose<List<Consultation>>((
 /// Null when the user has not applied as a counselor.
 final myCounselorProvider = FutureProvider.autoDispose<Counselor?>((ref) => ref.watch(consultationsRepositoryProvider).myCounselorProfile());
 
+/// Completed sessions the client still has to review (gates new bookings).
+final pendingReviewsProvider = FutureProvider.autoDispose<List<PendingReview>>((ref) => ref.watch(consultationsRepositoryProvider).pendingReviews());
+
+final integrityCaseProvider = FutureProvider.autoDispose<IntegrityCase?>((ref) => ref.watch(consultationsRepositoryProvider).integrityCase());
+
 final counselorDeskProvider = FutureProvider.autoDispose<List<Consultation>>((ref) => ref.watch(consultationsRepositoryProvider).desk());

@@ -4,6 +4,7 @@ import '../../core/localization/generated/app_localizations.dart';
 import '../../core/theme/olfa_colors.dart';
 import '../../core/theme/olfa_spacing.dart';
 import '../../core/theme/olfa_typography.dart';
+import '../../core/widgets/inputs.dart';
 import '../models/models.dart';
 import 'labels.dart';
 
@@ -341,5 +342,117 @@ class RangeFilter extends StatelessWidget {
           ),
       ]),
     );
+  }
+}
+
+// ───────────── religion & sect ─────────────
+
+String religionLabel(BuildContext context, String? key) => religionByKey(key)?.label(langOf(context)) ?? '';
+String sectLabel(BuildContext context, String? religion, String? sect) => sectOf(religion, sect)?.label(langOf(context)) ?? '';
+
+/// Religion, then the sects of THAT religion (the list follows the choice),
+/// plus the explicit consent the law requires for this kind of data.
+/// "Prefer not to say" needs no consent and hides the sect.
+class ReligionSectFields extends StatelessWidget {
+  const ReligionSectFields({super.key, required this.religion, required this.sect, required this.consent, required this.onReligion, required this.onSect, required this.onConsent, this.error});
+  final String? religion;
+  final String? sect;
+  final bool consent;
+  final ValueChanged<String?> onReligion;
+  final ValueChanged<String?> onSect;
+  final ValueChanged<bool> onConsent;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final lang = langOf(context);
+    final sects = religion == null ? const <Sect>[] : religionByKey(religion)?.sects ?? const <Sect>[];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(l.religion, style: context.type.inputLabel),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: religion,
+          isExpanded: true,
+          hint: Text(l.select),
+          decoration: InputDecoration(errorText: error),
+          items: [for (final r in kReligions) DropdownMenuItem(value: r.key, child: Text(r.label(lang)))],
+          onChanged: onReligion,
+        ),
+        if (sects.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Text(l.sect, style: context.type.inputLabel),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String?>(
+            // a sect from another religion is never kept (ProfileDraft.withReligion)
+            value: sects.any((x) => x.key == sect) ? sect : null,
+            isExpanded: true,
+            hint: Text(l.sectOptional),
+            items: [
+              DropdownMenuItem<String?>(value: null, child: Text(l.sectOptional)),
+              for (final x in sects) DropdownMenuItem<String?>(value: x.key, child: Text(x.label(lang))),
+            ],
+            onChanged: onSect,
+          ),
+        ],
+        if (religion != null && religion != 'undisclosed') ...[
+          const SizedBox(height: 10),
+          OlfaCheck(value: consent, onChanged: onConsent, label: l.religionConsent),
+        ],
+      ]),
+    );
+  }
+}
+
+/// Partner preference / search filter: religions (multi), and under each chosen
+/// religion its sects. Nothing selected = any. Sects narrow only their religion.
+class ReligionFilter extends StatelessWidget {
+  const ReligionFilter({super.key, required this.religions, required this.sects, required this.onChanged});
+  final Set<String> religions;
+  final Set<String> sects; // "religion.sect"
+  final void Function(Set<String> religions, Set<String> sects) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final lang = langOf(context);
+    final options = kReligions.where((r) => r.key != 'undisclosed').toList();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      ChoiceWrap<Religion>(
+        options: options,
+        label: (r) => r.label(lang),
+        isSelected: (r) => religions.contains(r.key),
+        onTap: (r) {
+          final next = {...religions};
+          final nextSects = {...sects};
+          if (!next.remove(r.key)) {
+            next.add(r.key);
+          } else {
+            nextSects.removeWhere((s) => s.startsWith('${r.key}.')); // sects follow their religion
+          }
+          onChanged(next, nextSects);
+        },
+      ),
+      for (final r in options.where((r) => religions.contains(r.key) && r.sects.isNotEmpty)) ...[
+        const SizedBox(height: 12),
+        Text(l.sectsOf(r.label(lang)), style: context.type.caption),
+        const SizedBox(height: 6),
+        ChoiceWrap<Sect>(
+          options: r.sects.where((s) => s.key != 'other').toList(),
+          label: (s) => s.label(lang),
+          isSelected: (s) => sects.contains('${r.key}.${s.key}'),
+          onTap: (s) {
+            final k = '${r.key}.${s.key}';
+            final next = {...sects};
+            if (!next.remove(k)) next.add(k);
+            onChanged(religions, next);
+          },
+        ),
+      ],
+      const SizedBox(height: 6),
+      Text(religions.isEmpty ? l.religionAny : l.religionFilterNote, style: context.type.caption),
+    ]);
   }
 }

@@ -150,6 +150,12 @@ String failureMessage(BuildContext context, Object error) {
         'conversation_closed' => l.chatClosedUnmatched,
         'rematch_used' => l.rematchAlreadyUsed,
         'not_paid' => l.consultPayFirst,
+        'account_type_locked' => l.errAccountTypeLocked,
+        'wrong_account_type' => l.errWrongAccountType,
+        'account_banned' => l.errAccountBanned,
+        'insufficient_balance' => l.errInsufficientBalance,
+        'review_required' => l.errReviewRequired,
+        'store_verification_failed' => l.errStoreVerification,
         _ => l.errorGeneric,
       },
   };

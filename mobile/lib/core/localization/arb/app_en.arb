@@ -1053,5 +1053,320 @@
   "confirmAndSchedule": "Confirm & schedule",
   "paidOn": "Paid",
   "edit": "Edit",
-  "deskFootnote": "Confirming opens a private chat — you can write first. Declining refunds the client in full. Amounts shown are before the platform fee."
+  "deskFootnote": "Confirming opens a private chat — you can write first. Declining refunds the client in full. Amounts shown are before the platform fee.",
+  "accountTypeTitle": "How will you use OLFA?",
+  "accountTypeBody": "Choose your account type. The steps, screens and features adapt to it.",
+  "accountTypeLocked": "You can’t change the account type after your profile is created. Contact support if you chose the wrong one.",
+  "typeMember": "Looking for marriage",
+  "typeMemberBody": "Find a compatible partner with serious intentions.",
+  "typeMemberP1": "Discover, likes and matches",
+  "typeMemberP2": "Partner preferences and filters",
+  "typePsychologist": "Register as a psychologist",
+  "typePsychologistBody": "Offer licensed psychological consultations to members.",
+  "typeFamilyCounselor": "Register as a family counselor",
+  "typeFamilyCounselorBody": "Offer marital and family consultations to members.",
+  "typeProP1": "Your own wallet, withdrawals to your bank",
+  "typeProP2": "Licence review before your profile goes live",
+  "bodyMetricsTitle": "Height and weight",
+  "bodyMetricsNote": "Optional. Shown on your profile and used in filters.",
+  "aboutYouProfessional": "Tell us about your practice",
+  "cityOfPractice": "City of practice",
+  "photosBodyProfessional": "A clear, professional photo of you. It is reviewed before your profile goes live.",
+  "professionalsRegisterNote": "Licensed professionals can register as a psychologist or family counselor when creating an account.",
+  "religion": "Religion",
+  "sect": "Sect / denomination",
+  "sectOptional": "Sect (optional)",
+  "sectsOf": "Sects of {religion}",
+  "@sectsOf": {
+    "placeholders": {
+      "religion": {
+        "type": "String"
+      }
+    }
+  },
+  "religionAny": "Any religion",
+  "religionFilterNote": "Leave the sect empty to include every sect of the chosen religions.",
+  "religionConsent": "I agree that OLFA uses my religion to show me compatible profiles. I can remove it at any time.",
+  "religionConsentRequired": "Please confirm your consent to save your religion.",
+  "acceptedReligions": "Partner’s religion",
+  "walletTitle": "Wallet",
+  "navWallet": "Wallet",
+  "navDesk": "Desk",
+  "walletAvailable": "Available to withdraw",
+  "walletAvailableAmount": "Available: {amount}",
+  "@walletAvailableAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "walletPending": "{amount} pending — released {days} days after each session",
+  "@walletPending": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "walletMinimum": "Minimum withdrawal {amount}",
+  "@walletMinimum": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "walletOnHold": "Withdrawals are paused while an account review is open. Your earnings are safe.",
+  "walletActivity": "Activity",
+  "walletEmpty": "Earnings from completed consultations will appear here.",
+  "availableOn": "Available on {date}",
+  "@availableOn": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "clientsPaid": "Clients paid",
+  "platformFee": "OLFA fee ({percent}%)",
+  "@platformFee": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "yourShare": "Your net earnings",
+  "commissionTitle": "What the 15% fee pays for",
+  "commissionBody": "OLFA keeps {percent}% of each consultation. The rest is yours and goes to your wallet when the session is completed.",
+  "@commissionBody": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "commissionDev": "Developing and running the platform",
+  "commissionMarketing": "Marketing OLFA to new members",
+  "commissionAds": "Advertising campaigns",
+  "commissionPromote": "Promoting your profile to clients",
+  "commissionYourNumbers": "Your numbers · {count} completed sessions",
+  "@commissionYourNumbers": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deskYouReceive": "You receive {amount} after the {percent}% OLFA fee",
+  "@deskYouReceive": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "deskCommissionNote": "Prices are what the client pays. OLFA keeps 15%; your net earnings go to your wallet.",
+  "withdraw": "Withdraw",
+  "requestWithdrawal": "Request withdrawal",
+  "withdrawNote": "Withdrawals are reviewed and sent within 3–5 business days. Bank or transfer fees may apply.",
+  "withdrawAmountError": "Enter an amount between the minimum and your available balance.",
+  "withdrawRequested": "Withdrawal requested",
+  "withdrawalHistory": "Withdrawals",
+  "noWithdrawals": "No withdrawals yet",
+  "payoutTo": "Send to",
+  "payoutMethods": "Payout methods",
+  "payoutMethodsHint": "Bank account (IBAN or SWIFT) or a supported international transfer service.",
+  "noPayoutMethods": "No payout method yet",
+  "addPayoutMethod": "Add payout method",
+  "addPayoutFirst": "Add a payout method first",
+  "payoutIban": "Bank account (IBAN)",
+  "payoutSwift": "Bank account (SWIFT)",
+  "payoutSecurity": "Account details are encrypted and only shown masked. They must be in your own name.",
+  "accountHolder": "Account holder name",
+  "accountNumber": "Account number",
+  "accountEmail": "Account email",
+  "bankNameOptional": "Bank name (optional)",
+  "invalidIban": "Check the IBAN",
+  "invalidBic": "Check the SWIFT/BIC code",
+  "invalidEmail": "Check the email",
+  "defaultLabel": "Default",
+  "makeDefault": "Make default",
+  "ledgerEarning": "Consultation earning",
+  "ledgerReversal": "Refund reversal",
+  "ledgerWithdrawal": "Withdrawal",
+  "ledgerReturn": "Withdrawal returned",
+  "ledgerAdjustment": "Adjustment",
+  "wdRequested": "Requested",
+  "wdProcessing": "Processing",
+  "wdPaid": "Paid",
+  "wdRejected": "Rejected",
+  "wdFailed": "Failed — returned to wallet",
+  "wdCancelled": "Cancelled",
+  "professionalPolicy": "Professional conduct policy",
+  "readProfessionalPolicy": "Read the full policy",
+  "acceptProfessionalPolicy": "I agree to the professional conduct policy",
+  "policySummaryTitle": "Before you register",
+  "policyPoint1": "OLFA keeps {percent}% of each consultation for development, marketing, advertising and promoting your profile.",
+  "@policyPoint1": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "policyPoint2": "All sessions, follow-ups and payments with clients you meet on OLFA stay on OLFA.",
+  "policyPoint3": "Moving clients off the platform to avoid the fee can lead to a permanent ban after a fair review in which you can respond.",
+  "policyPoint4": "Permanently banned professionals can’t register again.",
+  "integrityTitle": "Account review",
+  "integrityWarnedTitle": "Formal warning",
+  "integrityBodyRespond": "Some client feedback suggests sessions may be moving outside OLFA. Please give your account of it by {date}. Withdrawals are paused until the review ends.",
+  "@integrityBodyRespond": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "integrityBodyReview": "Thank you for your response. Our team is reviewing the case and will tell you the outcome.",
+  "integrityRespondTitle": "Your response",
+  "integrityRespondBody": "Explain what happened. You can mention appointments, how clients reached you and anything we should know. A reviewer reads every response.",
+  "yourResponse": "Your response",
+  "responseTooShort": "Please write at least 30 characters.",
+  "sendResponse": "Send response",
+  "reviewRequiredBanner": "Please complete the short questionnaire about your last consultation before booking another.",
+  "reviewsWaiting": "{count, plural, =1{1 consultation to rate} other{{count} consultations to rate}}",
+  "@reviewsWaiting": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewTitle": "Rate your consultation",
+  "reviewHeading": "How was your consultation?",
+  "reviewHeadingNamed": "How was your consultation with {name}?",
+  "@reviewHeadingNamed": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewIntro": "It takes a minute and helps keep the service safe and of high quality.",
+  "reviewConfidential": "Your answers are confidential. The counselor sees only the overall rating, never your name or other answers.",
+  "reviewSessionQuality": "The session",
+  "qOverall": "Overall",
+  "qQuality": "How you were treated",
+  "qCommitment": "Punctuality and commitment",
+  "qEffectiveness": "How useful it was",
+  "qOutcome": "Did you get what you hoped for?",
+  "reviewNextSteps": "Next steps",
+  "qNextSession": "Did you agree on another session?",
+  "nsBookedInApp": "Yes, booked in OLFA",
+  "nsPlanInApp": "Yes, I’ll book it in OLFA",
+  "nsAgreedOutside": "Yes, arranged outside OLFA",
+  "nsNotDiscussed": "We didn’t discuss it",
+  "nsNo": "No",
+  "qNextChannel": "Where would a next session happen?",
+  "ncOlfa": "In OLFA",
+  "ncDirect": "Directly (phone, clinic)",
+  "ncOtherApp": "Another app",
+  "ncUndecided": "Not decided",
+  "reviewSafety": "Safety",
+  "qContactShared": "Were you asked for, or given, personal contact details?",
+  "qContactSharedHint": "Phone, WhatsApp, email or social media",
+  "qOffPlatformPayment": "Were you asked to pay outside OLFA?",
+  "qExternalChannel": "Were you invited to continue on another app or website?",
+  "qExternalChannelHint": "Including a clinic, a booking site or a messaging app",
+  "answerYes": "Yes",
+  "answerNo": "No",
+  "answerUnsure": "Not sure",
+  "reviewCommentHint": "Anything else you’d like to tell us (optional)",
+  "reviewWhyOlfa": "Sessions and payments inside OLFA are protected: refunds, a private chat and support if something goes wrong.",
+  "answerAllQuestions": "Please answer every question.",
+  "submitReview": "Submit",
+  "startReview": "Rate now",
+  "reviewPromptTitle": "Rate your session with {name}",
+  "@reviewPromptTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewPromptBody": "A one-minute questionnaire. You can book again once it’s done.",
+  "errAccountBanned": "This account can’t be used on OLFA.",
+  "errAccountTypeLocked": "The account type can’t be changed after the profile is created.",
+  "errInsufficientBalance": "The amount is more than your available balance.",
+  "errReviewRequired": "Please rate your last consultation first.",
+  "errStoreVerification": "We couldn’t confirm the purchase with the store. You haven’t been charged twice — try Restore purchases.",
+  "errWrongAccountType": "This feature isn’t available for your account type.",
+  "respond": "Respond",
+  "remove": "Remove",
+  "currency": "Currency",
+  "reference": "Reference",
+  "max": "Max",
+  "purchasePending": "Payment pending — your plan starts as soon as the store approves it.",
+  "downgradeScheduled": "{plan} starts at your next renewal. You keep your current plan until then.",
+  "@downgradeScheduled": {
+    "placeholders": {
+      "plan": {
+        "type": "String"
+      }
+    }
+  },
+  "downgradeTo": "Switch to {plan} at renewal",
+  "@downgradeTo": {
+    "placeholders": {
+      "plan": {
+        "type": "String"
+      }
+    }
+  },
+  "changeScheduled": "Change scheduled",
+  "cancelInStore": "Cancel in the store",
+  "storeUnavailable": "The store isn’t available right now. Check that you’re signed in to the App Store / Google Play.",
+  "productUnavailable": "This plan isn’t available in your store region yet.",
+  "purchaseFailed": "The payment didn’t go through. You haven’t been charged.",
+  "nothingToRestore": "No previous subscriptions found for this store account.",
+  "restoring": "Restoring…",
+  "billingIssueBody": "We couldn’t renew your subscription. Update your payment method in the store to keep your plan.",
+  "billingIssueGrace": "Your payment didn’t go through. Your plan stays active until {date} — update your payment method in the store.",
+  "@billingIssueGrace": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "updatePayment": "Update",
+  "planChangesOn": "Your plan changes to {plan} on {date}.",
+  "@planChangesOn": {
+    "placeholders": {
+      "plan": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "planEndsOn": "Auto-renew is off. Your plan ends on {date}.",
+  "@planEndsOn": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "resubscribe": "Turn on",
+  "planChangeRules": "Upgrading starts the new plan now and the store credits unused time. Downgrading takes effect at your next renewal. Cancel any time in the store; you keep your plan until the end of the paid period."
 }

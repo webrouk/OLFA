@@ -15,11 +15,21 @@ class OlfaNavItem {
 /// Floating, rounded bottom navigation with external margins and SafeArea
 /// support. Order follows reading direction automatically (RTL/LTR).
 class FloatingNavBar extends StatelessWidget {
-  const FloatingNavBar({super.key, required this.index, required this.onTap, this.badges = const {}});
+  const FloatingNavBar({super.key, required this.index, required this.onTap, this.badges = const {}, this.professional = false});
 
   final int index;
   final ValueChanged<int> onTap;
   final Set<int> badges;
+
+  /// Professional accounts get their own tabs: desk, wallet, messages, profile.
+  final bool professional;
+
+  static List<OlfaNavItem> professionalItems(AppLocalizations l) => [
+        OlfaNavItem(Icons.dashboard_customize_outlined, Icons.dashboard_customize_rounded, l.navDesk),
+        OlfaNavItem(Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, l.navWallet),
+        OlfaNavItem(Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, l.navMessages),
+        OlfaNavItem(Icons.person_outline_rounded, Icons.person_rounded, l.navProfile),
+      ];
 
   static List<OlfaNavItem> items(AppLocalizations l) => [
         OlfaNavItem(Icons.explore_outlined, Icons.explore, l.navDiscover),
@@ -32,7 +42,7 @@ class FloatingNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final list = items(l);
+    final list = professional ? professionalItems(l) : items(l);
     final bottom = MediaQuery.paddingOf(context).bottom;
     return LayoutBuilder(
       builder: (context, c) {

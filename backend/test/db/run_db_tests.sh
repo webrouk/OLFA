@@ -29,6 +29,8 @@ INSERT INTO users (id, phone_e164, phone_country, status) VALUES
 -- 40 active users for pair races
 INSERT INTO users (phone_e164, phone_country, status)
 SELECT '+97155' || lpad(g::text, 7, '0'), 'AE', 'ACTIVE' FROM generate_series(1, 40) g;
+-- marriage members (account type chosen at sign-up)
+UPDATE users SET account_type = 'MEMBER';
 SQL
 
 echo "constraints"

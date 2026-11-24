@@ -26,6 +26,14 @@ const PUSH_TEXT: Record<string, { ar: [string, string]; en: [string, string] }> 
   'push.consultation_completed': { ar: ['اكتملت الجلسة', 'شاركنا تقييمك للاستشاري'], en: ['Session completed', 'Rate your counselor'] },
   'push.counselor_approved': { ar: ['تم اعتماد ملفك كاستشاري', 'أضف أسعارك لاستقبال الطلبات'], en: ['Counselor profile approved', 'Add your prices to receive requests'] },
   'push.counselor_rejected': { ar: ['طلب الاستشاري', 'راجع ملاحظات المراجعة'], en: ['Counselor application', 'See the review notes'] },
+  'push.review_required': { ar: ['كيف كانت جلستك؟', 'أجب عن أسئلة التقييم القصيرة — تقييمك يحمي المجتمع'], en: ['How was your session?', 'Answer the short review — it keeps the community safe'] },
+  'push.integrity_case': { ar: ['مراجعة التزام بسياسة المختصين', 'نحتاج ردّك خلال 7 أيام — افتح لوحة المستشار'], en: ['Professional policy review', 'Please respond within 7 days — open your desk'] },
+  'push.integrity_decision': { ar: ['قرار المراجعة', 'اطّلع على نتيجة المراجعة في لوحة المستشار'], en: ['Review decision', 'See the outcome in your desk'] },
+  'push.withdrawal_paid': { ar: ['تم تحويل أرباحك', 'أُرسل طلب السحب إلى حسابك'], en: ['Payout sent', 'Your withdrawal was sent to your account'] },
+  'push.withdrawal_rejected': { ar: ['تعذّر تنفيذ طلب السحب', 'أُعيد المبلغ إلى محفظتك — راجع التفاصيل'], en: ['Withdrawal not completed', 'The amount is back in your wallet — see details'] },
+  'push.earning_available': { ar: ['أرباح متاحة للسحب', 'انتهت فترة الانتظار وأصبحت أرباحك متاحة'], en: ['Earnings available', 'Your earnings are now available to withdraw'] },
+  'push.subscription_billing_issue': { ar: ['مشكلة في تجديد الاشتراك', 'حدّث طريقة الدفع في المتجر لتستمر مزاياك'], en: ['Subscription payment issue', 'Update your payment method in the store to keep your plan'] },
+  'push.subscription_expired': { ar: ['انتهى اشتراكك', 'يمكنك التجديد في أي وقت من صفحة الخطط'], en: ['Your subscription ended', 'Renew any time from Plans'] },
 };
 
 /** Message sounds vs. everything else; a match / compliment gets the warm chime. */

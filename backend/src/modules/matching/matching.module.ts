@@ -7,7 +7,7 @@ import { monthWindow } from '../../domain/quota-period';
 import { privacyOf } from '../../domain/privacy';
 import { ENV, Env } from '../../config/env';
 import { AppError, ErrorCode, fromPgError } from '../../common/errors';
-import { AllowPending, AuthUser, CurrentUser, RateLimit } from '../../common/http';
+import { AllowPending, AuthUser, CurrentUser, MembersOnly, RateLimit } from '../../common/http';
 import { AuditService, PrismaService, SettingsService } from '../../common/infra';
 import { profileInclude, toPublicProfile } from '../profiles/profile.mapper';
 import { NotificationsService } from '../notifications/notifications.module';
@@ -33,6 +33,8 @@ class DiscoveryQuery {
   @ApiPropertyOptional({ minimum: 35, maximum: 250 }) @IsOptional() @Type(() => Number) @IsInt() @Min(35) @Max(250) weightMin?: number;
   @ApiPropertyOptional({ minimum: 35, maximum: 250 }) @IsOptional() @Type(() => Number) @IsInt() @Min(35) @Max(250) weightMax?: number;
   @ApiPropertyOptional({ description: 'paid · nationality ISO code' }) @IsOptional() @IsIn(ref.nationalities) nationality?: string;
+  @ApiPropertyOptional({ description: 'comma-separated religion keys (all plans)' }) @IsOptional() @Transform(csv) @IsArray() @ArrayMaxSize(10) @IsIn(ref.religions, { each: true }) religions?: string[];
+  @ApiPropertyOptional({ description: 'comma-separated "religion.sect" keys; must belong to the chosen religions' }) @IsOptional() @Transform(csv) @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(71, { each: true }) sects?: string[];
   @ApiPropertyOptional({ enum: ['nearest', 'best'], description: 'nearest (default): closest first, then own country' }) @IsOptional() @IsIn(['nearest', 'best']) sort?: 'nearest' | 'best';
   @ApiPropertyOptional({ description: 'paid' }) @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(100) minCompatibility?: number;
 }
@@ -261,6 +263,7 @@ export class MatchesService {
 
 @ApiTags('discovery')
 @ApiBearerAuth()
+@MembersOnly() // professionals never see or appear in discovery
 @Controller('v1')
 export class MatchingController {
   constructor(private readonly matching: MatchingService, private readonly likes: LikesService, private readonly matches: MatchesService) {}

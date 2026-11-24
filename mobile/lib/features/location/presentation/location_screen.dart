@@ -65,7 +65,10 @@ class _LocationScreenState extends ConsumerState<LocationScreen> {
     final lang = langOf(context);
     final c = countryOrNull(loc?.countryIso);
     return FormPage(
-      header: const SetupProgress(step: 3),
+      header: Builder(builder: (_) {
+        final pro = ref.watch(profileDraftProvider).accountType?.isProfessional ?? false;
+        return SetupProgress(step: pro ? 4 : 5, total: pro ? 5 : 6);
+      }),
       action: loc != null
           ? PrimaryButton(label: l.continueLabel, onPressed: _next)
           : Column(mainAxisSize: MainAxisSize.min, children: [

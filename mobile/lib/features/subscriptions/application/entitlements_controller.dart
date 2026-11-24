@@ -18,19 +18,37 @@ class EntitlementsController extends AsyncNotifier<Entitlements> {
     if (cur != null) state = AsyncData(f(cur));
   }
 
-  Future<void> purchase(PlanCode plan) async {
-    final e = await ref.read(subscriptionRepositoryProvider).purchase(plan);
-    state = AsyncData(e);
+  /// Returns true when the store reports the payment as pending.
+  Future<bool> purchase(PlanCode plan) async {
+    final from = state.valueOrNull?.plan;
+    final pending = await ref.read(subscriptionRepositoryProvider).purchase(plan, from: from);
+    await refresh();
+    ref.invalidate(storeSubscriptionProvider);
     ref.invalidate(paymentsProvider);
+    return pending;
   }
 
-  Future<void> restore() async {
-    state = AsyncData(await ref.read(subscriptionRepositoryProvider).restore());
+  /// Returns how many subscriptions were restored.
+  Future<int> restore() async {
+    final n = await ref.read(subscriptionRepositoryProvider).restore();
+    await refresh();
+    ref.invalidate(storeSubscriptionProvider);
+    ref.invalidate(paymentsProvider);
+    return n;
   }
 }
 
 final entitlementsProvider = AsyncNotifierProvider<EntitlementsController, Entitlements>(EntitlementsController.new);
 
 final plansProvider = FutureProvider<List<PlanInfo>>((ref) => ref.watch(subscriptionRepositoryProvider).plans());
+
+final storeSubscriptionProvider = FutureProvider<StoreSubscription?>((ref) => ref.watch(subscriptionRepositoryProvider).storeSubscription());
+
+/// Keeps the store transaction listener alive while signed in, so renewals,
+/// Ask to Buy approvals and interrupted purchases reach the server.
+final storeListenerProvider = Provider<void>((ref) {
+  final repo = ref.watch(subscriptionRepositoryProvider);
+  if (repo is ApiSubscriptionRepository) repo.start().ignore();
+});
 
 final paymentsProvider = FutureProvider<List<PaymentRecord>>((ref) => ref.watch(subscriptionRepositoryProvider).payments());

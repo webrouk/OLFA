@@ -8,6 +8,7 @@ import { checkOtp, generateOtp, hashOtp, newRefreshToken, OTP_POLICY, sha256, to
 import { isValidTimeZone } from '../../domain/quota-period';
 import { RequestOtpDto, VerifyOtpDto } from './auth.dto';
 import { SMS_PROVIDER, SmsProvider } from './sms.provider';
+import { BansService } from '../integrity/integrity.module';
 
 @Injectable()
 export class AuthService {
@@ -19,12 +20,15 @@ export class AuthService {
     private readonly audit: AuditService,
     @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,
     @Inject(ENV) private readonly env: Env,
+    private readonly bans: BansService,
   ) {}
 
   /** Steps 1–3: validate phone, apply abuse limits, store a hashed OTP, send SMS. */
   async requestOtp(dto: RequestOtpDto, ipHash: string, locale: 'ar' | 'en' = 'ar') {
     const phone = toE164(dto.dialCode, dto.nationalNumber);
     if (!phone) throw new AppError(ErrorCode.VALIDATION, 'Invalid phone number', { field: 'nationalNumber' });
+    // A permanently banned number gets no code (and no SMS cost).
+    await this.bans.assertNotBanned('PHONE', phone);
 
     const cooldown = await this.settings.get('otp.resendCooldownSeconds', OTP_POLICY.resendCooldownSeconds);
     const ttl = await this.settings.get('otp.ttlSeconds', OTP_POLICY.ttlSeconds);
@@ -83,6 +87,10 @@ export class AuthService {
     if (consumed.count !== 1) throw new AppError(ErrorCode.OTP_INVALID);
 
     const now = new Date();
+    await this.bans.assertNotBanned('PHONE', c.phoneE164);
+    // A device that belonged to a banned account cannot open a NEW account.
+    const known = await this.prisma.user.findFirst({ where: { phoneE164: c.phoneE164, deletedAt: null }, select: { id: true } });
+    if (!known) await this.bans.assertNotBanned('DEVICE', dto.deviceId);
     const country = await this.countryForDial(c.phoneE164);
     const { user, isNew } = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.user.findFirst({ where: { phoneE164: c.phoneE164, deletedAt: null } });
@@ -105,11 +113,13 @@ export class AuthService {
       return { user: created, isNew: true };
     });
 
+    if (user.status === 'BANNED') throw new AppError(ErrorCode.ACCOUNT_BANNED);
     if (user.status === 'SUSPENDED') throw new AppError(ErrorCode.ACCOUNT_NOT_ACTIVE);
     const tokens = await this.openSession(user.id, dto, meta);
     if (isNew) await this.audit.record({ actorType: 'USER', actorId: user.id, action: 'user.register', entityType: 'user', entityId: user.id, ipHash: meta.ipHash });
     const profile = await this.prisma.userProfile.findUnique({ where: { userId: user.id }, select: { userId: true } });
-    return { ...tokens, isNewUser: isNew, accountStatus: user.status, profileComplete: !!profile };
+    const counselor = profile ? null : await this.prisma.counselorProfile.findUnique({ where: { userId: user.id }, select: { userId: true } });
+    return { ...tokens, isNewUser: isNew, accountStatus: user.status, accountType: user.accountType, profileComplete: !!profile || !!counselor };
   }
 
   /** Refresh-token rotation with reuse detection (a replayed token revokes the family). */

@@ -9,6 +9,7 @@ import { BullModule, InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { randomUUID } from 'node:crypto';
 import { containsPhoneNumber } from '../../domain/phone-detect';
+import { IntegrityService } from '../integrity/integrity.module';
 import { MEDIA_QUEUE, MediaModule } from '../media/media.module';
 import { StorageService } from '../media/storage.service';
 import { EventEmitter } from 'node:events';
@@ -87,6 +88,7 @@ export class MessagingService {
     private readonly storage: StorageService,
     @InjectQueue(MEDIA_QUEUE) private readonly mediaQueue: Queue,
     @Inject(ENV) private readonly env: Env,
+    private readonly integrity: IntegrityService,
   ) {}
 
   /**
@@ -102,7 +104,7 @@ export class MessagingService {
         id: true,
         kind: true,
         match: { select: { status: true, userAId: true, userBId: true } },
-        consultation: { select: { status: true, completedAt: true, clientId: true, counselorId: true } },
+        consultation: { select: { id: true, status: true, completedAt: true, clientId: true, counselorId: true } },
         members: { select: { userId: true } },
       },
     });
@@ -126,7 +128,9 @@ export class MessagingService {
     }
     const blocked = await this.prisma.blockedUser.findFirst({ where: { OR: [{ blockerId: userId, blockedId: peerId }, { blockerId: peerId, blockedId: userId }] } });
     if (blocked) throw new AppError(ErrorCode.BLOCKED);
-    return { peerId, kind: c.kind };
+    // set only when the sender is the counselor of a consultation chat (integrity checks)
+    const consultationId = c.kind === 'CONSULTATION' && c.consultation!.counselorId === userId ? c.consultation!.id : null;
+    return { peerId, kind: c.kind, consultationId };
   }
 
   private async listRows(userId: string) {
@@ -273,7 +277,7 @@ export class MessagingService {
    *  - every_message: every message also consumes the daily message quota.
    */
   async send(userId: string, conversationId: string, dto: SendMessageDto) {
-    const { peerId, kind } = await this.assertCanChat(userId, conversationId, { forWrite: true });
+    const { peerId, kind, consultationId } = await this.assertCanChat(userId, conversationId, { forWrite: true });
     const existing = await this.prisma.message.findUnique({
       where: { conversationId_senderId_clientMessageId: { conversationId, senderId: userId, clientMessageId: dto.clientMessageId } },
     });
@@ -331,6 +335,10 @@ export class MessagingService {
       select: { id: true, clientMessageId: true, senderId: true, body: true, type: true, createdAt: true, containsPhone: true, attachments: { orderBy: { position: 'asc' }, select: attachmentSelect } },
     });
     const out = { ...full, attachments: await this.signAttachments(full.attachments) };
+    // Counselor sharing off-platform contact details in a consultation chat → integrity signal.
+    if (kind === 'CONSULTATION' && consultationId && body) {
+      await this.integrity.fromCounselorMessage(userId, consultationId, body).catch(() => undefined);
+    }
     this.events.emit('message', { conversationId, userIds: [userId, peerId], message: out });
     await this.notifications.push(peerId, type === 'VOICE' ? 'push.new_voice' : type === 'IMAGE' ? 'push.new_photo' : 'push.new_message', { conversationId });
     return out;
@@ -478,9 +486,9 @@ export class ChatGateway implements OnGatewayConnection {
     try {
       const token = (socket.handshake.auth?.token as string) ?? '';
       const p = await this.jwt.verifyAsync<{ sub: string; sid: string; typ: string }>(token, { secret: this.env.JWT_ACCESS_SECRET });
-      const s = await this.prisma.userSession.findUnique({ where: { id: p.sid }, select: { revokedAt: true, user: { select: { status: true } } } });
+      const s = await this.prisma.userSession.findUnique({ where: { id: p.sid }, select: { revokedAt: true, user: { select: { status: true, accountType: true } } } });
       if (p.typ !== 'access' || !s || s.revokedAt || !['ACTIVE', 'RESTRICTED'].includes(s.user.status)) throw new Error('unauthorized');
-      socket.data.user = { id: p.sub, sessionId: p.sid, status: s.user.status } satisfies AuthUser;
+      socket.data.user = { id: p.sub, sessionId: p.sid, status: s.user.status, accountType: s.user.accountType } satisfies AuthUser;
       await socket.join(`user:${p.sub}`);
     } catch {
       socket.emit('error', { code: ErrorCode.UNAUTHORIZED });

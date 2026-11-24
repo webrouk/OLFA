@@ -27,7 +27,28 @@ class ProfileDraft {
     this.photoIds = const [null, null, null, null, null, null],
     this.photoRightsConfirmed = false,
     this.policyAccepted = false,
+    this.accountType,
+    this.religion,
+    this.sect,
+    this.religionConsent = false,
+    this.prefReligions = const {},
+    this.prefSects = const {},
   });
+
+  /// Chosen on the step after gender; decides the rest of the sign-up flow.
+  final AccountType? accountType;
+
+  /// Religion key (shared/reference/religions.tsv), its sect, and the explicit
+  /// consent to store it ("undisclosed" needs none).
+  final String? religion;
+  final String? sect;
+  final bool religionConsent;
+
+  /// Partner preference: accepted religions and "religion.sect" keys (empty = any).
+  final Set<String> prefReligions;
+  final Set<String> prefSects;
+
+  bool get religionValid => religion != null && (religion == 'undisclosed' || religionConsent);
 
   static const maxInterests = 8;
   static const minPhotos = 2;
@@ -66,6 +87,9 @@ class ProfileDraft {
   int get photoCount => photoSlots.where((x) => x).length;
   bool get photosReady => photoCount >= minPhotos && photoRightsConfirmed && policyAccepted;
 
+  /// Professionals need one clear professional photo.
+  bool get professionalPhotosReady => photoCount >= 1 && photoRightsConfirmed && policyAccepted;
+
   ProfileDraft copyWith({
     Gender? gender,
     String? name,
@@ -91,6 +115,12 @@ class ProfileDraft {
     List<String?>? photoIds,
     bool? photoRightsConfirmed,
     bool? policyAccepted,
+    AccountType? accountType,
+    String? Function()? religion,
+    String? Function()? sect,
+    bool? religionConsent,
+    Set<String>? prefReligions,
+    Set<String>? prefSects,
   }) =>
       ProfileDraft(
         gender: gender ?? this.gender,
@@ -117,7 +147,16 @@ class ProfileDraft {
         photoIds: photoIds ?? this.photoIds,
         photoRightsConfirmed: photoRightsConfirmed ?? this.photoRightsConfirmed,
         policyAccepted: policyAccepted ?? this.policyAccepted,
+        accountType: accountType ?? this.accountType,
+        religion: religion != null ? religion() : this.religion,
+        sect: sect != null ? sect() : this.sect,
+        religionConsent: religionConsent ?? this.religionConsent,
+        prefReligions: prefReligions ?? this.prefReligions,
+        prefSects: prefSects ?? this.prefSects,
       );
+
+  /// Changing the religion clears a sect that does not belong to it.
+  ProfileDraft withReligion(String? key) => copyWith(religion: () => key, sect: () => sect != null && key != null && sectOf(key, sect) != null ? sect : null);
 
   factory ProfileDraft.fromProfile(UserProfile p) => ProfileDraft(
         gender: p.gender,
@@ -138,6 +177,10 @@ class ProfileDraft {
         photoIds: [for (var i = 0; i < 6; i++) i < p.photos.length ? p.photos[i].id : null],
         photoRightsConfirmed: true,
         policyAccepted: true,
+        accountType: AccountType.member,
+        religion: p.religion ?? 'undisclosed',
+        sect: p.sect,
+        religionConsent: p.religion != null,
       );
 }
 

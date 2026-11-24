@@ -101,12 +101,15 @@ class MyProfileScreen extends ConsumerWidget {
               // Family & marital consultations — booking, and the counselor side.
               TileGroup(children: [
                 OlfaListTile(icon: Icons.support_agent_rounded, title: l.screenConsultations, subtitle: l.consultTileSub, accent: true, onTap: () => context.push(Routes.consultations)),
-                OlfaListTile(icon: Icons.event_note_outlined, title: l.screenMyConsultations, onTap: () => context.push(Routes.myConsultations)),
                 Consumer(builder: (context, ref, _) {
-                  final c = ref.watch(myCounselorProvider).valueOrNull;
-                  return c?.status == CounselorStatus.approved
-                      ? OlfaListTile(icon: Icons.dashboard_customize_outlined, title: l.screenCounselorDesk, onTap: () => context.push(Routes.counselorDesk))
-                      : OlfaListTile(icon: Icons.badge_outlined, title: l.becomeCounselor, subtitle: c?.status == CounselorStatus.pending ? l.counselorPending : null, onTap: () => context.push(Routes.counselorApply));
+                  final pending = ref.watch(pendingReviewsProvider).valueOrNull ?? const [];
+                  return OlfaListTile(
+                    icon: Icons.event_note_outlined,
+                    title: l.screenMyConsultations,
+                    subtitle: pending.isEmpty ? null : l.reviewsWaiting(pending.length),
+                    trailing: pending.isEmpty ? null : OlfaTag('${pending.length}', style: OlfaTagStyle.primary),
+                    onTap: () => context.push(Routes.myConsultations),
+                  );
                 }),
               ]),
               const SizedBox(height: 12),

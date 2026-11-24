@@ -54,8 +54,16 @@ export class RetentionProcessor extends WorkerHost implements OnApplicationBoots
       removed += batch.length;
     }
     const expired = await this.prisma.consultation.updateMany({ where: { status: 'AWAITING_PAYMENT', expiresAt: { lt: new Date() } }, data: { status: 'EXPIRED' } });
+    // Integrity cases whose response window passed go to review.
+    const toReview = await this.prisma.counselorIntegrityCase.updateMany({ where: { status: 'AWAITING_RESPONSE', responseDueAt: { lt: new Date() } }, data: { status: 'UNDER_REVIEW' } });
+    // Earnings that left the hold period during the last hour → tell the counselor.
+    const hourAgo = new Date(Date.now() - 3_600_000);
+    const released = await this.prisma.walletEntry.findMany({ where: { kind: 'EARNING', availableAt: { gt: hourAgo, lte: new Date() } }, select: { counselorId: true }, distinct: ['counselorId'] });
+    for (const r of released) {
+      await this.notifications.notify(r.counselorId, 'WITHDRAWAL_UPDATE', 'push.earning_available', {}).catch((e: unknown) => this.log.warn(`notify failed: ${String(e)}`));
+    }
     const counts = rows.reduce<Record<string, number>>((a, r) => ((a[r.action] = (a[r.action] ?? 0) + 1), a), {});
-    this.log.log(`sweep: ${JSON.stringify(counts)} bookingsExpired=${expired.count} incognitoReset=${reset} mediaRemoved=${removed}`);
+    this.log.log(`sweep: ${JSON.stringify(counts)} bookingsExpired=${expired.count} incognitoReset=${reset} mediaRemoved=${removed} casesToReview=${toReview.count} earningsReleased=${released.length}`);
     return { ...counts, bookingsExpired: expired.count, incognitoReset: reset };
   }
 }

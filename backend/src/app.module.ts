@@ -13,6 +13,9 @@ import { MatchingModule } from './modules/matching/matching.module';
 import { MediaModule } from './modules/media/media.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { ConsultationsModule } from './modules/consultations/consultations.module';
+import { IntegrityModule } from './modules/integrity/integrity.module';
+import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { WalletModule } from './modules/wallet/wallet.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ProfilesModule } from './modules/profiles/profiles.module';
@@ -53,6 +56,7 @@ export const bullConnection = {
     JwtModule.register({}),
     QuotasModule,
     NotificationsModule,
+    IntegrityModule,
     AuthModule,
     ProfilesModule,
     MediaModule,
@@ -61,6 +65,8 @@ export const bullConnection = {
     MessagingModule,
     ConsultationsModule,
     PaymentsModule,
+    WalletModule,
+    SubscriptionsModule,
     SafetyModule,
     AdminModule,
   ],

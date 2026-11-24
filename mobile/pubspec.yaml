@@ -35,9 +35,12 @@ dependencies:
   record: ^5.2.0 # voice notes: AAC-LC 48 kHz mono, ≤60 s
   just_audio: ^0.9.42 # voice-note playback + notification/message sounds
   path_provider: ^2.1.4
+  in_app_purchase: ^3.2.0 # App Store (StoreKit 2) / Google Play Billing; receipts are verified by the server
+  in_app_purchase_android: ^0.4.0
+  in_app_purchase_storekit: ^0.3.20
   url_launcher: ^6.3.1 # payment history: manage subscription in App Store / Google Play
   # Phase 3 (needs Firebase project config files first):
-  # firebase_core, firebase_messaging, in_app_purchase
+  # firebase_core, firebase_messaging
 
 dev_dependencies:
   flutter_test:

@@ -60,6 +60,8 @@ export function toPublicProfile(u: UserWithProfile, cdn: string, extra: ViewCont
     occupation: p.occupation,
     heightCm: p.heightCm,
     weightKg: p.weightKg,
+    religion: p.religion === 'undisclosed' ? null : p.religion,
+    sect: p.religion === 'undisclosed' ? null : p.sect,
     marriageTimeline: p.marriageTimeline,
     bio: underReview ? null : p.bio,
     interests: u.interests.map((i) => i.interest.key),

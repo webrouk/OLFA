@@ -1,10 +1,13 @@
 import { Body, Controller, Get, Headers, HttpCode, Inject, Injectable, Logger, Module, Param, ParseUUIDPipe, Post, Put, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiProperty, ApiTags } from '@nestjs/swagger';
 import { ConsultationStatus, Prisma } from '@prisma/client';
+import { IsIn, IsString, Length } from 'class-validator';
 import { randomUUID } from 'node:crypto';
 import { ENV, Env } from '../../config/env';
 import { AppError, ErrorCode, fromPgError } from '../../common/errors';
-import { AuthAdmin, AuthUser, CurrentAdmin, CurrentUser, OlfaRequest, Public, RateLimit, Req, RequirePermissions } from '../../common/http';
+import { AllowPending, AuthAdmin, AuthUser, CurrentAdmin, CurrentUser, MembersOnly, OlfaRequest, ProfessionalsOnly, Public, RateLimit, Req, RequirePermissions } from '../../common/http';
+import { QUESTIONNAIRE_VERSION } from '../../domain/integrity';
+import { BansService, IntegrityService } from '../integrity/integrity.module';
 import { AuditService, PrismaService, SettingsService } from '../../common/infra';
 import { splitFee } from '../../domain/payments';
 import { MediaModule } from '../media/media.module';
@@ -54,6 +57,8 @@ export class ConsultationsService {
     private readonly storage: StorageService,
     @Inject(PAYMENT_GATEWAY) private readonly gateway: PaymentGateway,
     @Inject(ENV) private readonly env: Env,
+    private readonly integrity: IntegrityService,
+    private readonly bans: BansService,
   ) {}
 
   private wrap = <T>(p: Promise<T>) =>
@@ -75,6 +80,10 @@ export class ConsultationsService {
     for (const k of dto.credentialKeys) await this.storage.head(k).catch(() => { throw new AppError(ErrorCode.VALIDATION, `Credential not uploaded: ${k}`); });
     const existing = await this.prisma.counselorProfile.findUnique({ where: { userId }, select: { status: true } });
     if (existing?.status === 'SUSPENDED') throw new AppError(ErrorCode.FORBIDDEN, 'Counselor account suspended');
+    // A licence that belonged to a permanently banned account cannot register again.
+    await this.bans.assertNotBanned('LICENSE', this.bans.licenseValue(dto.licenseCountry, dto.licenseNumber));
+    const policyVersion = await this.settings.get('counselor.policyVersion', '2026-11');
+    if (dto.policyVersion !== policyVersion) throw new AppError(ErrorCode.VALIDATION, 'Please accept the current professional policy', { field: 'policyVersion', current: policyVersion });
     const data = {
       kind: dto.kind,
       displayName: dto.displayName.trim(),
@@ -87,10 +96,17 @@ export class ConsultationsService {
       credentialKeys: dto.credentialKeys,
       languages: dto.languages,
       services: dto.services,
+      gender: dto.gender ?? null,
+      countryCode: dto.countryCode ?? dto.licenseCountry,
+      city: dto.city?.trim() ?? null,
+      policyVersion,
+      policyAcceptedAt: new Date(),
       status: 'PENDING' as const,
       rejectReason: null,
     };
-    await this.prisma.counselorProfile.upsert({ where: { userId }, create: { userId, ...data }, update: data });
+    await this.prisma.counselorProfile.upsert({ where: { userId }, create: { userId, ...data }, update: data }).catch((e: unknown) => {
+      throw fromPgError(e) ?? e;
+    });
     await this.audit.record({ actorType: 'USER', actorId: userId, action: existing ? 'counselor.reapply' : 'counselor.apply', entityType: 'counselor', entityId: userId });
     return this.mine(userId);
   }
@@ -98,7 +114,7 @@ export class ConsultationsService {
   async mine(userId: string) {
     const p = await this.prisma.counselorProfile.findUnique({
       where: { userId },
-      select: { ...publicCounselor, status: true, rejectReason: true, licenseNumber: true, offerings: { orderBy: [{ service: 'asc' }, { durationMinutes: 'asc' }] } },
+      select: { ...publicCounselor, status: true, rejectReason: true, licenseNumber: true, licenseCountry: true, gender: true, countryCode: true, city: true, policyVersion: true, policyAcceptedAt: true, offerings: { orderBy: [{ service: 'asc' }, { durationMinutes: 'asc' }] } },
     });
     return p ?? null;
   }
@@ -133,6 +149,7 @@ export class ConsultationsService {
       select: {
         id: true, service: true, language: true, durationMinutes: true, priceMinor: true, currency: true, status: true,
         clientNote: true, preferredTime: true, scheduledAt: true, createdAt: true, paidAt: true,
+        platformFeePercent: true, platformFeeMinor: true, counselorNetMinor: true, completedAt: true,
         conversation: { select: { id: true } },
         client: { select: { id: true, profile: { select: { displayName: true } } } },
       },
@@ -176,7 +193,8 @@ export class ConsultationsService {
     if (!k || k.counselorId !== userId) throw new AppError(ErrorCode.NOT_FOUND);
     if (k.status !== 'CONFIRMED') throw new AppError(ErrorCode.INVALID_STATE);
     await this.wrap(this.prisma.consultation.update({ where: { id }, data: { status: 'COMPLETED', completedAt: new Date() } }));
-    await this.notifications.notify(k.clientId, 'CONSULTATION_COMPLETED', 'push.consultation_completed', { consultationId: id });
+    // The client must answer the questionnaire before booking again (DB gate).
+    await this.notifications.notify(k.clientId, 'REVIEW_REQUIRED', 'push.review_required', { consultationId: id });
     return { id, status: 'COMPLETED' };
   }
 
@@ -300,18 +318,55 @@ export class ConsultationsService {
     return { id, status: 'REFUNDED' };
   }
 
-  /** Only the client, only after completion, once (DB trigger + unique). */
+  /**
+   * Mandatory questionnaire: only the client, only after completion, once
+   * (DB trigger + unique). Anti-circumvention answers become integrity signals;
+   * the counselor sees the star rating and comment, never the other answers.
+   */
   async review(userId: string, id: string, dto: ReviewDto) {
     const k = await this.prisma.consultation.findUnique({ where: { id }, select: { clientId: true, counselorId: true, status: true } });
     if (!k || k.clientId !== userId) throw new AppError(ErrorCode.NOT_FOUND);
     if (k.status !== 'COMPLETED') throw new AppError(ErrorCode.INVALID_STATE, 'You can rate after the consultation is completed');
     await this.wrap(
-      this.prisma.consultationReview.create({ data: { consultationId: id, clientId: userId, counselorId: k.counselorId, rating: dto.rating, comment: dto.comment?.trim() || null } }),
+      this.prisma.$transaction(async (tx) => {
+        await tx.consultationReview.create({
+          data: {
+            consultationId: id, clientId: userId, counselorId: k.counselorId, rating: dto.rating, comment: dto.comment?.trim() || null,
+            questionnaireVersion: QUESTIONNAIRE_VERSION, quality: dto.quality, commitment: dto.commitment, effectiveness: dto.effectiveness, outcome: dto.outcome,
+            nextSession: dto.nextSession, nextChannel: dto.nextChannel, contactShared: dto.contactShared, offPlatformPayment: dto.offPlatformPayment, externalChannel: dto.externalChannel,
+          },
+        });
+        await this.integrity.fromReview(k.counselorId, userId, id, dto, tx);
+      }),
     ).catch((e: unknown) => {
-      if (e instanceof AppError && e.code === ErrorCode.CONFLICT) throw new AppError(ErrorCode.CONFLICT, 'Already rated');
+      if (e instanceof AppError && e.code === ErrorCode.CONFLICT) throw new AppError(ErrorCode.CONFLICT, 'Already reviewed');
       throw e;
     });
+    await this.integrity.assess(k.counselorId).catch((e: unknown) => this.log.warn(`integrity assessment failed: ${String(e)}`));
     return { ok: true };
+  }
+
+  /** Completed consultations still waiting for the client's questionnaire (the app shows them first). */
+  pendingReviews(userId: string) {
+    return this.prisma.consultation.findMany({
+      where: { clientId: userId, status: 'COMPLETED', review: null },
+      orderBy: { completedAt: 'asc' },
+      select: { id: true, service: true, durationMinutes: true, completedAt: true, counselor: { select: { userId: true, displayName: true, kind: true } } },
+    });
+  }
+
+  /**
+   * After a suspension or ban: paid requests the counselor never confirmed are
+   * refunded in full and offers switched off. Confirmed sessions are left to
+   * Support so the client can choose a refund or another counselor.
+   */
+  async closeForSuspended(counselorId: string) {
+    const open = await this.prisma.consultation.findMany({ where: { counselorId, status: 'PAID' }, include: { payment: true } });
+    for (const k of open) {
+      await this.refundAndClose(k.id, k.payment, 'CANCELLED', {});
+      await this.notifications.notify(k.clientId, 'CONSULTATION_DECLINED', 'push.consultation_declined', { consultationId: k.id });
+    }
+    return open.length;
   }
 
   // ── payments ─────────────────────────────────────────────────────
@@ -423,36 +478,36 @@ export class ConsultationsService {
 export class ConsultationsController {
   constructor(private readonly svc: ConsultationsService) {}
 
-  // counselor
-  @RateLimit(20, 3600) @Post('counselors/me/credentials/upload-url')
+  // counselor (professional accounts; pending ones can complete their application)
+  @AllowPending() @ProfessionalsOnly() @RateLimit(20, 3600) @Post('counselors/me/credentials/upload-url')
   credential(@CurrentUser() u: AuthUser, @Body() dto: CredentialUploadDto) {
     return this.svc.credentialUploadUrl(u.id, dto);
   }
-  @RateLimit(10, 86400) @Put('counselors/me') @HttpCode(200)
+  @AllowPending() @ProfessionalsOnly() @RateLimit(10, 86400) @Put('counselors/me') @HttpCode(200)
   apply(@CurrentUser() u: AuthUser, @Body() dto: CounselorApplyDto) {
     return this.svc.apply(u.id, dto);
   }
-  @Get('counselors/me')
+  @AllowPending() @ProfessionalsOnly() @Get('counselors/me')
   mine(@CurrentUser() u: AuthUser) {
     return this.svc.mine(u.id);
   }
-  @Put('counselors/me/offerings') @HttpCode(200)
+  @ProfessionalsOnly() @Put('counselors/me/offerings') @HttpCode(200)
   offering(@CurrentUser() u: AuthUser, @Body() dto: OfferingDto) {
     return this.svc.upsertOffering(u.id, dto);
   }
-  @Get('counselors/me/bookings')
+  @ProfessionalsOnly() @Get('counselors/me/bookings')
   desk(@CurrentUser() u: AuthUser, @Query('status') status?: string) {
     return this.svc.counselorBookings(u.id, status);
   }
-  @Post('consultations/:id/confirm') @HttpCode(200)
+  @ProfessionalsOnly() @Post('consultations/:id/confirm') @HttpCode(200)
   confirm(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ConfirmDto) {
     return this.svc.confirm(u.id, id, dto);
   }
-  @Post('consultations/:id/decline') @HttpCode(200)
+  @ProfessionalsOnly() @Post('consultations/:id/decline') @HttpCode(200)
   decline(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ReasonDto) {
     return this.svc.decline(u.id, id, dto);
   }
-  @Post('consultations/:id/complete') @HttpCode(200)
+  @ProfessionalsOnly() @Post('consultations/:id/complete') @HttpCode(200)
   complete(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.svc.complete(u.id, id);
   }
@@ -466,11 +521,15 @@ export class ConsultationsController {
   details(@Param('id', ParseUUIDPipe) id: string) {
     return this.svc.details(id);
   }
-  @RateLimit(20, 3600) @Post('consultations')
+  @MembersOnly() @RateLimit(20, 3600) @Post('consultations')
   book(@CurrentUser() u: AuthUser, @Body() dto: BookDto) {
     return this.svc.book(u.id, dto);
   }
-  @Get('consultations')
+  @MembersOnly() @Get('consultations/pending-review')
+  pending(@CurrentUser() u: AuthUser) {
+    return this.svc.pendingReviews(u.id);
+  }
+  @MembersOnly() @Get('consultations')
   my(@CurrentUser() u: AuthUser) {
     return this.svc.myBookings(u.id);
   }
@@ -478,11 +537,11 @@ export class ConsultationsController {
   one(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.svc.mineOne(u.id, id);
   }
-  @Post('consultations/:id/cancel') @HttpCode(200)
+  @MembersOnly() @Post('consultations/:id/cancel') @HttpCode(200)
   cancel(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.svc.cancel(u.id, id);
   }
-  @Post('consultations/:id/review') @HttpCode(201)
+  @MembersOnly() @Post('consultations/:id/review') @HttpCode(201)
   review(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ReviewDto) {
     return this.svc.review(u.id, id, dto);
   }
@@ -499,11 +558,24 @@ export class ConsultationsController {
   }
 }
 
+class IntegrityDecisionDto {
+  @ApiProperty({ enum: ['CLEARED', 'WARNED', 'SUSPENDED', 'BANNED'] }) @IsIn(['CLEARED', 'WARNED', 'SUSPENDED', 'BANNED']) decision: 'CLEARED' | 'WARNED' | 'SUSPENDED' | 'BANNED';
+  @ApiProperty() @IsString() @Length(10, 1000) reason: string;
+}
+
 @ApiTags('admin')
 @ApiBearerAuth()
 @Controller('v1/admin')
 export class ConsultationsAdminController {
-  constructor(private readonly svc: ConsultationsService) {}
+  constructor(private readonly svc: ConsultationsService, private readonly integrity: IntegrityService) {}
+
+  /** Integrity decision; suspensions and bans also refund the counselor's unconfirmed paid requests. */
+  @RequirePermissions('integrity.manage') @Post('integrity/cases/:id/decide') @HttpCode(200)
+  async decide(@CurrentAdmin() a: AuthAdmin, @Param('id', ParseUUIDPipe) id: string, @Body() dto: IntegrityDecisionDto) {
+    const out = await this.integrity.decide(a, id, dto);
+    if (dto.decision === 'SUSPENDED' || dto.decision === 'BANNED') await this.svc.closeForSuspended(out.counselorId);
+    return out;
+  }
 
   @RequirePermissions('counselors.review') @Get('counselors')
   queue(@Query() q: AdminQueueQuery) {

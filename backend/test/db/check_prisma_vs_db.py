@@ -35,7 +35,7 @@ TYPE_OK = {
     'String': {'uuid', 'varchar', 'bpchar', 'text'},
     'Int': {'int4', 'int2'}, 'BigInt': {'int8'}, 'Boolean': {'bool'},
     'DateTime': {'timestamptz', 'date'}, 'Json': {'jsonb'},
-    'Float': {'float8'}, 'Decimal': {'numeric'},
+    'Float': {'float8'}, 'Decimal': {'numeric'}, 'Bytes': {'bytea'},
 }
 models = re.findall(r'^model (\w+) \{(.*?)^\}', schema, re.M | re.S)
 mapped_tables = set()

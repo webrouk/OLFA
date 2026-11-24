@@ -24,10 +24,13 @@ import { PrismaService, RateLimiter } from './infra';
 
 // ───────────── request context ─────────────
 
+export type AccountTypeName = 'MEMBER' | 'PSYCHOLOGIST' | 'FAMILY_COUNSELOR';
 export interface AuthUser {
   id: string;
   sessionId: string;
   status: string;
+  /** null until chosen during sign-up */
+  accountType: AccountTypeName | null;
 }
 export interface AuthAdmin {
   id: string;
@@ -113,6 +116,16 @@ export const Public = () => SetMetadata(IS_PUBLIC, true);
 export const ALLOW_PENDING = 'olfa:allowPending';
 export const AllowPending = () => SetMetadata(ALLOW_PENDING, true);
 
+/**
+ * Restricts a route (or controller) to account types: marriage features are
+ * for MEMBER accounts, the counselor workspace for professionals. Accounts
+ * that have not chosen a type yet are refused too.
+ */
+export const ACCOUNT_TYPES = 'olfa:accountTypes';
+export const AccountTypes = (...types: AccountTypeName[]) => SetMetadata(ACCOUNT_TYPES, types);
+export const MembersOnly = () => AccountTypes('MEMBER');
+export const ProfessionalsOnly = () => AccountTypes('PSYCHOLOGIST', 'FAMILY_COUNSELOR');
+
 export const ADMIN_ROUTE = 'olfa:admin';
 export const PERMISSIONS = 'olfa:permissions';
 /** Admin route requiring every listed permission. */
@@ -163,6 +176,8 @@ export class AuthGuard implements CanActivate {
       await this.authenticateAdmin(req, meta<string[]>(PERMISSIONS) ?? []);
     } else if (!meta<boolean>(IS_PUBLIC)) {
       await this.authenticateUser(req, meta<boolean>(ALLOW_PENDING) ?? false);
+      const types = meta<AccountTypeName[]>(ACCOUNT_TYPES);
+      if (types && (!req.user!.accountType || !types.includes(req.user!.accountType))) throw new AppError(ErrorCode.WRONG_ACCOUNT_TYPE);
     }
 
     const rl = meta<{ limit: number; windowSeconds: number }>(RATE_LIMIT);
@@ -190,17 +205,18 @@ export class AuthGuard implements CanActivate {
     // Session must still be live (logout / revoke take effect immediately).
     const session = await this.prisma.userSession.findUnique({
       where: { id: payload.sid },
-      select: { revokedAt: true, user: { select: { id: true, status: true, deletedAt: true, frozenAt: true, lastActiveAt: true } } },
+      select: { revokedAt: true, user: { select: { id: true, status: true, deletedAt: true, frozenAt: true, lastActiveAt: true, accountType: true } } },
     });
     if (!session || session.revokedAt || session.user.deletedAt || session.user.id !== payload.sub) {
       throw new AppError(ErrorCode.UNAUTHORIZED);
     }
     const status = session.user.status;
+    if (status === 'BANNED') throw new AppError(ErrorCode.ACCOUNT_BANNED);
     if (status === 'SUSPENDED' || status === 'DELETED') throw new AppError(ErrorCode.ACCOUNT_NOT_ACTIVE);
     if (!allowPending && status !== 'ACTIVE' && status !== 'RESTRICTED') throw new AppError(ErrorCode.ACCOUNT_NOT_ACTIVE);
     // A frozen account can only reach account routes (me, reactivate, settings, deletion).
     if (session.user.frozenAt && !allowPending) throw new AppError(ErrorCode.ACCOUNT_FROZEN);
-    req.user = { id: payload.sub, sessionId: payload.sid, status };
+    req.user = { id: payload.sub, sessionId: payload.sid, status, accountType: (session.user.accountType as AccountTypeName | null) ?? null };
     // Presence: at most one write per user per 2 minutes (cheap at scale).
     const seen = session.user.lastActiveAt?.getTime() ?? 0;
     if (!session.user.frozenAt && Date.now() - seen > 120_000) {

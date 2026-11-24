@@ -64,16 +64,17 @@ INSERT INTO permissions (key, description) VALUES
   ('payments.read','View payments'), ('payments.refund','Issue refunds'),
   ('settings.manage','Edit system settings and matching weights'), ('admins.manage','Manage admin accounts and roles'),
   ('support.manage','Handle tickets and FAQ'), ('notifications.send','Send broadcast notifications'), ('audit.read','Read audit logs'),
-  ('counselors.review','Approve, reject or suspend counselors'), ('consultations.manage','View consultations and resolve disputes')
+  ('counselors.review','Approve, reject or suspend counselors'), ('consultations.manage','View consultations and resolve disputes'),
+  ('payouts.manage','Process counselor withdrawals'), ('integrity.manage','Review integrity cases and ban accounts')
 ON CONFLICT (key) DO NOTHING;
 
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id FROM roles r JOIN permissions p ON
   r.key = 'super_admin'
   OR (r.key = 'admin' AND p.key <> 'admins.manage')
-  OR (r.key = 'moderator' AND p.key IN ('users.read','verification.review','reports.manage','chat.moderate','counselors.review'))
+  OR (r.key = 'moderator' AND p.key IN ('users.read','verification.review','reports.manage','chat.moderate','counselors.review','integrity.manage'))
   OR (r.key = 'support' AND p.key IN ('users.read','support.manage','consultations.manage'))
-  OR (r.key = 'finance' AND p.key IN ('users.read','payments.read','payments.refund','plans.manage'))
+  OR (r.key = 'finance' AND p.key IN ('users.read','payments.read','payments.refund','plans.manage','payouts.manage'))
   OR (r.key = 'viewer' AND p.key IN ('users.read','payments.read','audit.read'))
 ON CONFLICT DO NOTHING;
 
@@ -82,3 +83,13 @@ INSERT INTO feature_entitlements (plan_id, feature_key, value)
 SELECT p.id, v.k, v.val::jsonb FROM subscription_plans p
 JOIN (VALUES ('FREE','voice_notes_per_conversation','10'), ('PLUS','voice_notes_per_conversation','30'), ('PREMIUM','voice_notes_per_conversation','-1')) v(code, k, val) ON v.code = p.code::text
 ON CONFLICT (plan_id, feature_key) DO NOTHING;
+
+-- Store products (App Store subscription group "OLFA": Premium = level 1, Plus = level 2;
+-- Play subscriptions with one monthly base plan each). Product ids must match
+-- App Store Connect / Play Console and mobile/lib/features/subscriptions/data/store_products.dart.
+INSERT INTO plan_products (plan_id, provider, product_id, duration_days)
+SELECT p.id, v.provider::payment_provider, v.product_id, 30
+FROM (VALUES ('PLUS','APPLE','olfa.plus.monthly'), ('PREMIUM','APPLE','olfa.premium.monthly'),
+             ('PLUS','GOOGLE','olfa_plus'), ('PREMIUM','GOOGLE','olfa_premium')) v(code, provider, product_id)
+JOIN subscription_plans p ON p.code = v.code::plan_code
+ON CONFLICT (provider, product_id) DO NOTHING;

@@ -25,7 +25,11 @@ String? _err(AppLocalizations l, String? key) => switch (key) {
       _ => l.errorValidation,
     };
 
-/// 7 — Gender selection (step 1/4)
+/// Sign-up steps: members 6 (gender, account type, about you, partner,
+/// location, photos); professionals 5 (no partner preferences).
+int setupTotal(ProfileDraft d) => d.accountType?.isProfessional ?? false ? 5 : 6;
+
+/// 7 — Gender, with optional height and weight on the same page (step 1)
 class GenderScreen extends ConsumerWidget {
   const GenderScreen({super.key});
 
@@ -63,13 +67,24 @@ class GenderScreen extends ConsumerWidget {
       );
     }
 
+    final d = ref.watch(profileDraftProvider);
     return FormPage(
-      header: const SetupProgress(step: 1),
-      action: PrimaryButton(label: l.continueLabel, onPressed: g == null ? null : () => context.push(Routes.profileInfo)),
+      header: SetupProgress(step: 1, total: setupTotal(d)),
+      action: PrimaryButton(label: l.continueLabel, onPressed: g == null ? null : () => context.push(Routes.accountType)),
       children: [
         PageHeading(l.genderTitle, body: l.genderBody),
         Row(children: [card(Gender.male, l.man, Icons.male_rounded), const SizedBox(width: 12), card(Gender.female, l.woman, Icons.female_rounded)]),
         const SizedBox(height: 22),
+        Text(l.bodyMetricsTitle, style: context.type.inputLabel.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        Text(l.bodyMetricsNote, style: context.type.caption),
+        const SizedBox(height: 10),
+        BodyMetricsFields(
+          heightCm: d.heightCm,
+          weightKg: d.weightKg,
+          onHeight: (v) => ctrl.update((x) => x.copyWith(heightCm: () => v)),
+          onWeight: (v) => ctrl.update((x) => x.copyWith(weightKg: () => v)),
+        ),
         InfoBanner(text: l.genderNote),
       ],
     );
@@ -103,6 +118,7 @@ class _ProfileInfoScreenState extends ConsumerState<ProfileInfoScreen> {
       'timeline': ProfileValidators.required(d.timeline),
       'bio': ProfileValidators.bio(d.bio),
       'interests': d.interests.isEmpty ? 'required' : null,
+      'religion': d.religion == null ? 'required' : (!d.religionValid ? 'consent' : null),
     };
     String? e(String k) => _submitted ? _err(l, errors[k]) : null;
     final valid = errors.values.every((v) => v == null);
@@ -115,7 +131,7 @@ class _ProfileInfoScreenState extends ConsumerState<ProfileInfoScreen> {
     }
 
     return FormPage(
-      header: const SetupProgress(step: 2),
+      header: widget.editMode ? null : SetupProgress(step: 3, total: setupTotal(d)),
       action: PrimaryButton(
         label: l.continueLabel,
         onPressed: () {
@@ -151,12 +167,22 @@ class _ProfileInfoScreenState extends ConsumerState<ProfileInfoScreen> {
         ),
         const SizedBox(height: 18),
         OccupationField(label: l.occupation, value: d.occupation.isEmpty ? null : d.occupation, error: e('job'), onChanged: (v) => ctrl.update((x) => x.copyWith(occupation: v ?? ''))),
-        BodyMetricsFields(
-          heightCm: d.heightCm,
-          weightKg: d.weightKg,
-          onHeight: (v) => ctrl.update((x) => x.copyWith(heightCm: () => v)),
-          onWeight: (v) => ctrl.update((x) => x.copyWith(weightKg: () => v)),
+        ReligionSectFields(
+          religion: d.religion,
+          sect: d.sect,
+          consent: d.religionConsent,
+          error: switch (e('religion')) { null => null, _ when d.religion != null => l.religionConsentRequired, final m => m },
+          onReligion: (v) => ctrl.update((x) => x.withReligion(v)),
+          onSect: (v) => ctrl.update((x) => x.copyWith(sect: () => v)),
+          onConsent: (v) => ctrl.update((x) => x.copyWith(religionConsent: v)),
         ),
+        if (widget.editMode)
+          BodyMetricsFields(
+            heightCm: d.heightCm,
+            weightKg: d.weightKg,
+            onHeight: (v) => ctrl.update((x) => x.copyWith(heightCm: () => v)),
+            onWeight: (v) => ctrl.update((x) => x.copyWith(weightKg: () => v)),
+          ),
         Text(l.marriageTimeline, style: context.type.inputLabel),
         const SizedBox(height: 8),
         ChoiceWrap<MarriageTimeline>(options: MarriageTimeline.values, label: l.timelineLabel, isSelected: (t) => d.timeline == t, onTap: (t) => ctrl.update((x) => x.copyWith(timeline: t))),
@@ -186,7 +212,7 @@ class PreferencesScreen extends ConsumerWidget {
     final d = ref.watch(profileDraftProvider);
     final ctrl = ref.read(profileDraftProvider.notifier);
     return FormPage(
-      header: const SetupProgress(step: 3),
+      header: SetupProgress(step: 4, total: setupTotal(d)),
       action: PrimaryButton(label: l.continueLabel, onPressed: () => context.push(Routes.location)),
       children: [
         PageHeading(l.prefsTitle, body: l.prefsBody),
@@ -216,6 +242,14 @@ class PreferencesScreen extends ConsumerWidget {
           isSelected: (b) => d.prefWantsChildren == b,
           onTap: (b) => ctrl.update((x) => x.copyWith(prefWantsChildren: () => b)),
         ),
+        const SizedBox(height: 22),
+        Text(l.acceptedReligions, style: context.type.inputLabel),
+        const SizedBox(height: 8),
+        ReligionFilter(
+          religions: d.prefReligions,
+          sects: d.prefSects,
+          onChanged: (r, s) => ctrl.update((x) => x.copyWith(prefReligions: r, prefSects: s)),
+        ),
         const SizedBox(height: 24),
         InfoBanner(text: l.mutualNote, icon: Icons.people_alt_outlined, accent: true),
       ],
@@ -237,7 +271,13 @@ class _PhotosScreenState extends ConsumerState<PhotosScreen> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      await ref.read(profileDraftProvider.notifier).submit();
+      final d = ref.read(profileDraftProvider);
+      if (d.accountType?.isProfessional ?? false) {
+        // The professional application was sent on the "about you" step; photos complete it.
+        await ref.read(profileDraftProvider.notifier).submitProfessionalPhotos();
+      } else {
+        await ref.read(profileDraftProvider.notifier).submit();
+      }
       if (mounted) context.go(Routes.verification);
     } catch (e) {
       if (mounted) showToast(context, failureMessage(context, e));
@@ -252,10 +292,10 @@ class _PhotosScreenState extends ConsumerState<PhotosScreen> {
     final d = ref.watch(profileDraftProvider);
     final ctrl = ref.read(profileDraftProvider.notifier);
     return FormPage(
-      header: const SetupProgress(step: 4),
-      action: PrimaryButton(label: l.submitForReview, loading: _busy, onPressed: d.photosReady ? _submit : null),
+      header: SetupProgress(step: setupTotal(d), total: setupTotal(d)),
+      action: PrimaryButton(label: l.submitForReview, loading: _busy, onPressed: (d.accountType?.isProfessional ?? false ? d.professionalPhotosReady : d.photosReady) ? _submit : null),
       children: [
-        PageHeading(l.photosTitle, body: l.photosBody),
+        PageHeading(l.photosTitle, body: d.accountType?.isProfessional ?? false ? l.photosBodyProfessional : l.photosBody),
         PhotoGrid(slots: d.photoSlots, onToggle: ctrl.togglePhoto),
         const SizedBox(height: 18),
         for (final tip in [l.photoTip1, l.photoTip2, l.photoTip3])

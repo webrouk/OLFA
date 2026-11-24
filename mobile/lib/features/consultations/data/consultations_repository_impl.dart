@@ -84,8 +84,40 @@ class ApiConsultationsRepository implements ConsultationsRepository {
   Future<void> cancel(String id) => guard(() => _dio.post<void>('/consultations/$id/cancel'));
 
   @override
-  Future<void> review(String id, {required int rating, String? comment}) =>
-      guard(() => _dio.post<void>('/consultations/$id/review', data: {'rating': rating, if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim()}));
+  Future<void> review(String id, ReviewAnswers a) => guard(() => _dio.post<void>('/consultations/$id/review', data: a.toJson()));
+
+  @override
+  Future<List<PendingReview>> pendingReviews() => guard(() async {
+        final r = await _dio.get<List<dynamic>>('/consultations/pending-review');
+        return [
+          for (final j in r.data!)
+            PendingReview(
+              consultationId: (j as Map)['id'] as String,
+              counselorName: (j['counselor'] as Map?)?['displayName'] as String? ?? '',
+              service: fromApiEnum(ConsultationService.values, j['service'], ConsultationService.marital),
+              durationMinutes: (j['durationMinutes'] as num).toInt(),
+              completedAt: j['completedAt'] == null ? null : DateTime.parse(j['completedAt'] as String).toLocal(),
+            ),
+        ];
+      });
+
+  static IntegrityCase? _case(Map<String, dynamic>? j) => j == null || j.isEmpty
+      ? null
+      : IntegrityCase(
+          id: j['id'] as String,
+          status: fromApiEnum(IntegrityCaseStatus.values, j['status'], IntegrityCaseStatus.underReview),
+          openedAt: DateTime.parse(j['openedAt'] as String).toLocal(),
+          responseDueAt: j['responseDueAt'] == null ? null : DateTime.parse(j['responseDueAt'] as String).toLocal(),
+          response: j['counselorResponse'] as String?,
+          decisionReason: j['decisionReason'] as String?,
+        );
+
+  @override
+  Future<IntegrityCase?> integrityCase() => guard(() async => _case((await _dio.get<Map<String, dynamic>?>('/counselors/me/integrity')).data));
+
+  @override
+  Future<IntegrityCase?> respondIntegrity(String id, String response) =>
+      guard(() async => _case((await _dio.post<Map<String, dynamic>>('/counselors/me/integrity/$id/respond', data: {'response': response.trim()})).data));
 
   @override
   Future<Counselor?> myCounselorProfile() => guard(() async {
@@ -120,6 +152,11 @@ class ApiConsultationsRepository implements ConsultationsRepository {
           'credentialKeys': a.credentialKeys,
           'languages': a.languages,
           'services': a.services.map(toApiEnum).toList(),
+          if (a.gender != null) 'gender': toApiEnum(a.gender!),
+          if (a.countryIso != null) 'countryCode': a.countryIso,
+          if (a.city != null && a.city!.trim().length >= 2) 'city': a.city!.trim(),
+          'acceptPolicy': true,
+          'policyVersion': a.policyVersion,
         });
         return ApiMappers.counselor(r.data!);
       });
@@ -170,7 +207,13 @@ class DemoConsultationsRepository implements ConsultationsRepository {
   @override
   Future<void> cancel(String id) => _b.cancelConsultation(id);
   @override
-  Future<void> review(String id, {required int rating, String? comment}) => _b.reviewConsultation(id, rating);
+  Future<void> review(String id, ReviewAnswers a) => _b.submitReview(id, a);
+  @override
+  Future<List<PendingReview>> pendingReviews() => _b.pendingReviews();
+  @override
+  Future<IntegrityCase?> integrityCase() => _b.myIntegrityCase();
+  @override
+  Future<IntegrityCase?> respondIntegrity(String id, String response) => _b.respondIntegrity(id, response);
   @override
   Future<Counselor?> myCounselorProfile() => _b.myCounselor();
   @override

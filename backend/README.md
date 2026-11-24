@@ -50,3 +50,15 @@ Point the app at it: `flutter run --dart-define=API_BASE_URL=http://10.0.2.2:300
 ## Environment
 
 All variables are validated at boot (`src/config/env.ts`); the API refuses to start with missing or weak secrets. See `/.env.example`.
+
+Added for professional accounts and store subscriptions (values come from the secret manager, never the repo):
+
+| Variable | Purpose |
+|---|---|
+| `IDENTITY_HMAC_SECRET` | HMAC key for fingerprints of permanently banned phones, devices, licences and payout accounts |
+| `PAYOUT_ENC_KEY` | AES-256-GCM key (32 bytes, base64) for counselors' payout account details |
+| `APPLE_BUNDLE_ID`, `APPLE_ROOT_CA_PATH`, `APPLE_ALLOW_SANDBOX` | StoreKit 2 JWS verification |
+| `APPLE_ISSUER_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` | App Store Server API |
+| `GOOGLE_PACKAGE_NAME`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_RTDN_TOKEN` | Play Developer API and the RTDN push endpoint |
+
+Store-side setup still needed before launch: create the subscription products (`olfa.plus.monthly`, `olfa.premium.monthly` in one App Store subscription group; `olfa_plus`, `olfa_premium` on Google Play), point App Store Server Notifications v2 to `/v1/subscriptions/apple/notifications`, and create the Pub/Sub push subscription for RTDN to `/v1/subscriptions/google/rtdn?token=…`.

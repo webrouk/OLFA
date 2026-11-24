@@ -18,6 +18,7 @@ import '../application/consultation_providers.dart';
 import '../data/consultations_repository_impl.dart';
 import '../domain/consultations_repository.dart';
 import 'consult_labels.dart';
+import '../../profile/application/profile_controllers.dart';
 
 /// C1 — Family & marital consultations: directory filtered by counselor
 /// type, service, language and duration.
@@ -82,7 +83,8 @@ class ConsultationsScreen extends ConsumerWidget {
                 : Column(children: [for (final c in list) Padding(padding: const EdgeInsets.only(bottom: 12), child: _CounselorCard(c: c))]),
           ),
           const SizedBox(height: 8),
-          SecondaryButton(label: l.becomeCounselor, icon: Icons.badge_outlined, onPressed: () => context.push(Routes.counselorApply)),
+          // Professionals register with their own professional account (separate from marriage profiles).
+          Text(l.professionalsRegisterNote, style: context.type.caption, textAlign: TextAlign.center),
         ],
       ),
     );
@@ -259,6 +261,11 @@ class _BookConsultationScreenState extends ConsumerState<BookConsultationScreen>
       if (!mounted) return;
       showToast(context, l.paymentDone);
       router.pushReplacement(Routes.myConsultations);
+    } on ServerFailure catch (e) when (e.code == 'review_required') {
+      // Mandatory questionnaire first: open the pending review.
+      final pending = await repo.pendingReviews().catchError((Object _) => const <PendingReview>[]);
+      if (mounted) showToast(context, l.errReviewRequired);
+      if (pending.isNotEmpty) router.push(Routes.reviewConsultation(pending.first.consultationId), extra: pending.first.counselorName);
     } on Failure catch (e) {
       if (mounted) {
         showToast(
@@ -377,6 +384,10 @@ class MyConsultationsScreen extends ConsumerWidget {
           color: OlfaColors.primary,
           onRefresh: () => ref.refresh(myConsultationsProvider.future),
           child: ListView(padding: const EdgeInsets.fromLTRB(20, 8, 20, 28), children: [
+            if (list.any((k) => k.canRate)) ...[
+              InfoBanner(text: l.reviewRequiredBanner, icon: Icons.rate_review_outlined, accent: true),
+              const SizedBox(height: 12),
+            ],
             if (list.isEmpty) Padding(padding: const EdgeInsets.all(24), child: Text(l.noConsultations, textAlign: TextAlign.center, style: t.bodyMedium.copyWith(color: OlfaColors.textMuted))),
             for (final k in list)
               Padding(
@@ -437,58 +448,17 @@ class MyConsultationsScreen extends ConsumerWidget {
   }
 }
 
-Future<void> showRateSheet(BuildContext context, WidgetRef ref, Consultation k) async {
-  final l = AppLocalizations.of(context);
-  var stars = 0;
-  final comment = TextEditingController();
-  await showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    builder: (sheet) => StatefulBuilder(
-      builder: (sheet, setSheet) => Padding(
-        padding: EdgeInsets.fromLTRB(20, 0, 20, 16 + MediaQuery.viewInsetsOf(sheet).bottom),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(l.rateCounselorTitle(k.counselorName), style: sheet.type.h2),
-          const SizedBox(height: 6),
-          Text(l.rateCounselorBody, style: sheet.type.bodySmall.copyWith(color: OlfaColors.textMuted)),
-          const SizedBox(height: 14),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            for (var i = 1; i <= 5; i++)
-              IconButton(
-                tooltip: l.ratingOutOf5('$i'),
-                iconSize: 38,
-                onPressed: () => setSheet(() => stars = i),
-                icon: Icon(i <= stars ? Icons.star_rounded : Icons.star_outline_rounded, color: OlfaColors.primary),
-              ),
-          ]),
-          const SizedBox(height: 8),
-          OlfaTextField(label: l.reviewComment, controller: comment, maxLines: 3, maxLength: 1000),
-          PrimaryButton(
-            label: l.submitRating,
-            onPressed: stars == 0
-                ? null
-                : () async {
-                    try {
-                      await ref.read(consultationsRepositoryProvider).review(k.id, rating: stars, comment: comment.text);
-                      ref.invalidate(myConsultationsProvider);
-                      if (sheet.mounted) Navigator.of(sheet).pop();
-                      if (context.mounted) showToast(context, l.ratingThanks);
-                    } on Failure catch (e) {
-                      if (sheet.mounted) showToast(sheet, failureMessage(sheet, e));
-                    }
-                  },
-          ),
-        ]),
-      ),
-    ),
-  );
-  comment.dispose();
-}
+/// The questionnaire is a full screen (mandatory before booking again).
+void showRateSheet(BuildContext context, WidgetRef ref, Consultation k) => context.push(Routes.reviewConsultation(k.id), extra: k.counselorName);
 
 /// C5 — Become a counselor: psychologist or family counselor, licence,
 /// languages and services. Reviewed by moderators before it is listed.
 class CounselorApplyScreen extends ConsumerStatefulWidget {
-  const CounselorApplyScreen({super.key});
+  const CounselorApplyScreen({super.key, this.setupMode = false});
+
+  /// Sign-up "about you" step of a professional account (kind comes from the
+  /// account type; continues to location). Otherwise: edit and resubmit.
+  final bool setupMode;
   @override
   ConsumerState<CounselorApplyScreen> createState() => _CounselorApplyScreenState();
 }
@@ -496,8 +466,17 @@ class CounselorApplyScreen extends ConsumerStatefulWidget {
 class _CounselorApplyScreenState extends ConsumerState<CounselorApplyScreen> {
   CounselorKind _kind = CounselorKind.familyCounselor;
   final _name = TextEditingController(), _headline = TextEditingController(), _bio = TextEditingController();
-  final _years = TextEditingController(), _licNo = TextEditingController(), _licAuth = TextEditingController();
+  final _years = TextEditingController(), _licNo = TextEditingController(), _licAuth = TextEditingController(), _city = TextEditingController();
   String _licCountry = 'AE';
+  bool _policy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final type = ref.read(profileDraftProvider).accountType;
+    if (type == AccountType.psychologist) _kind = CounselorKind.psychologist;
+    if (type == AccountType.familyCounselor) _kind = CounselorKind.familyCounselor;
+  }
   final _langs = <String>{'ar'};
   final _svcs = <ConsultationService>{};
   final _credentials = <String>[];
@@ -505,7 +484,7 @@ class _CounselorApplyScreenState extends ConsumerState<CounselorApplyScreen> {
 
   @override
   void dispose() {
-    for (final c in [_name, _headline, _bio, _years, _licNo, _licAuth]) {
+    for (final c in [_name, _headline, _bio, _years, _licNo, _licAuth, _city]) {
       c.dispose();
     }
     super.dispose();
@@ -528,8 +507,9 @@ class _CounselorApplyScreenState extends ConsumerState<CounselorApplyScreen> {
   Future<void> _submit() async {
     setState(() => _submitted = true);
     final years = int.tryParse(_years.text.trim());
-    final ok = _name.text.trim().length >= 2 && _headline.text.trim().length >= 5 && _bio.text.trim().length >= 80 && years != null && _licNo.text.trim().length >= 3 && _licAuth.text.trim().length >= 3 && _langs.isNotEmpty && _svcs.isNotEmpty && _credentials.isNotEmpty;
+    final ok = _name.text.trim().length >= 2 && _headline.text.trim().length >= 5 && _bio.text.trim().length >= 80 && years != null && _licNo.text.trim().length >= 3 && _licAuth.text.trim().length >= 3 && _langs.isNotEmpty && _svcs.isNotEmpty && _credentials.isNotEmpty && _policy;
     if (!ok) return;
+    final draft = ref.read(profileDraftProvider);
     setState(() => _busy = true);
     try {
       await ref.read(consultationsRepositoryProvider).apply(CounselorApplication(
@@ -544,8 +524,12 @@ class _CounselorApplyScreenState extends ConsumerState<CounselorApplyScreen> {
             languages: _langs.toList(),
             services: _svcs.toList(),
             credentialKeys: _credentials,
+            gender: draft.gender,
+            countryIso: _licCountry,
+            city: _city.text,
           ));
       ref.invalidate(myCounselorProvider);
+      if (widget.setupMode && mounted) context.push(Routes.location);
     } on Failure catch (e) {
       if (mounted) showToast(context, failureMessage(context, e));
     } finally {
@@ -559,7 +543,7 @@ class _CounselorApplyScreenState extends ConsumerState<CounselorApplyScreen> {
     final t = context.type;
     final mine = ref.watch(myCounselorProvider);
     final status = mine.valueOrNull?.status;
-    if (status == CounselorStatus.pending || status == CounselorStatus.approved || status == CounselorStatus.suspended) {
+    if (!widget.setupMode && (status == CounselorStatus.pending || status == CounselorStatus.approved || status == CounselorStatus.suspended)) {
       return Scaffold(
         appBar: AppBar(title: Text(l.screenCounselorApply)),
         body: EmptyState(
@@ -574,18 +558,20 @@ class _CounselorApplyScreenState extends ConsumerState<CounselorApplyScreen> {
     }
     String? req(TextEditingController c, int min) => _submitted && c.text.trim().length < min ? l.errorValidation : null;
     return FormPage(
-      title: l.screenCounselorApply,
-      action: PrimaryButton(label: l.submitForReview, loading: _busy, onPressed: _busy ? null : _submit),
+      title: widget.setupMode ? null : l.screenCounselorApply,
+      header: widget.setupMode ? const SetupProgress(step: 3, total: 5) : null,
+      action: PrimaryButton(label: widget.setupMode ? l.continueLabel : l.submitForReview, loading: _busy, onPressed: _busy ? null : _submit),
       children: [
         if (status == CounselorStatus.rejected && mine.valueOrNull?.rejectReason != null) ...[
           InfoBanner(text: '${l.counselorRejected}: ${mine.valueOrNull!.rejectReason}', accent: true),
           const SizedBox(height: 14),
         ],
-        Text(l.counselorApplyBody, style: t.bodyMedium.copyWith(color: OlfaColors.textMuted)),
+        if (widget.setupMode) PageHeading(l.aboutYouProfessional, body: l.counselorApplyBody) else Text(l.counselorApplyBody, style: t.bodyMedium.copyWith(color: OlfaColors.textMuted)),
         const SizedBox(height: 18),
         Text(l.counselorType, style: t.inputLabel),
         const SizedBox(height: 8),
-        ChoiceWrap<CounselorKind>(options: CounselorKind.values, label: (k) => kindLabel(l, k), isSelected: (k) => k == _kind, onTap: (k) => setState(() => _kind = k)),
+        // the kind follows the account type chosen at sign-up
+        Align(alignment: AlignmentDirectional.centerStart, child: OlfaTag(kindLabel(l, _kind), style: OlfaTagStyle.primary, icon: Icons.verified_user_outlined)),
         const SizedBox(height: 18),
         OlfaTextField(label: l.professionalName, controller: _name, error: req(_name, 2)),
         OlfaTextField(label: l.headline, hint: l.headlineHint, controller: _headline, error: req(_headline, 5)),
@@ -602,6 +588,7 @@ class _CounselorApplyScreenState extends ConsumerState<CounselorApplyScreen> {
           onChanged: (v) => setState(() => _licCountry = v ?? _licCountry),
         ),
         const SizedBox(height: 18),
+        OlfaTextField(label: l.cityOfPractice, controller: _city),
         Text(l.serviceLanguage, style: t.inputLabel),
         const SizedBox(height: 8),
         ChoiceWrap<String>(options: kServiceLanguages, label: (x) => languageName(context, x), isSelected: _langs.contains, onTap: (x) => setState(() => _langs.contains(x) ? _langs.remove(x) : _langs.add(x))),
@@ -620,6 +607,28 @@ class _CounselorApplyScreenState extends ConsumerState<CounselorApplyScreen> {
           OlfaListTile(icon: Icons.description_outlined, title: l.credentialN(i + 1), showChevron: false, trailing: const Icon(Icons.check_rounded, color: OlfaColors.primary)),
         if (_credentials.length < 5) SecondaryButton(label: l.uploadCredential, icon: Icons.upload_file_rounded, onPressed: _addCredential),
         if (_submitted && _credentials.isEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(l.credentialRequired, style: t.bodySmall.copyWith(color: OlfaColors.primary))),
+        const SizedBox(height: 22),
+        // Professional policy: the 15% commission and the off-platform rules, accepted explicitly.
+        OlfaCard(
+          padding: const EdgeInsets.all(16),
+          color: OlfaColors.primaryTint(),
+          borderColor: _submitted && !_policy ? OlfaColors.primary : OlfaColors.primaryTint(0.2),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(l.policySummaryTitle, style: t.h3),
+            const SizedBox(height: 8),
+            for (final p in [l.policyPoint1(kPlatformFeePercent), l.policyPoint2, l.policyPoint3, l.policyPoint4])
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Padding(padding: EdgeInsets.only(top: 3), child: Icon(Icons.circle, size: 6, color: OlfaColors.primary)),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(p, style: t.bodySmall)),
+                ]),
+              ),
+            Align(alignment: AlignmentDirectional.centerStart, child: TextButton(onPressed: () => context.push(Routes.professionalPolicy), child: Text(l.readProfessionalPolicy))),
+            OlfaCheck(value: _policy, onChanged: (v) => setState(() => _policy = v), label: l.acceptProfessionalPolicy),
+          ]),
+        ),
       ],
     );
   }
@@ -666,8 +675,9 @@ class _CounselorDeskScreenState extends ConsumerState<CounselorDeskScreen> {
     final l = AppLocalizations.of(context);
     final t = context.type;
     final me = ref.watch(myCounselorProvider).valueOrNull;
+    final integrity = ref.watch(integrityCaseProvider).valueOrNull;
     return Scaffold(
-      appBar: AppBar(title: Text(l.screenCounselorDesk)),
+      appBar: AppBar(title: Text(l.screenCounselorDesk), automaticallyImplyLeading: context.canPop()),
       body: AsyncView<List<Consultation>>(
         value: ref.watch(counselorDeskProvider),
         onRetry: () => ref.invalidate(counselorDeskProvider),
@@ -719,6 +729,16 @@ class _CounselorDeskScreenState extends ConsumerState<CounselorDeskScreen> {
                       _DeskStat(value: monthValue == 0 ? '—' : money(context, monthValue, currency), label: l.thisMonth),
                     ]),
                   ]),
+                ),
+                const SizedBox(height: 12),
+                if (integrity != null && (integrity.isOpen || integrity.status == IntegrityCaseStatus.warned)) ...[
+                  IntegrityBanner(c: integrity),
+                  const SizedBox(height: 12),
+                ],
+                InfoBanner(
+                  text: l.deskCommissionNote,
+                  icon: Icons.account_balance_wallet_outlined,
+                  trailing: TextButton(onPressed: () => context.go(Routes.wallet), child: Text(l.walletTitle)),
                 ),
                 const SizedBox(height: 12),
                 if ((me?.offerings ?? const []).isEmpty)
@@ -863,6 +883,14 @@ class _DeskCard extends StatelessWidget {
               style: t.bodySmall,
             ),
           ]),
+          // what the counselor receives: price − 15% platform commission
+          Builder(builder: (_) {
+            final fee = (k.priceMinor * kPlatformFeePercent + 50) ~/ 100;
+            return Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(l.deskYouReceive(money(context, k.priceMinor - fee, k.currency), kPlatformFeePercent), style: t.caption.copyWith(color: OlfaColors.primary, fontWeight: FontWeight.w600)),
+            );
+          }),
           if (k.note != null && k.note!.isNotEmpty)
             Container(
               width: double.infinity,
@@ -961,4 +989,105 @@ Future<(List<int>, String)?> pickCredentialFile(BuildContext context) async {
   final bytes = await x.readAsBytes();
   final mime = x.name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
   return (bytes.toList(), mime);
+}
+
+
+/// Platform commission shown to counselors (server setting consultations.platformFeePercent;
+/// the exact split is fixed on each booking when the client pays).
+const kPlatformFeePercent = 15;
+
+/// Integrity review notice on the counselor desk: what happened, the deadline,
+/// and a way to respond before any decision. Never says who reported what.
+class IntegrityBanner extends ConsumerStatefulWidget {
+  const IntegrityBanner({super.key, required this.c});
+  final IntegrityCase c;
+  @override
+  ConsumerState<IntegrityBanner> createState() => _IntegrityBannerState();
+}
+
+class _IntegrityBannerState extends ConsumerState<IntegrityBanner> {
+  final _text = TextEditingController();
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  Future<void> _respond() async {
+    final l = AppLocalizations.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, set) => Padding(
+          padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.viewInsetsOf(ctx).bottom + 20),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text(l.integrityRespondTitle, style: ctx.type.h2),
+            const SizedBox(height: 6),
+            Text(l.integrityRespondBody, style: ctx.type.bodySmall.copyWith(color: OlfaColors.textMuted)),
+            const SizedBox(height: 14),
+            OlfaTextField(label: l.yourResponse, controller: _text, maxLines: 6, maxLength: 3000, counter: true),
+            PrimaryButton(
+              label: l.sendResponse,
+              loading: _busy,
+              onPressed: () async {
+                if (_text.text.trim().length < 20) {
+                  showToast(ctx, l.responseTooShort);
+                  return;
+                }
+                set(() => _busy = true);
+                try {
+                  await ref.read(consultationsRepositoryProvider).respondIntegrity(widget.c.id, _text.text);
+                  ref.invalidate(integrityCaseProvider);
+                  if (ctx.mounted) Navigator.pop(ctx);
+                } on Failure catch (e) {
+                  if (ctx.mounted) showToast(ctx, failureMessage(ctx, e));
+                } finally {
+                  set(() => _busy = false);
+                }
+              },
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final t = context.type;
+    final c = widget.c;
+    final due = c.responseDueAt == null ? '' : DateFormat.yMMMd(langOf(context)).format(c.responseDueAt!);
+    return OlfaCard(
+      padding: const EdgeInsets.all(14),
+      color: OlfaColors.primaryTint(),
+      borderColor: OlfaColors.primary,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.policy_outlined, color: OlfaColors.primary),
+          const SizedBox(width: 10),
+          Expanded(child: Text(c.status == IntegrityCaseStatus.warned ? l.integrityWarnedTitle : l.integrityTitle, style: t.h3)),
+        ]),
+        const SizedBox(height: 8),
+        Text(
+          switch (c.status) {
+            IntegrityCaseStatus.awaitingResponse || IntegrityCaseStatus.open => l.integrityBodyRespond(due),
+            IntegrityCaseStatus.underReview => l.integrityBodyReview,
+            _ => c.decisionReason ?? '',
+          },
+          style: t.bodySmall,
+        ),
+        const SizedBox(height: 10),
+        Row(children: [
+          TextButton(onPressed: () => context.push(Routes.professionalPolicy), child: Text(l.professionalPolicy)),
+          const Spacer(),
+          if (c.needsResponse) PrimaryButton(label: l.respond, expand: false, onPressed: _respond),
+        ]),
+      ]),
+    );
+  }
 }

@@ -125,6 +125,50 @@ Push sounds: APNs `sound` and Android channels `olfa_messages` / `olfa_matches` 
 
 Discovery filters accept `heightMin/heightMax` (cm) and `weightMin/weightMax` (kg).
 
+## Account types (Nov 2026)
+
+`PUT /me/account-type {type: MEMBER|PSYCHOLOGIST|FAMILY_COUNSELOR}` — chosen once at sign-up, after the gender step (which now also takes `heightCm` / `weightKg`). A DB trigger locks it once a profile exists (`account_type_locked`). Members get discovery, likes, matches, preferences and plans; professionals get the counselor desk, wallet and client chats. Member-only routes answer `wrong_account_type` to professionals and vice versa; professionals never appear in discovery and can't be liked.
+
+Sign-up order — member: gender + height/weight → account type → about you (incl. religion & sect) → partner preferences → location → photos. Professional: gender + height/weight → account type → about your practice (licence, services, policy acceptance) → location → photo.
+
+## Religion & sect
+
+Reference keys come from `shared/reference/religions.tsv` (`GET /reference` includes them). Profile: `religion`, `sect` (must belong to the religion; consent required, `undisclosed` allowed). Preferences: `religions[]`, `sects[]` (`religion.sect`; a sect is only accepted under a chosen religion). Discovery filters: `religions=islam,christianity&sects=christianity.maronite` — a religion with no sect selected matches all of its sects; `undisclosed` profiles are excluded only when a religion filter is set.
+
+## Professional wallet
+
+| method | path | notes |
+|---|---|---|
+| GET | `/wallet` | balances per currency: available, pending (released `wallet.holdDays` after each completed session, default 7), minimum withdrawal, gross / fee / net totals, `payoutsOnHold` while an integrity case is open. |
+| GET | `/wallet/entries?cursor=` | immutable ledger: EARNING (gross, fee, net), EARNING_REVERSAL (refund), WITHDRAWAL, WITHDRAWAL_RETURN, ADJUSTMENT. |
+| GET/POST/DELETE | `/wallet/payout-methods` | IBAN, SWIFT, Wise, PayPal, Payoneer. Details AES-256-GCM encrypted (`PAYOUT_ENC_KEY`), only a mask is returned; fingerprints of banned accounts are refused. |
+| GET/POST | `/wallet/withdrawals` · POST `/wallet/withdrawals/:id/cancel` | one open request per currency; the DB refuses a debit above the available balance. |
+
+The fee is snapshotted on each consultation (`consultations.platformFeePercent`, default 15). The earning is written by a DB trigger when a consultation completes, and reversed on refund.
+
+Admin: `GET /admin/withdrawals`, `POST /admin/withdrawals/:id/processing|paid|reject|failed` (failed/rejected return the money), `POST /admin/wallets/:counselorId/adjust`.
+
+## Post-consultation questionnaire & integrity
+
+`GET /consultations/pending-review` · `POST /consultations/:id/review` — mandatory before the member can book again (DB trigger, `review_required`). It asks for 5 ratings (overall, treatment, commitment, effectiveness, outcome), whether another session was agreed and where, and three safety questions: contact details shared, payment asked outside OLFA, invitation to another app. Answers are confidential; the counselor sees only the overall rating.
+
+Direct and indirect answers, plus phone numbers detected in consultation chats, become `counselor_integrity_signals`. Each (client, kind) counts once; a case opens when the 90-day score reaches 12 from at least 2 different clients. The counselor is notified, withdrawals pause, and they respond through `GET /counselors/me/integrity` and `POST /counselors/me/integrity/:id/respond`. A human decides via `POST /admin/integrity/cases/:id/decide {decision: CLEAR|WARN|SUSPEND|BAN, reason}`.
+
+A permanent ban stores HMAC fingerprints (`IDENTITY_HMAC_SECRET`) of the phone, devices, licence and payout accounts in `banned_identities`. OTP requests, new accounts on a banned device, counselor applications with a banned licence and banned payout accounts are refused (`account_banned`).
+
+## Store subscriptions
+
+| method | path | notes |
+|---|---|---|
+| GET | `/subscriptions/products` | store product ids per plan and provider. |
+| GET | `/subscriptions/me` | plan, the `accountToken` to attach to purchases, and the store state: status (ACTIVE, GRACE_PERIOD, BILLING_RETRY, ON_HOLD, PAUSED, PENDING, EXPIRED, REFUNDED, REVOKED), autoRenew, expiresAt, graceUntil, pendingPlan (downgrade at renewal), billingIssue, manageUrl. |
+| POST | `/subscriptions/apple {signedTransaction, signedRenewalInfo?}` | StoreKit 2 JWS verified against Apple Root CA G3, then the App Store Server API. |
+| POST | `/subscriptions/google {productId, purchaseToken}` | Play Developer API `subscriptionsv2`; acknowledged by the server. |
+| POST | `/subscriptions/restore {apple[], google[]}` | re-attaches purchases; a receipt owned by another account is not transferred. |
+| POST | `/subscriptions/apple/notifications` · `/subscriptions/google/rtdn?token=` | App Store Server Notifications v2 and Google RTDN: renewals, grace period, billing retry, on hold, pause, plan changes, refunds, revocations. |
+
+The app finishes a store transaction only after the server accepts it, so an interrupted purchase is re-delivered on the next launch. Upgrades start immediately (Google: time proration); downgrades start at renewal (Google: deferred; Apple: subscription group). Cancelling is done in the store; the app links there.
+
 ## Admin (RBAC)
 
 Admin JWTs are separate (`POST /admin/auth/login`). Every admin route declares the permissions it needs; every change is written to `audit_logs`.

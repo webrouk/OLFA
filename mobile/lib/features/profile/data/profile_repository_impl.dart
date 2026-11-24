@@ -50,6 +50,9 @@ class ApiProfileRepository implements ProfileRepository, PhotoRepository {
         if (d.heightCm != null) 'heightCm': d.heightCm,
         if (d.weightKg != null) 'weightKg': d.weightKg,
         'marriageTimeline': toApiEnum(d.timeline!),
+        if (d.religion != null) 'religion': d.religion,
+        if (d.religion != null) 'sect': d.religion == 'undisclosed' ? null : d.sect,
+        if (d.religion != null && d.religion != 'undisclosed') 'religionConsent': d.religionConsent,
         'bio': d.bio.trim(),
         'interests': d.interests.toList(),
         if (create) 'ageConfirmed': true,
@@ -70,6 +73,8 @@ class ApiProfileRepository implements ProfileRepository, PhotoRepository {
           'sameCountryOnly': d.prefSameCountry,
           'maritalStatuses': d.prefMarital.map(toApiEnum).toList(),
           'wantsChildren': d.prefWantsChildren,
+          'religions': d.prefReligions.toList(),
+          'sects': d.prefSects.where((s) => d.prefReligions.isEmpty || d.prefReligions.contains(s.split('.').first)).toList(),
         });
         await _dio.post<void>('/me/verification/submit');
       });

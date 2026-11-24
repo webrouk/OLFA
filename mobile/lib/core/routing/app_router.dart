@@ -2,7 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/account/account_type.dart';
 import '../../features/authentication/presentation/auth_screens.dart';
+import '../../features/consultations/application/consultation_providers.dart';
+import '../../features/consultations/presentation/review_screen.dart';
+import '../../features/profile/presentation/account_type_screen.dart';
+import '../../features/profile/presentation/professional_profile_screen.dart';
+import '../../features/wallet/presentation/wallet_screen.dart';
 import '../../features/consultations/presentation/consultation_screens.dart';
 import '../../features/discovery/presentation/discover_screen.dart';
 import '../../features/discovery/presentation/search_filters_screen.dart';
@@ -24,6 +30,7 @@ import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/subscriptions/presentation/plans_screen.dart';
 import '../../features/support/presentation/help_screen.dart';
 import '../widgets/floating_nav_bar.dart';
+import '../../shared/models/models.dart';
 import 'routes.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -35,7 +42,16 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: Routes.splash,
-    // Phase 3: redirect by session + account status (pending/rejected/active…).
+    refreshListenable: accountTypeListenable,
+    // Each account type only reaches its own area (the server enforces the same rule).
+    redirect: (context, state) {
+      final type = ref.read(accountTypeProvider);
+      final loc = state.matchedLocation;
+      if (type == null) return null;
+      if (type.isProfessional && Routes.memberOnly(loc)) return Routes.counselorDesk;
+      if (!type.isProfessional && Routes.professionalOnly(loc)) return Routes.discover;
+      return null;
+    },
     routes: [
       // A — Authentication & onboarding
       _root(Routes.splash, (_) => const SplashScreen()),
@@ -46,6 +62,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       _root(Routes.age, (_) => const AgeScreen()),
       // B — Profile setup
       _root(Routes.gender, (_) => const GenderScreen()),
+      _root(Routes.accountType, (_) => const AccountTypeScreen()),
+      _root(Routes.professionalInfo, (_) => const CounselorApplyScreen(setupMode: true)),
       _root(Routes.profileInfo, (_) => const ProfileInfoScreen()),
       _root(Routes.preferences, (_) => const PreferencesScreen()),
       _root(Routes.photos, (_) => const PhotosScreen()),
@@ -63,7 +81,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       _root(Routes.book, (s) => BookConsultationScreen(counselorId: s.pathParameters['id']!)),
       _root(Routes.counselor, (s) => CounselorDetailsScreen(counselorId: s.pathParameters['id']!)),
       _root(Routes.counselorApply, (_) => const CounselorApplyScreen()),
-      _root(Routes.counselorDesk, (_) => const CounselorDeskScreen()),
+      _root(Routes.reviewConsultationPath, (s) => ConsultationReviewScreen(consultationId: s.pathParameters['id']!, counselorName: s.extra as String?)),
+      _root(Routes.payoutMethods, (_) => const PayoutMethodsScreen()),
+      _root(Routes.withdrawals, (_) => const WithdrawalsScreen()),
+      _root(Routes.professionalPolicy, (_) => const LegalScreen.professional()),
       _root(Routes.notifications, (_) => const NotificationsScreen()),
       _root(Routes.editProfile, (_) => const EditProfileScreen()),
       _root(Routes.plans, (_) => const PlansScreen()),
@@ -88,14 +109,45 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(routes: [GoRoute(path: Routes.myProfile, builder: (_, __) => const MyProfileScreen())]),
         ],
       ),
+      // Professional workspace: desk, wallet, messages (consultation chats), profile
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, shell) => ProfessionalShell(shell: shell),
+        branches: [
+          StatefulShellBranch(routes: [GoRoute(path: Routes.counselorDesk, builder: (_, __) => const CounselorDeskScreen())]),
+          StatefulShellBranch(routes: [GoRoute(path: Routes.wallet, builder: (_, __) => const WalletScreen())]),
+          StatefulShellBranch(routes: [GoRoute(path: Routes.proMessages, builder: (_, __) => const ConversationsScreen())]),
+          StatefulShellBranch(routes: [GoRoute(path: Routes.proProfile, builder: (_, __) => const ProfessionalProfileScreen())]),
+        ],
+      ),
     ],
   );
 });
 
-/// Tab shell hosting the floating bottom navigation.
-class MainShell extends StatelessWidget {
+/// Tab shell hosting the floating bottom navigation (marriage members).
+/// Once per session it reminds a member of a consultation they still have to
+/// review (the questionnaire is required before booking again).
+class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key, required this.shell});
   final StatefulNavigationShell shell;
+  @override
+  ConsumerState<MainShell> createState() => _MainShellState();
+}
+
+bool _reviewPrompted = false;
+
+class _MainShellState extends ConsumerState<MainShell> {
+  StatefulNavigationShell get shell => widget.shell;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (_reviewPrompted) return;
+      _reviewPrompted = true;
+      final pending = await ref.read(pendingReviewsProvider.future).catchError((Object _) => const <PendingReview>[]);
+      if (pending.isNotEmpty && mounted) await promptPendingReview(context, pending.first);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -105,6 +157,26 @@ class MainShell extends StatelessWidget {
       bottomNavigationBar: FloatingNavBar(
         index: shell.currentIndex,
         badges: const {1, 3},
+        onTap: (i) => shell.goBranch(i, initialLocation: i == shell.currentIndex),
+      ),
+    );
+  }
+}
+
+/// Tab shell for psychologists and family counselors.
+class ProfessionalShell extends StatelessWidget {
+  const ProfessionalShell({super.key, required this.shell});
+  final StatefulNavigationShell shell;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      extendBody: true,
+      body: shell,
+      bottomNavigationBar: FloatingNavBar(
+        professional: true,
+        index: shell.currentIndex,
+        badges: const {0},
         onTap: (i) => shell.goBranch(i, initialLocation: i == shell.currentIndex),
       ),
     );

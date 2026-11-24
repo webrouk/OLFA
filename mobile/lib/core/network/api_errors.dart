@@ -40,6 +40,12 @@ Failure toFailure(Object e, {String quota = 'likes'}) {
     'REMATCH_USED' => const ServerFailure('rematch_used'),
     'INVALID_STATE' => const ServerFailure('invalid_state'),
     'NOT_PAID' => const ServerFailure('not_paid'),
+    'ACCOUNT_TYPE_LOCKED' => const ServerFailure('account_type_locked'),
+    'WRONG_ACCOUNT_TYPE' => const ServerFailure('wrong_account_type'),
+    'ACCOUNT_BANNED' => const ServerFailure('account_banned'),
+    'INSUFFICIENT_BALANCE' => const ServerFailure('insufficient_balance'),
+    'REVIEW_REQUIRED' => const ServerFailure('review_required'),
+    'STORE_VERIFICATION_FAILED' => const ServerFailure('store_verification_failed'),
     'CONFLICT' => const ServerFailure('conflict'),
     _ => const ServerFailure(),
   };

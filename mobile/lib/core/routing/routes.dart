@@ -12,6 +12,8 @@ abstract final class Routes {
 
   // 2. Profile setup (5)
   static const gender = '/setup/gender';
+  static const accountType = '/setup/account-type'; // member · psychologist · family counselor
+  static const professionalInfo = '/setup/professional'; // "about you" for professionals
   static const profileInfo = '/setup/info';
   static const preferences = '/setup/preferences';
   static const photos = '/setup/photos';
@@ -53,7 +55,28 @@ abstract final class Routes {
   static const counselor = '/consultations/counselor/:id';
   static const book = '/consultations/counselor/:id/book';
   static const counselorApply = '/counselor/apply';
+  static const reviewConsultationPath = '/consultations/:id/review'; // mandatory questionnaire
+
+  // 7. Professional workspace (psychologist / family counselor accounts) — floating-nav tabs
   static const counselorDesk = '/counselor/desk';
+  static const wallet = '/counselor/wallet';
+  static const proMessages = '/counselor/messages';
+  static const proProfile = '/counselor/profile';
+  static const payoutMethods = '/counselor/wallet/payout-methods';
+  static const withdrawals = '/counselor/wallet/withdrawals';
+  static const professionalPolicy = '/legal/professional';
+
+  /// Marriage-only areas a professional account never reaches (router redirect;
+  /// the server refuses them too).
+  static bool memberOnly(String loc) =>
+      loc.startsWith('/discover') || loc.startsWith('/likes') || loc.startsWith('/matches') || loc == myProfile || loc == conversations ||
+      loc == editProfile || loc == plans || loc == preferences || loc == profileInfo || loc == archive || loc == unmatched ||
+      loc.startsWith('/consultations');
+
+  /// The professional workspace (members are sent to Discover).
+  static bool professionalOnly(String loc) => loc.startsWith('/counselor/') || loc == professionalInfo;
+
+  static String reviewConsultation(String id) => '/consultations/$id/review';
 
   static String counselorDetails(String id) => '/consultations/counselor/$id';
   static String bookCounselor(String id) => '/consultations/counselor/$id/book';

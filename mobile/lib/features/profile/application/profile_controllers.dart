@@ -55,6 +55,12 @@ class ProfileDraftController extends Notifier<ProfileDraft> {
     await ref.read(profileRepositoryProvider).submitForReview(state);
     ref.invalidate(verificationProvider);
   }
+
+  /// Professionals: the application went out on the "about you" step and
+  /// each photo is uploaded when picked; the counselor review covers both.
+  Future<void> submitProfessionalPhotos() async {
+    ref.invalidate(verificationProvider);
+  }
 }
 
 final profileDraftProvider = NotifierProvider<ProfileDraftController, ProfileDraft>(ProfileDraftController.new);

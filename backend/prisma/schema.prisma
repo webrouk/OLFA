@@ -20,6 +20,7 @@ enum AccountStatus {
   SUSPENDED
   RESTRICTED
   DELETED
+  BANNED
 
   @@map("account_status")
 }
@@ -133,6 +134,9 @@ enum SubscriptionStatus {
   EXPIRED
   REFUNDED
   REVOKED
+  ON_HOLD
+  PAUSED
+  PENDING
 
   @@map("subscription_status")
 }
@@ -182,6 +186,9 @@ enum NotificationType {
   REMATCH_REQUEST
   REMATCH_ACCEPTED
   NEW_COMPLIMENT
+  INTEGRITY_CASE
+  WITHDRAWAL_UPDATE
+  REVIEW_REQUIRED
 
   @@map("notification_type")
 }
@@ -255,6 +262,7 @@ enum ModerationActionType {
   APPROVE_COUNSELOR
   REJECT_COUNSELOR
   SUSPEND_COUNSELOR
+  BAN
 
   @@map("moderation_action_type")
 }
@@ -276,6 +284,8 @@ model User {
   deletionRequestedAt DateTime?     @map("deletion_requested_at") @db.Timestamptz
   frozenAt            DateTime?     @map("frozen_at") @db.Timestamptz
   freezeReason        String?       @map("freeze_reason") @db.VarChar(40)
+  /// Chosen once at sign-up; locked when a profile exists (DB trigger).
+  accountType         AccountType?  @map("account_type")
   privacy             UserPrivacySettings?
   deletedAt           DateTime?     @map("deleted_at") @db.Timestamptz
   createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz
@@ -347,6 +357,10 @@ model UserProfile {
   createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt         DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   nationality       String?          @db.Char(2)
+  /// Key from shared/reference/religions.tsv; stored only with explicit consent.
+  religion          String?          @db.VarChar(30)
+  sect              String?          @db.VarChar(40)
+  religionConsentAt DateTime?        @map("religion_consent_at") @db.Timestamptz
   latitude          Float? // rounded to 2 decimals (~1 km), never exposed
   longitude         Float?
   locationCountry   String?          @map("location_country") @db.Char(2)
@@ -393,6 +407,9 @@ model UserPreference {
   educationLevels EducationLevel[] @default([]) @map("education_levels")
   occupations     String[]         @default([])
   wantsChildren   Boolean?         @map("wants_children")
+  /// Accepted religions (empty = any) and sects as "religion.sect".
+  religions       String[]         @default([]) @db.VarChar(30)
+  sects           String[]         @default([]) @db.VarChar(71)
   updatedAt       DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -655,6 +672,13 @@ model UserSubscription {
   expiresAt             DateTime           @map("expires_at") @db.Timestamptz
   autoRenew             Boolean            @default(true) @map("auto_renew")
   cancelledAt           DateTime?          @map("cancelled_at") @db.Timestamptz
+  /// Product that takes over at the next renewal (scheduled downgrade).
+  pendingProductId      String?            @map("pending_product_id") @db.VarChar(120)
+  graceUntil            DateTime?          @map("grace_until") @db.Timestamptz
+  sandbox               Boolean            @default(false)
+  replacedBy            String?            @map("replaced_by") @db.Uuid
+  lastVerifiedAt        DateTime?          @map("last_verified_at") @db.Timestamptz
+  latestTransactionId   String?            @map("latest_transaction_id") @db.VarChar(200)
   createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz
   updatedAt             DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1043,6 +1067,13 @@ model CounselorProfile {
   ratingAvg        Decimal               @default(0) @map("rating_avg") @db.Decimal(3, 2)
   ratingCount      Int                   @default(0) @map("rating_count")
   rejectReason     String?               @map("reject_reason") @db.VarChar(300)
+  gender           Gender?
+  countryCode      String?               @map("country_code") @db.Char(2)
+  city             String?               @db.VarChar(80)
+  latitude         Float? // rounded (~1 km), never exposed
+  longitude        Float?
+  policyVersion    String?               @map("policy_version") @db.VarChar(20)
+  policyAcceptedAt DateTime?             @map("policy_accepted_at") @db.Timestamptz
   reviewedBy       String?               @map("reviewed_by") @db.Uuid
   reviewedAt       DateTime?             @map("reviewed_at") @db.Timestamptz
   createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz
@@ -1052,6 +1083,11 @@ model CounselorProfile {
   offerings        CounselorOffering[]
   consultations    Consultation[]
   reviews          ConsultationReview[]
+  payoutMethods    PayoutMethod[]
+  withdrawals      Withdrawal[]
+  walletEntries    WalletEntry[]
+  integritySignals CounselorIntegritySignal[]
+  integrityCases   CounselorIntegrityCase[]
 
   @@index([status, kind, ratingAvg(sort: Desc)], map: "counselor_profiles_listing_idx")
   @@map("counselor_profiles")
@@ -1097,6 +1133,10 @@ model Consultation {
   confirmedAt     DateTime?           @map("confirmed_at") @db.Timestamptz
   completedAt     DateTime?           @map("completed_at") @db.Timestamptz
   cancelledAt     DateTime?           @map("cancelled_at") @db.Timestamptz
+  /// Commission snapshot taken when the client pays (DB trigger).
+  platformFeePercent Int?             @map("platform_fee_percent") @db.SmallInt
+  platformFeeMinor   Int?             @map("platform_fee_minor")
+  counselorNetMinor  Int?             @map("counselor_net_minor")
   createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   client          User                @relation("ConsultationClient", fields: [clientId], references: [id], onDelete: Cascade)
@@ -1106,6 +1146,8 @@ model Consultation {
   payments        Payment[]           @relation("ConsultationPayments")
   conversation    Conversation?
   review          ConsultationReview?
+  walletEntries   WalletEntry[]
+  integritySignals CounselorIntegritySignal[]
 
   @@index([clientId, createdAt(sort: Desc)], map: "consultations_client_idx")
   @@index([counselorId, status, createdAt(sort: Desc)], map: "consultations_counselor_idx")
@@ -1120,6 +1162,17 @@ model ConsultationReview {
   rating         Int              @db.SmallInt
   comment        String?          @db.VarChar(1000)
   hidden         Boolean          @default(false)
+  /// Mandatory questionnaire (v1). Direct + indirect anti-circumvention answers.
+  questionnaireVersion Int?       @map("questionnaire_version") @db.SmallInt
+  quality        Int?             @db.SmallInt
+  commitment     Int?             @db.SmallInt
+  effectiveness  Int?             @db.SmallInt
+  outcome        Int?             @db.SmallInt
+  nextSession    String?          @map("next_session") @db.VarChar(20)
+  nextChannel    String?          @map("next_channel") @db.VarChar(12)
+  contactShared  String?          @map("contact_shared") @db.VarChar(6)
+  offPlatformPayment String?      @map("off_platform_payment") @db.VarChar(6)
+  externalChannel String?         @map("external_channel") @db.VarChar(6)
   createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz
   consultation   Consultation     @relation(fields: [consultationId], references: [id], onDelete: Cascade)
   client         User             @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -1209,4 +1262,204 @@ model StorageGarbage {
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   @@map("storage_garbage")
+}
+
+// ───────────── Account types, religion, wallet, integrity (migration 20261114180000) ─────────────
+
+enum AccountType {
+  MEMBER
+  PSYCHOLOGIST
+  FAMILY_COUNSELOR
+
+  @@map("account_type")
+}
+
+model Religion {
+  key       String  @id @db.VarChar(30)
+  nameEn    String  @map("name_en") @db.VarChar(60)
+  nameAr    String  @map("name_ar") @db.VarChar(60)
+  sortOrder Int     @default(0) @map("sort_order") @db.SmallInt
+  sects     Sect[]
+
+  @@map("religions")
+}
+
+model Sect {
+  religionKey String   @map("religion_key") @db.VarChar(30)
+  key         String   @db.VarChar(40)
+  nameEn      String   @map("name_en") @db.VarChar(60)
+  nameAr      String   @map("name_ar") @db.VarChar(60)
+  sortOrder   Int      @default(0) @map("sort_order") @db.SmallInt
+  religion    Religion @relation(fields: [religionKey], references: [key])
+
+  @@id([religionKey, key])
+  @@map("sects")
+}
+
+enum WalletEntryKind {
+  EARNING
+  EARNING_REVERSAL
+  WITHDRAWAL
+  WITHDRAWAL_RETURN
+  ADJUSTMENT
+
+  @@map("wallet_entry_kind")
+}
+
+enum PayoutMethodKind {
+  BANK_IBAN
+  BANK_SWIFT
+  WISE
+  PAYPAL
+  PAYONEER
+
+  @@map("payout_method_kind")
+}
+
+enum WithdrawalStatus {
+  REQUESTED
+  PROCESSING
+  PAID
+  REJECTED
+  FAILED
+  CANCELLED
+
+  @@map("withdrawal_status")
+}
+
+/// Payout destination. Details are sealed (AES-256-GCM); only the mask is readable.
+model PayoutMethod {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  counselorId String           @map("counselor_id") @db.Uuid
+  kind        PayoutMethodKind
+  holderName  String           @map("holder_name") @db.VarChar(120)
+  countryCode String           @map("country_code") @db.Char(2)
+  currency    String           @db.Char(3)
+  detailsEnc  Bytes            @map("details_enc")
+  detailsMask String           @map("details_mask") @db.VarChar(60)
+  fingerprint String           @db.Char(64)
+  isDefault   Boolean          @default(false) @map("is_default")
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  deletedAt   DateTime?        @map("deleted_at") @db.Timestamptz
+  counselor   CounselorProfile @relation(fields: [counselorId], references: [userId], onDelete: Cascade)
+  withdrawals Withdrawal[]
+
+  @@map("payout_methods")
+}
+
+/// Ledger debit is written with the request (DB trigger); failures return the funds.
+model Withdrawal {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  counselorId    String           @map("counselor_id") @db.Uuid
+  payoutMethodId String           @map("payout_method_id") @db.Uuid
+  amountMinor    Int              @map("amount_minor")
+  currency       String           @db.Char(3)
+  status         WithdrawalStatus @default(REQUESTED)
+  providerRef    String?          @map("provider_ref") @db.VarChar(120)
+  failureReason  String?          @map("failure_reason") @db.VarChar(300)
+  processedBy    String?          @map("processed_by") @db.Uuid
+  requestedAt    DateTime         @default(now()) @map("requested_at") @db.Timestamptz
+  processedAt    DateTime?        @map("processed_at") @db.Timestamptz
+  updatedAt      DateTime         @default(now()) @map("updated_at") @db.Timestamptz
+  counselor      CounselorProfile @relation(fields: [counselorId], references: [userId])
+  payoutMethod   PayoutMethod     @relation(fields: [payoutMethodId], references: [id])
+  entries        WalletEntry[]
+
+  @@map("withdrawals")
+}
+
+/// Append-only counselor ledger (earnings net of the platform fee, withdrawals).
+model WalletEntry {
+  id             BigInt           @id @default(autoincrement())
+  counselorId    String           @map("counselor_id") @db.Uuid
+  currency       String           @db.Char(3)
+  kind           WalletEntryKind
+  amountMinor    Int              @map("amount_minor")
+  consultationId String?          @map("consultation_id") @db.Uuid
+  withdrawalId   String?          @map("withdrawal_id") @db.Uuid
+  availableAt    DateTime         @default(now()) @map("available_at") @db.Timestamptz
+  memo           String?          @db.VarChar(200)
+  createdBy      String?          @map("created_by") @db.Uuid
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  counselor      CounselorProfile @relation(fields: [counselorId], references: [userId])
+  consultation   Consultation?    @relation(fields: [consultationId], references: [id])
+  withdrawal     Withdrawal?      @relation(fields: [withdrawalId], references: [id])
+
+  @@index([counselorId, currency, createdAt(sort: Desc)], map: "wallet_entries_counselor_idx")
+  @@map("wallet_entries")
+}
+
+model CounselorIntegritySignal {
+  id             BigInt           @id @default(autoincrement())
+  counselorId    String           @map("counselor_id") @db.Uuid
+  clientId       String?          @map("client_id") @db.Uuid
+  consultationId String?          @map("consultation_id") @db.Uuid
+  kind           String           @db.VarChar(40)
+  weight         Int              @db.SmallInt
+  details        Json             @default("{}")
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  counselor      CounselorProfile @relation(fields: [counselorId], references: [userId], onDelete: Cascade)
+  consultation   Consultation?    @relation(fields: [consultationId], references: [id])
+
+  @@index([counselorId, createdAt(sort: Desc)], map: "counselor_integrity_signals_idx")
+  @@map("counselor_integrity_signals")
+}
+
+enum IntegrityCaseStatus {
+  OPEN
+  AWAITING_RESPONSE
+  UNDER_REVIEW
+  CLEARED
+  WARNED
+  SUSPENDED
+  BANNED
+
+  @@map("integrity_case_status")
+}
+
+/// Human review of a counselor; the counselor is notified and can respond before a decision.
+model CounselorIntegrityCase {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  counselorId       String              @map("counselor_id") @db.Uuid
+  status            IntegrityCaseStatus @default(OPEN)
+  score             Int                 @db.SmallInt
+  reasons           String[]            @default([])
+  openedAt          DateTime            @default(now()) @map("opened_at") @db.Timestamptz
+  notifiedAt        DateTime?           @map("notified_at") @db.Timestamptz
+  responseDueAt     DateTime?           @map("response_due_at") @db.Timestamptz
+  counselorResponse String?             @map("counselor_response") @db.VarChar(3000)
+  respondedAt       DateTime?           @map("responded_at") @db.Timestamptz
+  decidedBy         String?             @map("decided_by") @db.Uuid
+  decidedAt         DateTime?           @map("decided_at") @db.Timestamptz
+  decisionReason    String?             @map("decision_reason") @db.VarChar(1000)
+  counselor         CounselorProfile    @relation(fields: [counselorId], references: [userId], onDelete: Cascade)
+  bans              BannedIdentity[]
+
+  @@map("counselor_integrity_cases")
+}
+
+enum BanIdentityKind {
+  PHONE
+  DEVICE
+  LICENSE
+  PAYOUT
+
+  @@map("ban_identity_kind")
+}
+
+/// HMAC-SHA256 of an identifier of a permanently banned account (re-registration block).
+model BannedIdentity {
+  id        String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kind      BanIdentityKind
+  valueHash String                  @map("value_hash") @db.Char(64)
+  userId    String?                 @map("user_id") @db.Uuid
+  caseId    String?                 @map("case_id") @db.Uuid
+  reason    String                  @db.VarChar(300)
+  createdBy String?                 @map("created_by") @db.Uuid
+  createdAt DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  liftedAt  DateTime?               @map("lifted_at") @db.Timestamptz
+  liftedBy  String?                 @map("lifted_by") @db.Uuid
+  case      CounselorIntegrityCase? @relation(fields: [caseId], references: [id])
+
+  @@map("banned_identities")
 }

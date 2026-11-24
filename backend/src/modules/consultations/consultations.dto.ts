@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ConsultationService, CounselorKind } from '@prisma/client';
+import { ConsultationService, CounselorKind, Gender } from '@prisma/client';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique, Equals, IsArray, IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
 import ref from '../../reference/reference.json';
 import { SUPPORTED_CURRENCIES } from '../../domain/payments';
 
@@ -22,6 +22,17 @@ export class CounselorApplyDto {
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(5) @IsString({ each: true }) @Matches(/^credentials\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/, { each: true }) credentialKeys: string[];
   @ApiProperty({ type: [String], enum: SERVICE_LANGUAGES }) @IsArray() @ArrayMinSize(1) @ArrayUnique() @IsIn(SERVICE_LANGUAGES, { each: true }) languages: string[];
   @ApiProperty({ enum: ConsultationService, isArray: true }) @IsArray() @ArrayMinSize(1) @ArrayUnique() @IsEnum(ConsultationService, { each: true }) services: ConsultationService[];
+  @ApiPropertyOptional({ enum: Gender, description: 'Clients may prefer a counselor of a given gender' }) @IsOptional() @IsEnum(Gender) gender?: Gender;
+  @ApiPropertyOptional({ description: 'Country of practice' }) @IsOptional() @IsIn(ref.countries) countryCode?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @Length(2, 80) city?: string;
+  /**
+   * The professional policy: 15% commission (platform development, marketing,
+   * advertising and promoting the professional), no moving clients or payments
+   * outside OLFA, fair review before any sanction, permanent ban for proven
+   * circumvention with a block on re-registering.
+   */
+  @ApiProperty({ description: 'Must be true: accepts the professional policy' }) @Equals(true) acceptPolicy: true;
+  @ApiProperty({ example: '2026-11' }) @IsString() @Length(1, 20) policyVersion: string;
 }
 
 export class CredentialUploadDto {
@@ -59,8 +70,31 @@ export class ReasonDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(300) reason?: string;
 }
 
+const SCORE = () => (t: object, k: string) => {
+  ApiProperty({ minimum: 1, maximum: 5 })(t, k);
+  Type(() => Number)(t, k);
+  IsInt()(t, k);
+  Min(1)(t, k);
+  Max(5)(t, k);
+};
+const YNU = ['NO', 'YES', 'UNSURE'] as const;
+
+/**
+ * Mandatory questionnaire after every completed consultation (v1). Quality
+ * questions plus direct and indirect questions about moving the relationship
+ * outside OLFA. Answers are confidential: counselors never see who answered what.
+ */
 export class ReviewDto {
-  @ApiProperty({ minimum: 1, maximum: 5 }) @Type(() => Number) @IsInt() @Min(1) @Max(5) rating: number;
+  @SCORE() rating: number; // overall
+  @SCORE() quality: number; // professionalism & respect
+  @SCORE() commitment: number; // punctuality & commitment
+  @SCORE() effectiveness: number; // usefulness of the session
+  @SCORE() outcome: number; // how far your goals were reached
+  @ApiProperty({ enum: ['BOOKED_IN_APP', 'PLAN_IN_APP', 'AGREED_OUTSIDE', 'NOT_DISCUSSED', 'NO'] }) @IsIn(['BOOKED_IN_APP', 'PLAN_IN_APP', 'AGREED_OUTSIDE', 'NOT_DISCUSSED', 'NO']) nextSession: 'BOOKED_IN_APP' | 'PLAN_IN_APP' | 'AGREED_OUTSIDE' | 'NOT_DISCUSSED' | 'NO';
+  @ApiProperty({ enum: ['OLFA', 'DIRECT', 'OTHER_APP', 'UNDECIDED'] }) @IsIn(['OLFA', 'DIRECT', 'OTHER_APP', 'UNDECIDED']) nextChannel: 'OLFA' | 'DIRECT' | 'OTHER_APP' | 'UNDECIDED';
+  @ApiProperty({ enum: YNU }) @IsIn(YNU) contactShared: (typeof YNU)[number];
+  @ApiProperty({ enum: YNU }) @IsIn(YNU) offPlatformPayment: (typeof YNU)[number];
+  @ApiProperty({ enum: YNU }) @IsIn(YNU) externalChannel: (typeof YNU)[number];
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) @Matches(NO_CONTACT, { message: 'contact details are not allowed' }) comment?: string;
 }
 

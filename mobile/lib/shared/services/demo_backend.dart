@@ -606,6 +606,7 @@ class DemoBackend {
 
   Future<BookingIntent> book(String offeringId, String? note) => _call(() {
         _seedConsultations();
+        if (_bookings.any((b) => b.status == ConsultationStatus.completed && b.myRating == null)) throw const ServerFailure('review_required');
         final k = _counselorsAll().firstWhere((c) => c.offerings.any((o) => o.id == offeringId), orElse: () => throw const ServerFailure('not_found'));
         if (_bookings.any((b) => b.counselorId == k.id && (b.status == ConsultationStatus.awaitingPayment || b.status == ConsultationStatus.paid || b.status == ConsultationStatus.confirmed))) {
           throw const ServerFailure('conflict');
@@ -715,7 +716,189 @@ class DemoBackend {
         return conv;
       });
   Future<void> declineBooking(String id) => _call(() => _setDesk(id, ConsultationStatus.refunded));
-  Future<void> completeBooking(String id) => _call(() => _setDesk(id, ConsultationStatus.completed));
+  Future<void> completeBooking(String id) => _call(() {
+        _setDesk(id, ConsultationStatus.completed);
+        _seedWallet();
+        final k = _desk.firstWhere((x) => x.id == id);
+        final fee = (k.priceMinor * commissionPercent + 50) ~/ 100;
+        _wallet.add(WalletEntry(id: 'e$id', kind: WalletEntryKind.earning, amountMinor: k.priceMinor - fee, currency: k.currency, createdAt: DateTime.now(), availableAt: DateTime.now().add(const Duration(days: holdDays)), pending: true, grossMinor: k.priceMinor, feeMinor: fee, feePercent: commissionPercent, service: k.service, durationMinutes: k.durationMinutes));
+      });
+
+
+  // ───────────── account type (chosen at sign-up) ─────────────
+
+  /// The demo starts as a marriage member; choosing a professional type in
+  /// setup switches the app to the counselor workspace (desk, wallet).
+  AccountType accountType = AccountType.member;
+  Future<void> setAccountType(AccountType t) => _call(() => accountType = t, ms: 250);
+
+  // ───────────── mandatory questionnaire ─────────────
+
+  Future<List<PendingReview>> pendingReviews() => _call(() {
+        _seedConsultations();
+        return [
+          for (final k in _bookings.where((b) => b.status == ConsultationStatus.completed && b.myRating == null))
+            PendingReview(consultationId: k.id, counselorName: k.counselorName, service: k.service, durationMinutes: k.durationMinutes, completedAt: k.scheduledAt),
+        ];
+      }, ms: 200);
+
+  Future<void> submitReview(String id, ReviewAnswers a) => _call(() {
+        if (!a.complete) throw const ValidationFailure('questionnaire');
+        _setBooking(id, (k) {
+          if (k.status != ConsultationStatus.completed) throw const ServerFailure('invalid_state');
+          if (k.myRating != null) throw const ServerFailure('conflict');
+          return _with(k, myRating: a.rating);
+        });
+      }, ms: 700);
+
+  // ───────────── counselor wallet (demo ledger) ─────────────
+
+  static const commissionPercent = 15, holdDays = 7;
+  final _wallet = <WalletEntry>[];
+  final _payoutMethods = <PayoutMethod>[];
+  final _withdrawals = <Withdrawal>[];
+  IntegrityCase? integrityCase;
+
+  void _seedWallet() {
+    if (_wallet.isNotEmpty) return;
+    final now = DateTime.now();
+    WalletEntry earn(String id, int gross, int daysAgo, ConsultationService s, int dur) {
+      final fee = (gross * commissionPercent + 50) ~/ 100;
+      final at = now.subtract(Duration(days: daysAgo));
+      return WalletEntry(id: id, kind: WalletEntryKind.earning, amountMinor: gross - fee, currency: 'AED', createdAt: at, availableAt: at.add(const Duration(days: holdDays)),
+          pending: at.add(const Duration(days: holdDays)).isAfter(now), grossMinor: gross, feeMinor: fee, feePercent: commissionPercent, service: s, durationMinutes: dur);
+    }
+    _wallet.addAll([
+      earn('w5', 30000, 2, ConsultationService.marital, 60),
+      earn('w4', 25000, 5, ConsultationService.premarital, 45),
+      earn('w3', 30000, 12, ConsultationService.marital, 60),
+      earn('w2', 18000, 16, ConsultationService.family, 30),
+      earn('w1', 30000, 24, ConsultationService.marital, 60),
+    ]);
+    _withdrawals.add(Withdrawal(id: 'wd1', amountMinor: 40000, currency: 'AED', status: WithdrawalStatus.paid, requestedAt: now.subtract(const Duration(days: 20)), processedAt: now.subtract(const Duration(days: 18)), reference: 'FT26110412', methodMask: 'AE07 •••• 3456', methodKind: PayoutKind.bankIban));
+    _wallet.add(WalletEntry(id: 'w0', kind: WalletEntryKind.withdrawal, amountMinor: -40000, currency: 'AED', createdAt: now.subtract(const Duration(days: 20)), availableAt: now.subtract(const Duration(days: 20))));
+    _payoutMethods.add(const PayoutMethod(id: 'pm1', kind: PayoutKind.bankIban, holderName: 'Huda Al Mansoori', countryIso: 'AE', currency: 'AED', mask: 'AE07 •••• 3456', isDefault: true));
+  }
+
+  WalletSummary _walletSummary() {
+    _seedWallet();
+    final now = DateTime.now();
+    var avail = 0, pending = 0, gross = 0, fee = 0, net = 0, withdrawn = 0, sessions = 0;
+    for (final e in _wallet) {
+      if (e.amountMinor < 0 || !e.availableAt.isAfter(now)) {
+        avail += e.amountMinor;
+      } else {
+        pending += e.amountMinor;
+      }
+      if (e.kind == WalletEntryKind.earning) {
+        gross += e.grossMinor ?? 0;
+        fee += e.feeMinor ?? 0;
+        net += e.amountMinor;
+        sessions++;
+      }
+    }
+    withdrawn = _withdrawals.where((w) => w.status == WithdrawalStatus.paid).fold(0, (a, w) => a + w.amountMinor);
+    return WalletSummary(
+      commissionPercent: commissionPercent,
+      holdDays: holdDays,
+      balances: [WalletBalance(currency: 'AED', availableMinor: avail, pendingMinor: pending, completedSessions: sessions, grossMinor: gross, platformFeeMinor: fee, netEarnedMinor: net, withdrawnMinor: withdrawn, minimumMinor: 5000)],
+      openWithdrawals: _withdrawals.where((w) => w.open).toList(),
+      payoutsOnHold: integrityCase?.isOpen ?? false,
+    );
+  }
+
+  Future<WalletSummary> wallet() => _call(_walletSummary, ms: 300);
+  Future<List<WalletEntry>> walletEntries() => _call(() {
+        _seedWallet();
+        final now = DateTime.now();
+        return [
+          for (final e in _wallet..sort((a, b) => b.createdAt.compareTo(a.createdAt)))
+            WalletEntry(id: e.id, kind: e.kind, amountMinor: e.amountMinor, currency: e.currency, createdAt: e.createdAt, availableAt: e.availableAt, pending: e.amountMinor > 0 && e.availableAt.isAfter(now), grossMinor: e.grossMinor, feeMinor: e.feeMinor, feePercent: e.feePercent, service: e.service, durationMinutes: e.durationMinutes, memo: e.memo),
+        ];
+      });
+  Future<List<PayoutMethod>> payoutMethods() => _call(() {
+        _seedWallet();
+        return List.unmodifiable(_payoutMethods);
+      });
+  Future<PayoutMethod> addPayoutMethod(PayoutMethodDraft d) => _call(() {
+        final id = (d.iban ?? d.accountNumber ?? d.email ?? '').replaceAll(' ', '').toUpperCase();
+        final mask = d.email != null ? '${d.email!.substring(0, 2)}•••@${d.email!.split('@').last}' : '${id.substring(0, 4)} •••• ${id.substring(id.length - 4)}';
+        if (_payoutMethods.any((m) => m.mask == mask)) throw const ServerFailure('conflict');
+        final makeDefault = d.makeDefault || _payoutMethods.isEmpty;
+        if (makeDefault) {
+          for (var i = 0; i < _payoutMethods.length; i++) {
+            final m = _payoutMethods[i];
+            _payoutMethods[i] = PayoutMethod(id: m.id, kind: m.kind, holderName: m.holderName, countryIso: m.countryIso, currency: m.currency, mask: m.mask);
+          }
+        }
+        final m = PayoutMethod(id: 'pm${DateTime.now().microsecondsSinceEpoch}', kind: d.kind, holderName: d.holderName, countryIso: d.countryIso, currency: d.currency, mask: mask, isDefault: makeDefault);
+        _payoutMethods.insert(0, m);
+        return m;
+      }, ms: 700);
+  Future<void> removePayoutMethod(String id) => _call(() {
+        if (_withdrawals.any((w) => w.open && w.methodMask == _payoutMethods.firstWhere((m) => m.id == id).mask)) throw const ServerFailure('invalid_state');
+        _payoutMethods.removeWhere((m) => m.id == id);
+      });
+  Future<Withdrawal> withdraw(String methodId, int amountMinor) => _call(() {
+        final s = _walletSummary();
+        final b = s.balances.first;
+        if (amountMinor < b.minimumMinor) throw const ValidationFailure('amountMinor');
+        if (amountMinor > b.availableMinor) throw const ServerFailure('insufficient_balance');
+        if (_withdrawals.any((w) => w.open)) throw const ServerFailure('conflict');
+        final m = _payoutMethods.firstWhere((x) => x.id == methodId);
+        final w = Withdrawal(id: 'wd${_withdrawals.length + 1}', amountMinor: amountMinor, currency: 'AED', status: WithdrawalStatus.requested, requestedAt: DateTime.now(), methodMask: m.mask, methodKind: m.kind);
+        _withdrawals.insert(0, w);
+        _wallet.add(WalletEntry(id: 'e${w.id}', kind: WalletEntryKind.withdrawal, amountMinor: -amountMinor, currency: 'AED', createdAt: DateTime.now(), availableAt: DateTime.now()));
+        return w;
+      }, ms: 800);
+  Future<List<Withdrawal>> withdrawals() => _call(() {
+        _seedWallet();
+        return List.unmodifiable(_withdrawals);
+      });
+  Future<void> cancelWithdrawal(String id) => _call(() {
+        final i = _withdrawals.indexWhere((w) => w.id == id && w.status == WithdrawalStatus.requested);
+        if (i < 0) throw const ServerFailure('invalid_state');
+        final w = _withdrawals[i];
+        _withdrawals[i] = Withdrawal(id: w.id, amountMinor: w.amountMinor, currency: w.currency, status: WithdrawalStatus.cancelled, requestedAt: w.requestedAt, processedAt: DateTime.now(), methodMask: w.methodMask, methodKind: w.methodKind);
+        _wallet.add(WalletEntry(id: 'r${w.id}', kind: WalletEntryKind.withdrawalReturn, amountMinor: w.amountMinor, currency: 'AED', createdAt: DateTime.now(), availableAt: DateTime.now()));
+      });
+
+  Future<IntegrityCase?> myIntegrityCase() => _call(() => integrityCase, ms: 150);
+  Future<IntegrityCase> respondIntegrity(String id, String text) => _call(() {
+        final c = integrityCase!;
+        return integrityCase = IntegrityCase(id: c.id, status: IntegrityCaseStatus.underReview, openedAt: c.openedAt, responseDueAt: c.responseDueAt, response: text);
+      });
+
+  // ───────────── store subscription (demo) ─────────────
+
+  PlanCode? pendingDowngrade;
+  bool autoRenew = true;
+  bool billingIssue = false;
+  Future<StoreSubscription?> storeSubscription() => _call(
+        () => plan == PlanCode.free
+            ? null
+            : StoreSubscription(
+                plan: plan,
+                status: billingIssue ? StoreSubStatus.gracePeriod : (autoRenew ? StoreSubStatus.active : StoreSubStatus.cancelled),
+                autoRenew: autoRenew,
+                expiresAt: DateTime.now().add(const Duration(days: 23)),
+                pendingPlan: pendingDowngrade,
+                manageUrl: 'https://apps.apple.com/account/subscriptions',
+              ),
+        ms: 200,
+      );
+
+  /// Store rules: upgrades apply now; downgrades wait for the renewal date.
+  Future<void> changePlan(PlanCode code) async {
+    if (plan == PlanCode.free || code.index > plan.index) {
+      pendingDowngrade = null;
+      await purchase(code);
+      return;
+    }
+    await _call(() => pendingDowngrade = code == plan ? null : code, ms: 700);
+  }
+
+  Future<int> restore() => _call(() => plan == PlanCode.free ? 0 : 1, ms: 900);
 
   // ───────────── safety ─────────────
   Future<void> report(String userId, String reason, {bool block = false}) => _call(() {

@@ -511,3 +511,12 @@ erDiagram
 - `messages.type` (`TEXT|IMAGE|VOICE`), `messages.contains_phone`; trigram indexes `messages_body_trgm_idx`, `user_profiles_name_trgm_idx`.
 - `user_profiles.height_cm` (120–230), `user_profiles.weight_kg` (35–250).
 - Scale: `cube` + `earthdistance` + `btree_gist`; GiST KNN indexes `user_profiles_knn_idx` and `user_profiles_country_knn_idx`. Tested at 200k users: discovery 40–125 ms (`backend/test/db/scale_test.sh`).
+
+## Account types, wallet, integrity, store subscriptions, religion (Nov 2026)
+
+- `users.account_type` (`MEMBER|PSYCHOLOGIST|FAMILY_COUNSELOR`), locked by `olfa_account_type_guard` once a profile exists. Member profiles and likes are limited to members; a counselor profile's kind must match the account type.
+- `religions`, `sects` (reference); `user_profiles.religion/sect` (+ consent); `user_preferences.religions[]/sects[]` validated by `olfa_preferences_religion_guard`.
+- `consultations.platform_fee_percent` (snapshot), `wallet_entries` (append-only ledger, debit guard against the available balance), `payout_methods` (encrypted details, masked, fingerprinted), `withdrawals` (one open per currency; ledger written by trigger).
+- `consultation_reviews` extended with the questionnaire; `olfa_booking_review_gate` blocks a new booking while a completed one is unrated.
+- `counselor_integrity_signals`, `counselor_integrity_cases` (one open case per counselor), `banned_identities` (HMAC fingerprints by kind: PHONE, DEVICE, LICENSE, PAYOUT).
+- `subscription_status` adds `ON_HOLD`, `PAUSED`, `PENDING`; `user_subscriptions` keeps the store's original transaction id / purchase token, auto-renew, grace period and a pending product for downgrades.
