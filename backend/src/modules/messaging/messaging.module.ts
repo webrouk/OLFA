@@ -485,6 +485,10 @@ export class ChatGateway implements OnGatewayConnection {
     events.on('read', (e: { userIds: string[]; conversationId: string; readerId: string; at: Date }) =>
       e.userIds.forEach((u) => this.server?.to(`user:${u}`).emit('message:read', { conversationId: e.conversationId, readerId: e.readerId, at: e.at })),
     );
+    // support replies appear live in the open Help thread
+    events.on('support', (e: { userId: string; ticketId: string; message: unknown }) =>
+      this.server?.to(`user:${e.userId}`).emit('support:message', { ticketId: e.ticketId, message: e.message }),
+    );
     // unmatch / re-match / archive moves: clients re-fetch the affected section
     events.on('conversation', (e: { userIds: string[]; conversationId: string; section: string }) =>
       e.userIds.forEach((u) => this.server?.to(`user:${u}`).emit('conversation:moved', { conversationId: e.conversationId, section: e.section })),
@@ -620,5 +624,6 @@ export class MessagingController {
   imports: [JwtModule.register({}), MediaModule, BullModule.registerQueue({ name: MEDIA_QUEUE })],
   controllers: [MessagingController],
   providers: [MessagingService, ChatGateway, ChatEvents],
+  exports: [ChatEvents],
 })
 export class MessagingModule {}

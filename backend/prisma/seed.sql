@@ -93,3 +93,33 @@ FROM (VALUES ('PLUS','APPLE','olfa.plus.monthly'), ('PREMIUM','APPLE','olfa.prem
              ('PLUS','GOOGLE','olfa_plus'), ('PREMIUM','GOOGLE','olfa_premium')) v(code, provider, product_id)
 JOIN subscription_plans p ON p.code = v.code::plan_code
 ON CONFLICT (provider, product_id) DO NOTHING;
+
+-- ───────────── Help: frequently asked questions (ar / en / fr) — only when none exist yet ─────────────
+INSERT INTO faq_entries (category, sort_order, question, answer)
+SELECT v.category::ticket_category, v.sort_order, v.q::jsonb, v.a::jsonb FROM (VALUES
+ ('ACCOUNT', 1,
+  '{"ar":"لماذا أحتاج إلى التحقق من رقم هاتفي؟","en":"Why do I need to verify my phone number?","fr":"Pourquoi dois-je vérifier mon numéro de téléphone ?"}',
+  '{"ar":"التحقق برمز يُرسل إلى هاتفك يضمن أن كل حساب يعود لشخص حقيقي ويحمي المجتمع من الحسابات الوهمية. لا نعرض رقمك لأي مستخدم.","en":"A code sent to your phone makes sure every account belongs to a real person and keeps fake accounts out. Your number is never shown to other members.","fr":"Un code envoyé sur votre téléphone garantit que chaque compte appartient à une personne réelle. Votre numéro n’est jamais montré aux autres membres."}'),
+ ('ACCOUNT', 2,
+  '{"ar":"ما الفرق بين تجميد الحساب وحذفه؟","en":"What is the difference between freezing and deleting my account?","fr":"Quelle différence entre geler et supprimer mon compte ?"}',
+  '{"ar":"التجميد يخفي ملفك مؤقتاً ويمكنك إعادة تفعيله في أي وقت. الحذف يزيل حسابك وبياناتك نهائياً بعد مهلة الاسترجاع الموضحة في الإعدادات.","en":"Freezing hides your profile for now and you can reactivate any time. Deleting removes your account and data for good after the recovery period shown in Settings.","fr":"Le gel masque votre profil temporairement ; vous pouvez le réactiver à tout moment. La suppression efface définitivement votre compte après le délai indiqué dans les Réglages."}'),
+ ('ACCOUNT', 3,
+  '{"ar":"لماذا يظهر لي أن حسابي مغلق؟","en":"Why does it say my account is closed?","fr":"Pourquoi mon compte apparaît-il comme fermé ?"}',
+  '{"ar":"تُغلق الحسابات التي تخالف سياسة المجتمع إما لمدة محددة (وتُفتح تلقائياً عند انتهائها) أو نهائياً. يظهر لك السبب والمدة على شاشة الحساب المغلق، ويمكنك التواصل مع الدعم.","en":"Accounts that break the community policy are closed either for a set period (they reopen by themselves when it ends) or permanently. The closed-account screen shows the reason and the period, and you can contact support.","fr":"Les comptes qui enfreignent la charte sont fermés pour une durée déterminée (réouverture automatique ensuite) ou définitivement. L’écran indique le motif et la durée ; vous pouvez contacter le support."}'),
+ ('VERIFICATION', 1,
+  '{"ar":"كيف تحمي ألفة صوري الشخصية؟","en":"How does OLFA protect my photos?","fr":"Comment OLFA protège-t-elle mes photos ?"}',
+  '{"ar":"تُراجع الصور قبل ظهورها، ويمنع التطبيق لقطات الشاشة وتسجيلها على أندرويد، ويخفي المحتوى عند التسجيل أو في قائمة التطبيقات على iOS. لا يمكن لأي تطبيق منع تصوير الشاشة بكاميرا أخرى، لذا شارك ما ترتاح له فقط.","en":"Photos are reviewed before they appear. On Android the app blocks screenshots and screen recording; on iOS it hides content while the screen is recorded and in the app switcher. No app can stop someone photographing the screen with another camera, so share only what you are comfortable with.","fr":"Les photos sont vérifiées avant publication. Sur Android, l’app bloque captures et enregistrements d’écran ; sur iOS, elle masque le contenu pendant un enregistrement et dans le sélecteur d’apps. Aucune app ne peut empêcher de photographier l’écran avec un autre appareil : ne partagez que ce qui vous convient."}'),
+ ('PAYMENT', 1,
+  '{"ar":"متى يحصل المستشار على أجر الاستشارة؟","en":"When does the counselor get paid for a consultation?","fr":"Quand le conseiller est-il payé ?"}',
+  '{"ar":"يُحتجز المبلغ عند الدفع، ولا يُحوَّل إلى محفظة المستشار إلا بعد أن تؤكد أن الجلسة تمت وتقيّم المستشار. إن لم تتم الجلسة اختر «لم تتم» وسيراجع الدعم الحالة ويعيد المبلغ عند الاقتضاء.","en":"The fee is held when you pay and only goes to the counselor’s wallet after you confirm the session took place and rate the counselor. If it did not happen, choose “It didn’t happen” and support will review it and refund you where appropriate.","fr":"Le montant est retenu au paiement et n’est versé au conseiller qu’après votre confirmation que la séance a eu lieu et votre note. Si elle n’a pas eu lieu, choisissez « Elle n’a pas eu lieu » : le support examinera et remboursera si nécessaire."}'),
+ ('PAYMENT', 2,
+  '{"ar":"كيف أستعيد اشتراكي على جهاز جديد؟","en":"How do I restore my subscription on a new phone?","fr":"Comment restaurer mon abonnement sur un nouveau téléphone ?"}',
+  '{"ar":"سجّل الدخول بنفس رقم الهاتف ثم افتح «الاشتراكات» واضغط «استعادة المشتريات». يُدار الاشتراك وإلغاؤه من متجر التطبيقات.","en":"Sign in with the same phone number, open Subscriptions and tap “Restore purchases”. Billing and cancellation are managed by the app store.","fr":"Connectez-vous avec le même numéro, ouvrez Abonnements et touchez « Restaurer les achats ». La facturation et la résiliation se gèrent dans le store."}'),
+ ('TECHNICAL', 1,
+  '{"ar":"لا تصلني الإشعارات، ماذا أفعل؟","en":"I am not getting notifications — what can I do?","fr":"Je ne reçois pas les notifications, que faire ?"}',
+  '{"ar":"تأكد من السماح بإشعارات ألفة في إعدادات الهاتف ومن تفعيلها في «الإشعارات» داخل التطبيق، ثم أعد فتح التطبيق.","en":"Make sure OLFA notifications are allowed in your phone settings and switched on under Notifications in the app, then reopen the app.","fr":"Vérifiez que les notifications d’OLFA sont autorisées dans les réglages du téléphone et activées dans l’app, puis rouvrez l’app."}'),
+ ('OTHER', 1,
+  '{"ar":"كيف أتواصل مع الدعم؟","en":"How do I contact support?","fr":"Comment contacter le support ?"}',
+  '{"ar":"من «المساعدة والدعم» اضغط «طلب جديد»، اكتب رسالتك وأرفق صورة أو ملف PDF إن لزم. تصلك ردود الفريق في نفس الصفحة وبإشعار.","en":"In Help & Support tap “New request”, write your message and attach an image or a PDF if needed. Replies arrive on the same page and as a notification.","fr":"Dans Aide et support, touchez « Nouvelle demande », écrivez votre message et joignez une image ou un PDF si besoin. Les réponses arrivent sur la même page et par notification."}')
+) AS v(category, sort_order, q, a)
+WHERE NOT EXISTS (SELECT 1 FROM faq_entries);

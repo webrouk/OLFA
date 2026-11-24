@@ -66,32 +66,88 @@ B1=00000000-0000-0000-0000-0000000001b1; P1=00000000-0000-0000-0000-0000000001e1
 run_session $B1 $P1 $M1
 check "15% fee fixed at payment (4200 / 23800)" "$(q "SELECT platform_fee_percent || ':' || platform_fee_minor || ':' || counselor_net_minor FROM consultations WHERE id='$B1'")" "15:4200:23800"
 check "nothing credited before completion" "$(q "SELECT count(*) FROM wallet_entries WHERE counselor_id='$K'")" "0"
+check "payment puts the money in escrow" "$(q "SELECT escrow_status FROM consultations WHERE id='$B1'")" "HELD"
 q "UPDATE consultations SET status='CONFIRMED', scheduled_at=now() WHERE id='$B1'; UPDATE consultations SET status='COMPLETED' WHERE id='$B1'" >/dev/null
-check "net share credited on completion" "$(q "SELECT kind || ':' || amount_minor FROM wallet_entries WHERE consultation_id='$B1'")" "EARNING:23800"
-check "earning is pending during the 7-day hold" "$(q "SELECT available_minor || '/' || pending_minor FROM olfa_wallet_balance('$K','AED')")" "0/23800"
-check "completing twice never double-credits" "$(q "SELECT count(*) FROM wallet_entries WHERE consultation_id='$B1'")" "1"
-
+check "completing the session alone pays nothing — money stays in escrow" "$(q "SELECT count(*) || ':' || (SELECT escrow_status FROM consultations WHERE id='$B1') FROM wallet_entries WHERE consultation_id='$B1'")" "0:HELD"
 PM=00000000-0000-0000-0000-0000000000a9
 q "INSERT INTO payout_methods (id, counselor_id, kind, holder_name, country_code, currency, details_enc, details_mask, fingerprint) VALUES ('$PM','$K','BANK_IBAN','Huda','AE','AED','\\x01','AE07 •••• 3456','$(printf 'a%.0s' {1..64})')" >/dev/null
-expect_error "pending earnings cannot be withdrawn" P0041 "INSERT INTO withdrawals (counselor_id, payout_method_id, amount_minor, currency) VALUES ('$K','$PM',10000,'AED')"
+expect_error "escrowed money cannot be withdrawn" P0041 "INSERT INTO withdrawals (counselor_id, payout_method_id, amount_minor, currency) VALUES ('$K','$PM',10000,'AED')"
 expect_error "unknown payout method" 23503 "INSERT INTO withdrawals (counselor_id, payout_method_id, amount_minor, currency) VALUES ('$K','00000000-0000-0000-0000-000000000000',100,'AED')"
-# release the hold (simulate 8 days later by back-dating through an adjustment of the window)
-q "INSERT INTO wallet_entries (counselor_id, currency, kind, amount_minor, memo) VALUES ('$K','AED','ADJUSTMENT',20000,'test: released funds')" >/dev/null
+q "INSERT INTO consultation_reviews (consultation_id, client_id, counselor_id, rating, questionnaire_version, quality, commitment, effectiveness, outcome, next_session, next_channel, contact_shared, off_platform_payment, external_channel, session_happened) VALUES ('$B1','$M1','$K',5,1,5,5,5,5,'PLAN_IN_APP','OLFA','NO','NO','NO',true)" >/dev/null
+check "the client's confirmation + rating releases the net share" "$(q "SELECT kind || ':' || amount_minor FROM wallet_entries WHERE consultation_id='$B1'")" "EARNING:23800"
+check "released money is available at once" "$(q "SELECT available_minor || '/' || pending_minor || ':' || (SELECT escrow_status FROM consultations WHERE id='$B1') FROM olfa_wallet_balance('$K','AED')")" "23800/0:RELEASED"
+check "a second release never double-credits" "$(q "SELECT olfa_release_escrow('$B1','again')::text || ':' || (SELECT count(*) FROM wallet_entries WHERE consultation_id='$B1')")" "false:1"
 W1=$(q "INSERT INTO withdrawals (counselor_id, payout_method_id, amount_minor, currency) VALUES ('$K','$PM',15000,'AED') RETURNING id")
-check "withdrawal reserves funds immediately" "$(q "SELECT available_minor FROM olfa_wallet_balance('$K','AED')")" "5000"
+check "withdrawal reserves funds immediately" "$(q "SELECT available_minor FROM olfa_wallet_balance('$K','AED')")" "8800"
 expect_error "one open withdrawal per currency" 23505 "INSERT INTO withdrawals (counselor_id, payout_method_id, amount_minor, currency) VALUES ('$K','$PM',1000,'AED')"
 expect_error "cannot jump from REQUESTED to PAID" P0042 "UPDATE withdrawals SET status='PAID', provider_ref='x' WHERE id='$W1'"
 q "UPDATE withdrawals SET status='PROCESSING' WHERE id='$W1'" >/dev/null
 expect_error "PAID needs a transfer reference" 23514 "UPDATE withdrawals SET status='PAID' WHERE id='$W1'"
 q "UPDATE withdrawals SET status='FAILED', failure_reason='bank rejected' WHERE id='$W1'" >/dev/null
-check "failed withdrawal returns the money" "$(q "SELECT available_minor FROM olfa_wallet_balance('$K','AED')")" "20000"
-W2=$(q "INSERT INTO withdrawals (counselor_id, payout_method_id, amount_minor, currency) VALUES ('$K','$PM',20000,'AED') RETURNING id")
+check "failed withdrawal returns the money" "$(q "SELECT available_minor FROM olfa_wallet_balance('$K','AED')")" "23800"
+W2=$(q "INSERT INTO withdrawals (counselor_id, payout_method_id, amount_minor, currency) VALUES ('$K','$PM',23800,'AED') RETURNING id")
 q "UPDATE withdrawals SET status='PROCESSING' WHERE id='$W2'; UPDATE withdrawals SET status='PAID', provider_ref='FT2611140001' WHERE id='$W2'" >/dev/null
 check "paid withdrawal empties the available balance" "$(q "SELECT available_minor FROM olfa_wallet_balance('$K','AED')")" "0"
 expect_error "ledger is append-only" P0040 "UPDATE wallet_entries SET amount_minor=1 WHERE consultation_id='$B1'"
 expect_error "ledger rows cannot be deleted" P0040 "DELETE FROM wallet_entries WHERE consultation_id='$B1'"
 q "UPDATE consultations SET status='REFUNDED' WHERE id='$B1'" >/dev/null
-check "refund after completion reverses the earning" "$(q "SELECT kind || ':' || amount_minor FROM wallet_entries WHERE consultation_id='$B1' AND kind='EARNING_REVERSAL'")" "EARNING_REVERSAL:-23800"
+check "refund after release reverses the earning" "$(q "SELECT kind || ':' || amount_minor FROM wallet_entries WHERE consultation_id='$B1' AND kind='EARNING_REVERSAL'")" "EARNING_REVERSAL:-23800"
+
+echo "escrow disputes & auto-release"
+B3=00000000-0000-0000-0000-0000000001b3; P3=00000000-0000-0000-0000-0000000001e3
+run_session $B3 $P3 $M1
+q "UPDATE consultations SET status='CONFIRMED', scheduled_at=now() + interval '2 hours' WHERE id='$B3'; UPDATE consultations SET status='COMPLETED' WHERE id='$B3'" >/dev/null
+RC0=$(q "SELECT rating_count FROM counselor_profiles WHERE user_id='$K'")
+expect_error "a rating is required when the session happened" 23514 "INSERT INTO consultation_reviews (consultation_id, client_id, counselor_id, questionnaire_version, session_happened) VALUES ('$B3','$M1','$K',1,true)"
+# 'did not take place': no rating is invented (the app sends only the report)
+q "INSERT INTO consultation_reviews (consultation_id, client_id, counselor_id, questionnaire_version, session_happened, hidden) VALUES ('$B3','$M1','$K',1,false,true)" >/dev/null
+check "a dispute does not change the counselor's rating" "$(q "SELECT rating_count FROM counselor_profiles WHERE user_id='$K'")" "$RC0"
+check "'the session did not take place' disputes it — nothing paid" "$(q "SELECT escrow_status || ':' || (SELECT count(*) FROM wallet_entries WHERE consultation_id='$B3') FROM consultations WHERE id='$B3'")" "DISPUTED:0"
+q "UPDATE consultations SET status='REFUNDED' WHERE id='$B3'" >/dev/null
+check "support can refund a disputed session (nothing to reverse)" "$(q "SELECT escrow_status || ':' || (SELECT count(*) FROM wallet_entries WHERE consultation_id='$B3') FROM consultations WHERE id='$B3'")" "REFUNDED:0"
+check "auto-release is off by default" "$(q "SELECT olfa_auto_release_escrow()")" "0"
+
+echo "scheduling"
+q "INSERT INTO counselor_schedules (counselor_id, timezone) VALUES ('$K','Asia/Dubai')" >/dev/null
+q "INSERT INTO counselor_availability (counselor_id, weekday, start_minute, end_minute) VALUES ('$K',1,540,780)" >/dev/null
+expect_error "weekly windows cannot overlap" 23P01 "INSERT INTO counselor_availability (counselor_id, weekday, start_minute, end_minute) VALUES ('$K',1,720,900)"
+expect_error "a window must end after it starts" 23514 "INSERT INTO counselor_availability (counselor_id, weekday, start_minute, end_minute) VALUES ('$K',2,600,600)"
+T0="date_trunc('hour', now()) + interval '3 days'"
+B4=00000000-0000-0000-0000-0000000001b4
+q "INSERT INTO consultations (id, client_id, counselor_id, offering_id, service, language, duration_minutes, price_minor, currency, expires_at, preferred_time) VALUES ('$B4','$M1','$K','$O','MARITAL','ar',60,28000,'AED', now() + interval '30 min', $T0)" >/dev/null
+expect_error "two clients can't hold the same time" 23P01 "INSERT INTO consultations (client_id, counselor_id, offering_id, service, language, duration_minutes, price_minor, currency, expires_at, preferred_time) VALUES ('$M2','$K','$O','MARITAL','ar',60,28000,'AED', now() + interval '30 min', $T0 + interval '30 min')"
+check "back-to-back times are fine" "$(q "INSERT INTO consultations (client_id, counselor_id, offering_id, service, language, duration_minutes, price_minor, currency, expires_at, preferred_time) VALUES ('$M2','$K','$O','MARITAL','ar',60,28000,'AED', now() + interval '30 min', $T0 + interval '60 min') RETURNING status")" "AWAITING_PAYMENT"
+q "UPDATE consultations SET status='CANCELLED' WHERE id='$B4'" >/dev/null
+check "a cancelled booking frees its time" "$(q "INSERT INTO consultations (client_id, counselor_id, offering_id, service, language, duration_minutes, price_minor, currency, expires_at, preferred_time) VALUES ('$M1','$K','$O','MARITAL','ar',60,28000,'AED', now() + interval '30 min', $T0) RETURNING status")" "AWAITING_PAYMENT"
+q "UPDATE consultations SET status='CANCELLED' WHERE counselor_id='$K' AND status='AWAITING_PAYMENT'" >/dev/null
+
+echo "support tickets"
+TK=$(q "INSERT INTO support_tickets (user_id, category, subject) VALUES ('$M1','PAYMENT','Refund?') RETURNING id")
+q "INSERT INTO ticket_messages (ticket_id, author_type, author_id, body) VALUES ('$TK','USER','$M1','Where is my refund?')" >/dev/null
+MS=$(q "INSERT INTO ticket_messages (ticket_id, author_type, author_id, body) VALUES ('$TK','ADMIN','$M1','We are on it') RETURNING id")
+check "a staff reply waits for the user" "$(q "SELECT status FROM support_tickets WHERE id='$TK'")" "PENDING_USER"
+q "INSERT INTO ticket_messages (ticket_id, author_type, author_id, body) VALUES ('$TK','USER','$M1','Thanks')" >/dev/null
+check "the user's answer reopens it" "$(q "SELECT status FROM support_tickets WHERE id='$TK'")" "OPEN"
+for i in 1 2 3; do q "INSERT INTO ticket_attachments (ticket_id, message_id, uploader_id, storage_key, file_name, mime, bytes) VALUES ('$TK','$MS','$M1','support/$TK/'||gen_random_uuid(),'r.pdf','application/pdf',1000)" >/dev/null; done
+expect_error "at most 3 attachments per message" P0021 "INSERT INTO ticket_attachments (ticket_id, message_id, uploader_id, storage_key, file_name, mime, bytes) VALUES ('$TK','$MS','$M1','x4','r.pdf','application/pdf',1000)"
+expect_error "only images and PDF" 23514 "INSERT INTO ticket_attachments (ticket_id, uploader_id, storage_key, file_name, mime, bytes) VALUES ('$TK','$M1','x5','a.exe','application/x-msdownload',10)"
+expect_error "attachments up to 10 MB" 23514 "INSERT INTO ticket_attachments (ticket_id, uploader_id, storage_key, file_name, mime, bytes) VALUES ('$TK','$M1','x6','a.png','image/png',20000000)"
+expect_error "FAQ needs all three languages" 23514 "INSERT INTO faq_entries (question, answer) VALUES ('{\"ar\":\"س\",\"en\":\"Q\"}','{\"ar\":\"ج\",\"en\":\"A\",\"fr\":\"R\"}')"
+
+echo "support attachments"
+TK=$(q "INSERT INTO support_tickets (user_id, category, subject) VALUES ('$M1','OTHER','help') RETURNING id" | head -1)
+TM=$(q "INSERT INTO ticket_messages (ticket_id, author_type, author_id, body) VALUES ('$TK','USER','$M1','hello') RETURNING id" | head -1)
+for i in 1 2 3; do q "INSERT INTO ticket_attachments (ticket_id, message_id, uploader_id, storage_key, file_name, mime, bytes) VALUES ('$TK','$TM','$M1','support/t/$i','a$i.pdf','application/pdf',100)" >/dev/null; done
+expect_error "at most 3 files per support message" P0021 "INSERT INTO ticket_attachments (ticket_id, message_id, uploader_id, storage_key, file_name, mime, bytes) VALUES ('$TK','$TM','$M1','support/t/4','a4.pdf','application/pdf',100)"
+expect_error "only images and PDFs" 23514 "INSERT INTO ticket_attachments (uploader_id, storage_key, file_name, mime, bytes) VALUES ('$M1','support/t/x','x.exe','application/x-msdownload',100)"
+check "removed files are queued for storage clean-up" "$(q "DELETE FROM ticket_attachments WHERE storage_key='support/t/1'; SELECT count(*) FROM storage_garbage WHERE storage_key='support/t/1'" | tail -1)" "1"
+
+echo "account bans"
+q "UPDATE users SET status='SUSPENDED', suspended_until=now() - interval '1 minute', restriction_reason='spam' WHERE id='$M2'" >/dev/null
+check "an expired suspension lifts itself" "$(q "SELECT olfa_lift_expired_suspensions()"):$(q "SELECT status FROM users WHERE id='$M2'")" "1:ACTIVE"
+q "UPDATE users SET status='SUSPENDED', suspended_until=now() + interval '7 days' WHERE id='$M2'" >/dev/null
+check "a future suspension stays" "$(q "SELECT olfa_lift_expired_suspensions()"):$(q "SELECT status FROM users WHERE id='$M2'")" "0:SUSPENDED"
+q "UPDATE users SET status='ACTIVE', suspended_until=NULL WHERE id='$M2'" >/dev/null
 
 echo "mandatory questionnaire"
 B2=00000000-0000-0000-0000-0000000001b2; P2=00000000-0000-0000-0000-0000000001e2

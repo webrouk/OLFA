@@ -21,6 +21,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { ProfilesModule } from './modules/profiles/profiles.module';
 import { QuotasModule } from './modules/quotas/quotas.module';
 import { SafetyModule } from './modules/safety/safety.module';
+import { SupportModule } from './modules/support/support.module';
 import { VerificationModule } from './modules/verification/verification.module';
 
 @ApiTags('health')
@@ -61,6 +62,7 @@ export const bullConnection = {
     ProfilesModule,
     MediaModule,
     VerificationModule,
+    SupportModule,
     MatchingModule,
     MessagingModule,
     ConsultationsModule,

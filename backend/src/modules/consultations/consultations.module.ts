@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, HttpCode, Inject, Injectable, Logger, Module, Param, ParseUUIDPipe, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, HttpCode, Inject, Injectable, Logger, Module, Param, ParseUUIDPipe, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiProperty, ApiTags } from '@nestjs/swagger';
 import { ConsultationStatus, Prisma } from '@prisma/client';
 import { IsIn, IsString, Length } from 'class-validator';
@@ -22,9 +22,16 @@ import {
   CounselorListQuery,
   CredentialUploadDto,
   OfferingDto,
+  AvailabilityDto,
+  EscrowDecisionDto,
   ReasonDto,
+  ReplyDto,
   ReviewDto,
+  ScheduleDto,
+  SlotsQuery,
+  TimeOffDto,
 } from './consultations.dto';
+import { computeSlots, isValidTimeZoneName, SlotInput } from '../../domain/schedule';
 import { PAYMENT_GATEWAY, PaymentGateway, StripeGateway, TestGateway } from './payment.gateway';
 
 const OPEN: ConsultationStatus[] = ['AWAITING_PAYMENT', 'PAID', 'CONFIRMED'];
@@ -149,7 +156,7 @@ export class ConsultationsService {
       select: {
         id: true, service: true, language: true, durationMinutes: true, priceMinor: true, currency: true, status: true,
         clientNote: true, preferredTime: true, scheduledAt: true, createdAt: true, paidAt: true,
-        platformFeePercent: true, platformFeeMinor: true, counselorNetMinor: true, completedAt: true,
+        platformFeePercent: true, platformFeeMinor: true, counselorNetMinor: true, completedAt: true, escrowStatus: true, escrowReleasedAt: true,
         conversation: { select: { id: true } },
         client: { select: { id: true, profile: { select: { displayName: true } } } },
       },
@@ -158,10 +165,13 @@ export class ConsultationsService {
 
   /** Counselor accepts a paid booking: schedules it and opens the chat (counselor may write first). */
   async confirm(userId: string, id: string, dto: ConfirmDto) {
-    const scheduledAt = new Date(dto.scheduledAt);
-    if (scheduledAt.getTime() < Date.now() - 5 * 60_000) throw new AppError(ErrorCode.VALIDATION, 'scheduledAt is in the past');
-    const k = await this.prisma.consultation.findUnique({ where: { id }, select: { counselorId: true, clientId: true, status: true } });
+    const k = await this.prisma.consultation.findUnique({ where: { id }, select: { counselorId: true, clientId: true, status: true, preferredTime: true } });
     if (!k || k.counselorId !== userId) throw new AppError(ErrorCode.NOT_FOUND);
+    // default: the time the client picked from the counselor's published schedule
+    const when = dto.scheduledAt ?? k.preferredTime?.toISOString();
+    if (!when) throw new AppError(ErrorCode.VALIDATION, 'scheduledAt is required');
+    const scheduledAt = new Date(when);
+    if (scheduledAt.getTime() < Date.now() - 5 * 60_000) throw new AppError(ErrorCode.VALIDATION, 'scheduledAt is in the past');
     if (k.status !== 'PAID') throw new AppError(ErrorCode.INVALID_STATE, 'Only paid bookings can be confirmed');
     const conversationId = await this.wrap(
       this.prisma.$transaction(async (tx) => {
@@ -225,10 +235,154 @@ export class ConsultationsService {
       where: { counselorId: id, hidden: false },
       orderBy: { createdAt: 'desc' },
       take: 20,
-      select: { rating: true, comment: true, createdAt: true, client: { select: { profile: { select: { displayName: true } } } } },
+      select: { rating: true, comment: true, createdAt: true, counselorReply: true, counselorRepliedAt: true, client: { select: { profile: { select: { displayName: true } } } } },
     });
     // reviewers are shown by first name only
-    return { ...p, reviews: reviews.map((r) => ({ rating: r.rating, comment: r.comment, createdAt: r.createdAt, by: r.client.profile?.displayName.split(' ')[0] ?? null })) };
+    return {
+      ...p,
+      ratings: await this.ratingBreakdown(id),
+      hasSchedule: (await this.prisma.counselorAvailability.count({ where: { counselorId: id } })) > 0,
+      reviews: reviews.filter((r) => r.rating != null).map((r) => ({
+        rating: r.rating, comment: r.comment, createdAt: r.createdAt, by: r.client.profile?.displayName.split(' ')[0] ?? null,
+        reply: r.counselorReply, repliedAt: r.counselorRepliedAt,
+      })),
+    };
+  }
+
+  /** Averages per question and the 1–5 star distribution (visible, rated reviews only). */
+  async ratingBreakdown(counselorId: string) {
+    const where = { counselorId, hidden: false, rating: { not: null } } satisfies Prisma.ConsultationReviewWhereInput;
+    const [agg, dist] = await Promise.all([
+      this.prisma.consultationReview.aggregate({ where, _avg: { rating: true, quality: true, commitment: true, effectiveness: true, outcome: true }, _count: { rating: true } }),
+      this.prisma.consultationReview.groupBy({ by: ['rating'], where, _count: { _all: true } }),
+    ]);
+    const r2 = (v: number | null | undefined) => (v == null ? null : Math.round(v * 100) / 100);
+    return {
+      count: agg._count.rating,
+      average: r2(agg._avg.rating),
+      quality: r2(agg._avg.quality),
+      commitment: r2(agg._avg.commitment),
+      effectiveness: r2(agg._avg.effectiveness),
+      outcome: r2(agg._avg.outcome),
+      distribution: [1, 2, 3, 4, 5].map((stars) => ({ stars, count: dist.find((d) => d.rating === stars)?._count._all ?? 0 })),
+    };
+  }
+
+  // ── counselor schedule (controlled from the counselor's own account) ──
+
+  async getSchedule(userId: string) {
+    await this.approvedCounselor(userId);
+    const [schedule, windows, timeOff] = await Promise.all([
+      this.prisma.counselorSchedule.findUnique({ where: { counselorId: userId } }),
+      this.prisma.counselorAvailability.findMany({ where: { counselorId: userId }, orderBy: [{ weekday: 'asc' }, { startMinute: 'asc' }], select: { weekday: true, startMinute: true, endMinute: true } }),
+      this.prisma.counselorTimeOff.findMany({ where: { counselorId: userId, endsAt: { gt: new Date() } }, orderBy: { startsAt: 'asc' } }),
+    ]);
+    return {
+      schedule: schedule ?? { counselorId: userId, timezone: 'Asia/Dubai', bufferMinutes: 10, minNoticeHours: 12, maxDaysAhead: 30, accepting: true },
+      windows,
+      timeOff,
+    };
+  }
+
+  async putSchedule(userId: string, dto: ScheduleDto) {
+    await this.approvedCounselor(userId);
+    if (!isValidTimeZoneName(dto.timezone)) throw new AppError(ErrorCode.VALIDATION, 'Unknown time zone');
+    await this.prisma.counselorSchedule.upsert({ where: { counselorId: userId }, create: { counselorId: userId, ...dto }, update: { ...dto, updatedAt: new Date() } });
+    return this.getSchedule(userId);
+  }
+
+  /** Replaces the weekly hours (overlaps are rejected by the DB exclusion constraint). */
+  async putAvailability(userId: string, dto: AvailabilityDto) {
+    await this.approvedCounselor(userId);
+    if (dto.windows.some((w) => w.endMinute <= w.startMinute)) throw new AppError(ErrorCode.VALIDATION, 'Each period must end after it starts');
+    await this.wrap(
+      this.prisma.$transaction(async (tx) => {
+        await tx.counselorSchedule.upsert({ where: { counselorId: userId }, create: { counselorId: userId }, update: {} });
+        await tx.counselorAvailability.deleteMany({ where: { counselorId: userId } });
+        if (dto.windows.length) await tx.counselorAvailability.createMany({ data: dto.windows.map((w) => ({ counselorId: userId, ...w })) });
+      }),
+    ).catch((e: unknown) => {
+      if (e instanceof AppError && e.code === ErrorCode.SLOT_TAKEN) throw new AppError(ErrorCode.VALIDATION, 'Periods on the same day overlap');
+      throw e;
+    });
+    return this.getSchedule(userId);
+  }
+
+  async addTimeOff(userId: string, dto: TimeOffDto) {
+    await this.approvedCounselor(userId);
+    const startsAt = new Date(dto.startsAt), endsAt = new Date(dto.endsAt);
+    if (endsAt <= startsAt) throw new AppError(ErrorCode.VALIDATION, 'endsAt must be after startsAt');
+    return this.prisma.counselorTimeOff.create({ data: { counselorId: userId, startsAt, endsAt, note: dto.note?.trim() || null } });
+  }
+
+  async removeTimeOff(userId: string, id: string) {
+    await this.prisma.counselorTimeOff.deleteMany({ where: { id, counselorId: userId } });
+    return { ok: true };
+  }
+
+  private async slotInput(counselorId: string, durationMinutes: number, excludeId?: string): Promise<SlotInput | null> {
+    const [schedule, windows] = await Promise.all([
+      this.prisma.counselorSchedule.findUnique({ where: { counselorId } }),
+      this.prisma.counselorAvailability.findMany({ where: { counselorId }, select: { weekday: true, startMinute: true, endMinute: true } }),
+    ]);
+    if (!schedule || windows.length === 0) return null; // no published schedule: free-text preferred time
+    const now = new Date();
+    const horizon = new Date(now.getTime() + (schedule.maxDaysAhead + 1) * 86_400_000);
+    const [timeOff, booked] = await Promise.all([
+      this.prisma.counselorTimeOff.findMany({ where: { counselorId, endsAt: { gt: now }, startsAt: { lt: horizon } }, select: { startsAt: true, endsAt: true } }),
+      this.prisma.consultation.findMany({
+        where: {
+          counselorId, status: { in: OPEN }, ...(excludeId ? { id: { not: excludeId } } : {}),
+          OR: [{ scheduledAt: { gt: new Date(now.getTime() - 86_400_000), lt: horizon } }, { scheduledAt: null, preferredTime: { gt: new Date(now.getTime() - 86_400_000), lt: horizon } }],
+        },
+        select: { scheduledAt: true, preferredTime: true, durationMinutes: true, status: true, expiresAt: true },
+      }),
+    ]);
+    const busy = booked
+      .filter((b) => b.status !== 'AWAITING_PAYMENT' || (b.expiresAt && b.expiresAt > now))
+      .map((b) => {
+        const start = (b.scheduledAt ?? b.preferredTime)!;
+        return { start, end: new Date(start.getTime() + b.durationMinutes * 60_000) };
+      });
+    return {
+      timezone: schedule.timezone, windows, timeOff: timeOff.map((t) => ({ start: t.startsAt, end: t.endsAt })), busy,
+      durationMinutes, bufferMinutes: schedule.bufferMinutes, minNoticeHours: schedule.minNoticeHours,
+      maxDaysAhead: schedule.accepting ? schedule.maxDaysAhead : -1, now,
+    };
+  }
+
+  /** Bookable start times for one of the counselor's offerings (UTC; the app shows them in the client's zone). */
+  async slots(counselorId: string, q: SlotsQuery) {
+    const o = await this.prisma.counselorOffering.findFirst({ where: { id: q.offeringId, counselorId, active: true }, select: { durationMinutes: true } });
+    if (!o) throw new AppError(ErrorCode.NOT_FOUND);
+    const input = await this.slotInput(counselorId, o.durationMinutes);
+    if (!input) return { scheduled: false, timezone: null, slots: [] };
+    return { scheduled: true, timezone: input.timezone, durationMinutes: o.durationMinutes, slots: input.maxDaysAhead < 0 ? [] : computeSlots(input) };
+  }
+
+  /** Counselor answers a review publicly (once; editable). */
+  async replyToReview(userId: string, consultationId: string, dto: ReplyDto) {
+    const r = await this.prisma.consultationReview.updateMany({
+      where: { consultationId, counselorId: userId, hidden: false, rating: { not: null } },
+      data: { counselorReply: dto.reply.trim(), counselorRepliedAt: new Date() },
+    });
+    if (r.count === 0) throw new AppError(ErrorCode.NOT_FOUND);
+    return { ok: true };
+  }
+
+  /** Counselor desk: own rating breakdown + recent reviews (star and comment only — never the integrity answers). */
+  async myReviews(userId: string) {
+    await this.approvedCounselor(userId);
+    const reviews = await this.prisma.consultationReview.findMany({
+      where: { counselorId: userId, hidden: false, rating: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: { consultationId: true, rating: true, comment: true, createdAt: true, counselorReply: true, counselorRepliedAt: true, client: { select: { profile: { select: { displayName: true } } } } },
+    });
+    return {
+      ratings: await this.ratingBreakdown(userId),
+      reviews: reviews.map((r) => ({ consultationId: r.consultationId, rating: r.rating, comment: r.comment, createdAt: r.createdAt, by: r.client.profile?.displayName.split(' ')[0] ?? null, reply: r.counselorReply, repliedAt: r.counselorRepliedAt })),
+    };
   }
 
   /**
@@ -240,6 +394,15 @@ export class ConsultationsService {
     if (!o || !o.active || o.counselor.status !== 'APPROVED') throw new AppError(ErrorCode.NOT_FOUND, 'Offering not available');
     if (o.counselorId === userId) throw new AppError(ErrorCode.VALIDATION, 'You cannot book yourself');
     const windowMin = await this.settings.get('consultations.paymentWindowMinutes', 30);
+    // Counselors who publish a schedule are booked on one of their offered times only.
+    const input = await this.slotInput(o.counselorId, o.durationMinutes);
+    let preferredTime = dto.preferredTime ? new Date(dto.preferredTime) : null;
+    if (input) {
+      if (!dto.slot) throw new AppError(ErrorCode.SLOT_UNAVAILABLE, 'Choose one of the available times');
+      const at = new Date(dto.slot);
+      if (input.maxDaysAhead < 0 || !computeSlots(input).some((x) => x.getTime() === at.getTime())) throw new AppError(ErrorCode.SLOT_UNAVAILABLE);
+      preferredTime = at;
+    }
     const k = await this.wrap(
       this.prisma.consultation.create({
         data: {
@@ -252,7 +415,7 @@ export class ConsultationsService {
           priceMinor: o.priceMinor,
           currency: o.currency,
           clientNote: dto.note?.trim() || null,
-          preferredTime: dto.preferredTime ? new Date(dto.preferredTime) : null,
+          preferredTime,
           expiresAt: new Date(Date.now() + windowMin * 60_000),
         },
       }),
@@ -291,9 +454,9 @@ export class ConsultationsService {
       take: 100,
       select: {
         id: true, service: true, language: true, durationMinutes: true, priceMinor: true, currency: true, status: true,
-        scheduledAt: true, expiresAt: true, createdAt: true, completedAt: true, declineReason: true,
+        scheduledAt: true, preferredTime: true, expiresAt: true, createdAt: true, completedAt: true, declineReason: true, escrowStatus: true,
         conversation: { select: { id: true } },
-        review: { select: { rating: true } },
+        review: { select: { rating: true, sessionHappened: true } },
         counselor: { select: { userId: true, displayName: true, kind: true } },
       },
     });
@@ -327,11 +490,27 @@ export class ConsultationsService {
     const k = await this.prisma.consultation.findUnique({ where: { id }, select: { clientId: true, counselorId: true, status: true } });
     if (!k || k.clientId !== userId) throw new AppError(ErrorCode.NOT_FOUND);
     if (k.status !== 'COMPLETED') throw new AppError(ErrorCode.INVALID_STATE, 'You can rate after the consultation is completed');
+    if (dto.sessionHappened === false) {
+      // Not taken: no rating is recorded; the held fee waits for support (refund or release).
+      await this.wrap(
+        this.prisma.$transaction(async (tx) => {
+          await tx.consultationReview.create({ data: { consultationId: id, clientId: userId, counselorId: k.counselorId, sessionHappened: false, hidden: true, questionnaireVersion: QUESTIONNAIRE_VERSION } });
+          await tx.consultation.update({ where: { id }, data: { disputeReason: `client: ${dto.disputeReason?.trim() ?? 'the session did not take place'}` } });
+          await this.audit.record({ actorType: 'USER', actorId: userId, action: 'consultation.dispute', entityType: 'consultation', entityId: id, reason: dto.disputeReason }, tx);
+          await this.notifications.notify(k.counselorId, 'ESCROW_RELEASED', 'push.escrow_disputed', { consultationId: id }, tx);
+        }),
+      ).catch((e: unknown) => {
+        if (e instanceof AppError && e.code === ErrorCode.CONFLICT) throw new AppError(ErrorCode.CONFLICT, 'Already reviewed');
+        throw e;
+      });
+      await this.notifications.push(k.counselorId, 'push.escrow_disputed', { consultationId: id });
+      return { ok: true, escrow: 'DISPUTED' };
+    }
     await this.wrap(
       this.prisma.$transaction(async (tx) => {
         await tx.consultationReview.create({
           data: {
-            consultationId: id, clientId: userId, counselorId: k.counselorId, rating: dto.rating, comment: dto.comment?.trim() || null,
+            consultationId: id, clientId: userId, counselorId: k.counselorId, rating: dto.rating, comment: dto.comment?.trim() || null, sessionHappened: true,
             questionnaireVersion: QUESTIONNAIRE_VERSION, quality: dto.quality, commitment: dto.commitment, effectiveness: dto.effectiveness, outcome: dto.outcome,
             nextSession: dto.nextSession, nextChannel: dto.nextChannel, contactShared: dto.contactShared, offPlatformPayment: dto.offPlatformPayment, externalChannel: dto.externalChannel,
           },
@@ -343,7 +522,10 @@ export class ConsultationsService {
       throw e;
     });
     await this.integrity.assess(k.counselorId).catch((e: unknown) => this.log.warn(`integrity assessment failed: ${String(e)}`));
-    return { ok: true };
+    // the DB released the held fee to the counselor's wallet (trigger) — tell them
+    const after = await this.prisma.consultation.findUnique({ where: { id }, select: { escrowStatus: true } });
+    if (after?.escrowStatus === 'RELEASED') await this.notifications.notify(k.counselorId, 'ESCROW_RELEASED', 'push.escrow_released', { consultationId: id });
+    return { ok: true, escrow: after?.escrowStatus ?? null };
   }
 
   /** Completed consultations still waiting for the client's questionnaire (the app shows them first). */
@@ -465,6 +647,43 @@ export class ConsultationsService {
     });
   }
 
+  /** Disputed sessions (the client said it did not take place) — the fee is still held. */
+  adminDisputes() {
+    return this.prisma.consultation.findMany({
+      where: { escrowStatus: 'DISPUTED' },
+      orderBy: { completedAt: 'asc' },
+      take: 200,
+      select: { id: true, status: true, service: true, durationMinutes: true, priceMinor: true, currency: true, counselorNetMinor: true, scheduledAt: true, completedAt: true, disputeReason: true, clientId: true, counselor: { select: { userId: true, displayName: true } }, conversation: { select: { id: true } } },
+    });
+  }
+
+  /** Support decides a held fee: release to the counselor, or refund the client in full. */
+  async adminEscrowDecision(admin: AuthAdmin, id: string, dto: EscrowDecisionDto) {
+    const k = await this.prisma.consultation.findUnique({ where: { id }, include: { payment: true } });
+    if (!k || (k.escrowStatus !== 'DISPUTED' && k.escrowStatus !== 'HELD') || k.status !== 'COMPLETED') throw new AppError(ErrorCode.INVALID_STATE);
+    if (dto.decision === 'RELEASE') {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT olfa_release_escrow(${id}::uuid, ${'support: ' + dto.reason})`;
+        await this.audit.record({ actorType: 'ADMIN', actorId: admin.id, action: 'escrow.release', entityType: 'consultation', entityId: id, reason: dto.reason }, tx);
+        await this.notifications.notify(k.counselorId, 'ESCROW_RELEASED', 'push.escrow_released', { consultationId: id }, tx);
+      });
+      await this.notifications.push(k.counselorId, 'push.escrow_released', { consultationId: id });
+      return { id, escrow: 'RELEASED' };
+    }
+    if (k.payment) await this.gateway.refund(k.payment.providerPaymentId);
+    await this.wrap(
+      this.prisma.$transaction(async (tx) => {
+        await tx.consultation.update({ where: { id }, data: { status: 'REFUNDED' } });
+        if (k.payment) {
+          await tx.payment.update({ where: { id: k.payment.id }, data: { status: 'REFUNDED', refundedAt: new Date() } });
+          await tx.transaction.create({ data: { paymentId: k.payment.id, type: 'REFUND', amountMinor: -(k.payment.amountMinor ?? 0), currency: k.payment.currency ?? 'USD' } });
+        }
+        await this.audit.record({ actorType: 'ADMIN', actorId: admin.id, action: 'escrow.refund', entityType: 'consultation', entityId: id, reason: dto.reason }, tx);
+      }),
+    );
+    return { id, escrow: 'REFUNDED' };
+  }
+
   /** Daily: unpaid bookings past their window → EXPIRED. */
   async expireUnpaid(now = new Date()) {
     const r = await this.prisma.consultation.updateMany({ where: { status: 'AWAITING_PAYMENT', expiresAt: { lt: now } }, data: { status: 'EXPIRED' } });
@@ -495,6 +714,41 @@ export class ConsultationsController {
   offering(@CurrentUser() u: AuthUser, @Body() dto: OfferingDto) {
     return this.svc.upsertOffering(u.id, dto);
   }
+  @ProfessionalsOnly() @Get('counselors/me/schedule')
+  schedule(@CurrentUser() u: AuthUser) {
+    return this.svc.getSchedule(u.id);
+  }
+
+  @ProfessionalsOnly() @Put('counselors/me/schedule') @HttpCode(200)
+  putSchedule(@CurrentUser() u: AuthUser, @Body() dto: ScheduleDto) {
+    return this.svc.putSchedule(u.id, dto);
+  }
+
+  @ProfessionalsOnly() @Put('counselors/me/availability') @HttpCode(200)
+  putAvailability(@CurrentUser() u: AuthUser, @Body() dto: AvailabilityDto) {
+    return this.svc.putAvailability(u.id, dto);
+  }
+
+  @ProfessionalsOnly() @Post('counselors/me/time-off')
+  addTimeOff(@CurrentUser() u: AuthUser, @Body() dto: TimeOffDto) {
+    return this.svc.addTimeOff(u.id, dto);
+  }
+
+  @ProfessionalsOnly() @Delete('counselors/me/time-off/:id') @HttpCode(200)
+  removeTimeOff(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.svc.removeTimeOff(u.id, id);
+  }
+
+  @ProfessionalsOnly() @Get('counselors/me/reviews')
+  myReviews(@CurrentUser() u: AuthUser) {
+    return this.svc.myReviews(u.id);
+  }
+
+  @ProfessionalsOnly() @RateLimit(30, 3600) @Put('counselors/me/reviews/:consultationId/reply') @HttpCode(200)
+  reply(@CurrentUser() u: AuthUser, @Param('consultationId', ParseUUIDPipe) id: string, @Body() dto: ReplyDto) {
+    return this.svc.replyToReview(u.id, id, dto);
+  }
+
   @ProfessionalsOnly() @Get('counselors/me/bookings')
   desk(@CurrentUser() u: AuthUser, @Query('status') status?: string) {
     return this.svc.counselorBookings(u.id, status);
@@ -517,6 +771,11 @@ export class ConsultationsController {
   list(@Query() q: CounselorListQuery) {
     return this.svc.list(q);
   }
+  @Get('counselors/:id/slots')
+  slots(@Param('id', ParseUUIDPipe) id: string, @Query() q: SlotsQuery) {
+    return this.svc.slots(id, q);
+  }
+
   @Get('counselors/:id')
   details(@Param('id', ParseUUIDPipe) id: string) {
     return this.svc.details(id);
@@ -596,6 +855,14 @@ export class ConsultationsAdminController {
   @RequirePermissions('consultations.manage') @Get('consultations')
   consultations(@Query('status') status?: string) {
     return this.svc.adminConsultations(status);
+  }
+  @RequirePermissions('consultations.manage') @Get('consultations/disputes')
+  disputes() {
+    return this.svc.adminDisputes();
+  }
+  @RequirePermissions('consultations.manage') @Post('consultations/:id/escrow') @HttpCode(200)
+  escrow(@CurrentAdmin() a: AuthAdmin, @Param('id', ParseUUIDPipe) id: string, @Body() dto: EscrowDecisionDto) {
+    return this.svc.adminEscrowDecision(a, id, dto);
   }
 }
 

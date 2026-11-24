@@ -29,6 +29,9 @@ export enum ErrorCode {
   ACCOUNT_TYPE_LOCKED = 'ACCOUNT_TYPE_LOCKED',
   WRONG_ACCOUNT_TYPE = 'WRONG_ACCOUNT_TYPE',
   ACCOUNT_BANNED = 'ACCOUNT_BANNED',
+  ACCOUNT_SUSPENDED = 'ACCOUNT_SUSPENDED',
+  SLOT_TAKEN = 'SLOT_TAKEN',
+  SLOT_UNAVAILABLE = 'SLOT_UNAVAILABLE',
   INSUFFICIENT_BALANCE = 'INSUFFICIENT_BALANCE',
   REVIEW_REQUIRED = 'REVIEW_REQUIRED',
   STORE_VERIFICATION_FAILED = 'STORE_VERIFICATION_FAILED',
@@ -63,6 +66,9 @@ const STATUS: Record<ErrorCode, HttpStatus> = {
   ACCOUNT_TYPE_LOCKED: HttpStatus.CONFLICT,
   WRONG_ACCOUNT_TYPE: HttpStatus.FORBIDDEN,
   ACCOUNT_BANNED: HttpStatus.FORBIDDEN,
+  ACCOUNT_SUSPENDED: HttpStatus.FORBIDDEN,
+  SLOT_TAKEN: HttpStatus.CONFLICT,
+  SLOT_UNAVAILABLE: HttpStatus.UNPROCESSABLE_ENTITY,
   INSUFFICIENT_BALANCE: HttpStatus.UNPROCESSABLE_ENTITY,
   REVIEW_REQUIRED: HttpStatus.CONFLICT,
   STORE_VERIFICATION_FAILED: HttpStatus.UNPROCESSABLE_ENTITY,
@@ -125,6 +131,11 @@ export function fromPgError(e: unknown): AppError | null {
       return new AppError(ErrorCode.INSUFFICIENT_BALANCE);
     case 'P0050':
       return new AppError(ErrorCode.REVIEW_REQUIRED);
+    // escrow / scheduling / support (migration 20261124160000)
+    case '23P01': // exclusion constraint: the counselor is already booked at that time
+      return new AppError(ErrorCode.SLOT_TAKEN);
+    case 'P0021':
+      return new AppError(ErrorCode.VALIDATION, 'too many attachments');
     case '23505':
     case 'P2002':
       return new AppError(ErrorCode.CONFLICT);

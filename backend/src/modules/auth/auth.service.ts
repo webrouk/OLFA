@@ -6,6 +6,7 @@ import { AppError, ErrorCode } from '../../common/errors';
 import { AuditService, PrismaService, RateLimiter, SettingsService } from '../../common/infra';
 import { checkOtp, generateOtp, hashOtp, newRefreshToken, OTP_POLICY, sha256, toE164 } from '../../domain/security';
 import { isValidTimeZone } from '../../domain/quota-period';
+import { restrictionDetails, restrictionOf } from '../../domain/restriction';
 import { RequestOtpDto, VerifyOtpDto } from './auth.dto';
 import { SMS_PROVIDER, SmsProvider } from './sms.provider';
 import { BansService } from '../integrity/integrity.module';
@@ -119,13 +120,14 @@ export class AuthService {
       return { user: created, isNew: true };
     });
 
-    if (user.status === 'BANNED') throw new AppError(ErrorCode.ACCOUNT_BANNED);
-    if (user.status === 'SUSPENDED') throw new AppError(ErrorCode.ACCOUNT_NOT_ACTIVE);
+    const restricted = await this.restrictionError(user);
+    if (restricted) throw restricted;
+    if (user.status === 'SUSPENDED') await this.prisma.user.update({ where: { id: user.id }, data: { status: 'ACTIVE', suspendedUntil: null } });
     const tokens = await this.openSession(user.id, dto, meta);
     if (isNew) await this.audit.record({ actorType: 'USER', actorId: user.id, action: 'user.register', entityType: 'user', entityId: user.id, ipHash: meta.ipHash });
     const profile = await this.prisma.userProfile.findUnique({ where: { userId: user.id }, select: { userId: true } });
     const counselor = profile ? null : await this.prisma.counselorProfile.findUnique({ where: { userId: user.id }, select: { userId: true } });
-    return { ...tokens, isNewUser: isNew, accountStatus: user.status, accountType: user.accountType, profileComplete: !!profile || !!counselor };
+    return { ...tokens, isNewUser: isNew, accountStatus: user.status === 'SUSPENDED' ? 'ACTIVE' : user.status, accountType: user.accountType, profileComplete: !!profile || !!counselor };
   }
 
   /** Refresh-token rotation with reuse detection (a replayed token revokes the family). */
@@ -133,6 +135,12 @@ export class AuthService {
     const hash = sha256(refreshToken);
     const s = await this.prisma.userSession.findUnique({ where: { refreshTokenHash: hash } });
     if (!s) throw new AppError(ErrorCode.UNAUTHORIZED);
+    if (s.revokedAt && s.revokedReason?.startsWith('admin_')) {
+      // closed by the admin panel: tell the app why (closed-account screen), not a silent sign-out
+      const u = await this.prisma.user.findUnique({ where: { id: s.userId }, select: { id: true, status: true, suspendedUntil: true, restrictionReason: true, restrictedAt: true } });
+      const restricted = u && (await this.restrictionError(u));
+      throw restricted || new AppError(ErrorCode.UNAUTHORIZED);
+    }
     if (s.revokedAt) {
       await this.prisma.userSession.updateMany({
         where: { familyId: s.familyId, revokedAt: null },
@@ -162,6 +170,17 @@ export class AuthService {
       }),
     ]);
     return { accessToken: await this.signAccess(s.userId, created.id), accessTokenExpiresIn: this.env.JWT_ACCESS_TTL_SECONDS, refreshToken: next.token };
+  }
+
+  /**
+   * Banned / suspended → the error the app turns into the closed-account screen. It carries a
+   * short-lived appeal token so the person can still write to support (POST /support/appeal).
+   */
+  private async restrictionError(user: { id: string; status: string; suspendedUntil?: Date | null; restrictionReason?: string | null; restrictedAt?: Date | null }) {
+    const r = restrictionOf(user);
+    if (r.kind === 'none') return null;
+    const appealToken = await this.jwt.signAsync({ sub: user.id, typ: 'appeal' }, { secret: this.env.JWT_ACCESS_SECRET, expiresIn: 7200 });
+    return new AppError(r.kind === 'banned' ? ErrorCode.ACCOUNT_BANNED : ErrorCode.ACCOUNT_SUSPENDED, undefined, { ...restrictionDetails(r), appealToken });
   }
 
   async logout(sessionId: string) {

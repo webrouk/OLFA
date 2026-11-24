@@ -91,10 +91,23 @@ export class WalletService {
   async summary(userId: string) {
     await this.counselor(userId);
     const now = new Date();
-    const currencies = await this.prisma.walletEntry.groupBy({ by: ['currency'], where: { counselorId: userId } });
+    const [inWallet, inEscrow] = await Promise.all([
+      this.prisma.walletEntry.groupBy({ by: ['currency'], where: { counselorId: userId } }),
+      this.prisma.consultation.groupBy({ by: ['currency'], where: { counselorId: userId, escrowStatus: { in: ['HELD', 'DISPUTED'] } } }),
+    ]);
+    const currencies = [...new Set([...inWallet, ...inEscrow].map((c) => c.currency))].map((currency) => ({ currency }));
     const balances = await Promise.all(
       currencies.map(async ({ currency }) => {
         const [b] = await this.prisma.$queryRaw<{ available_minor: bigint; pending_minor: bigint }[]>`SELECT * FROM olfa_wallet_balance(${userId}::uuid, ${currency}::char(3), ${now})`;
+        // Escrow: paid by the client, released only after the client confirms the session and rates it.
+        const escrow = await this.prisma.consultation.groupBy({
+          by: ['escrowStatus'],
+          where: { counselorId: userId, currency, escrowStatus: { in: ['HELD', 'DISPUTED'] } },
+          _sum: { counselorNetMinor: true },
+          _count: { _all: true },
+        });
+        const held = escrow.find((e) => e.escrowStatus === 'HELD');
+        const disputed = escrow.find((e) => e.escrowStatus === 'DISPUTED');
         const agg = await this.prisma.consultation.aggregate({
           where: { counselorId: userId, currency, status: 'COMPLETED' },
           _sum: { priceMinor: true, platformFeeMinor: true, counselorNetMinor: true },
@@ -105,6 +118,10 @@ export class WalletService {
           currency,
           availableMinor: Number(b.available_minor),
           pendingMinor: Number(b.pending_minor),
+          heldMinor: held?._sum.counselorNetMinor ?? 0,
+          heldSessions: held?._count._all ?? 0,
+          disputedMinor: disputed?._sum.counselorNetMinor ?? 0,
+          disputedSessions: disputed?._count._all ?? 0,
           completedSessions: agg._count,
           grossMinor: agg._sum.priceMinor ?? 0,
           platformFeeMinor: agg._sum.platformFeeMinor ?? 0,
@@ -119,7 +136,8 @@ export class WalletService {
     return {
       commissionPercent: await this.settings.get('consultations.platformFeePercent', 15),
       commissionPurpose: ['platform_development', 'marketing', 'advertising', 'promoting_you'],
-      holdDays: await this.settings.get('wallet.holdDays', 7),
+      holdDays: await this.settings.get('wallet.holdDays', 0),
+      escrowAutoReleaseDays: await this.settings.get('escrow.autoReleaseDays', 0),
       minimums: Object.fromEntries(balances.map((b) => [b.currency, minMajor * 10 ** currencyExponent(b.currency)])),
       balances,
       openWithdrawals,

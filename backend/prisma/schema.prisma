@@ -190,6 +190,9 @@ enum NotificationType {
   INTEGRITY_CASE
   WITHDRAWAL_UPDATE
   REVIEW_REQUIRED
+  SUPPORT_REPLY
+  ESCROW_RELEASED
+  ACCOUNT_RESTRICTED
 
   @@map("notification_type")
 }
@@ -284,6 +287,10 @@ model User {
   lastActiveAt        DateTime?     @map("last_active_at") @db.Timestamptz
   deletionRequestedAt DateTime?     @map("deletion_requested_at") @db.Timestamptz
   frozenAt            DateTime?     @map("frozen_at") @db.Timestamptz
+  /// SUSPENDED with a date = temporary; BANNED = permanent (shown on the closed-account screen).
+  suspendedUntil      DateTime?     @map("suspended_until") @db.Timestamptz
+  restrictionReason   String?       @map("restriction_reason") @db.VarChar(300)
+  restrictedAt        DateTime?     @map("restricted_at") @db.Timestamptz
   freezeReason        String?       @map("freeze_reason") @db.VarChar(40)
   /// Chosen once at sign-up; locked when a profile exists (DB trigger).
   accountType         AccountType?  @map("account_type")
@@ -915,9 +922,13 @@ model SupportTicket {
   assignedTo String?         @map("assigned_to") @db.Uuid
   createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz
   updatedAt  DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  lastMessageAt   DateTime   @default(now()) @map("last_message_at") @db.Timestamptz
+  userLastReadAt  DateTime?  @map("user_last_read_at") @db.Timestamptz
+  staffLastReadAt DateTime?  @map("staff_last_read_at") @db.Timestamptz
   user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   assignee   AdminUser?      @relation(fields: [assignedTo], references: [id])
   messages   TicketMessage[]
+  attachments TicketAttachment[]
 
   @@index([status, category, createdAt], map: "support_tickets_queue_idx")
   @@map("support_tickets")
@@ -928,9 +939,10 @@ model TicketMessage {
   ticketId   String        @map("ticket_id") @db.Uuid
   authorType ActorType     @map("author_type")
   authorId   String        @map("author_id") @db.Uuid
-  body       String        @db.VarChar(4000)
+  body       String        @default("") @db.VarChar(4000)
   createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz
   ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  attachments TicketAttachment[]
 
   @@map("ticket_messages")
 }
@@ -1089,6 +1101,9 @@ model CounselorProfile {
   walletEntries    WalletEntry[]
   integritySignals CounselorIntegritySignal[]
   integrityCases   CounselorIntegrityCase[]
+  schedule         CounselorSchedule?
+  availability     CounselorAvailability[]
+  timeOff          CounselorTimeOff[]
 
   @@index([status, kind, ratingAvg(sort: Desc)], map: "counselor_profiles_listing_idx")
   @@map("counselor_profiles")
@@ -1138,6 +1153,12 @@ model Consultation {
   platformFeePercent Int?             @map("platform_fee_percent") @db.SmallInt
   platformFeeMinor   Int?             @map("platform_fee_minor")
   counselorNetMinor  Int?             @map("counselor_net_minor")
+  /// HELD from payment until the client confirms the session and rates it (DB triggers).
+  escrowStatus       EscrowStatus?    @map("escrow_status")
+  escrowReleasedAt   DateTime?        @map("escrow_released_at") @db.Timestamptz
+  disputeReason      String?          @map("dispute_reason") @db.VarChar(500)
+  /// Generated: [scheduled_at or preferred_time, + duration) — no double booking (exclusion constraint).
+  slot               Unsupported("tstzrange")?
   createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   client          User                @relation("ConsultationClient", fields: [clientId], references: [id], onDelete: Cascade)
@@ -1160,7 +1181,7 @@ model ConsultationReview {
   consultationId String           @unique @map("consultation_id") @db.Uuid
   clientId       String           @map("client_id") @db.Uuid
   counselorId    String           @map("counselor_id") @db.Uuid
-  rating         Int              @db.SmallInt
+  rating         Int?              @db.SmallInt
   comment        String?          @db.VarChar(1000)
   hidden         Boolean          @default(false)
   /// Mandatory questionnaire (v1). Direct + indirect anti-circumvention answers.
@@ -1174,6 +1195,10 @@ model ConsultationReview {
   contactShared  String?          @map("contact_shared") @db.VarChar(6)
   offPlatformPayment String?      @map("off_platform_payment") @db.VarChar(6)
   externalChannel String?         @map("external_channel") @db.VarChar(6)
+  /// "Did the session take place?" — yes releases the escrow, no opens a dispute.
+  sessionHappened Boolean?         @map("session_happened")
+  counselorReply  String?          @map("counselor_reply") @db.VarChar(1000)
+  counselorRepliedAt DateTime?     @map("counselor_replied_at") @db.Timestamptz
   createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz
   consultation   Consultation     @relation(fields: [consultationId], references: [id], onDelete: Cascade)
   client         User             @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -1463,4 +1488,91 @@ model BannedIdentity {
   case      CounselorIntegrityCase? @relation(fields: [caseId], references: [id])
 
   @@map("banned_identities")
+}
+
+// ───────────── Escrow, scheduling, support attachments, FAQ (migration 20261124160000) ─────────────
+
+enum EscrowStatus {
+  HELD
+  RELEASED
+  DISPUTED
+  REFUNDED
+
+  @@map("escrow_status")
+}
+
+enum AttachmentStatus {
+  PENDING
+  READY
+
+  @@map("attachment_status")
+}
+
+model CounselorSchedule {
+  counselorId    String           @id @map("counselor_id") @db.Uuid
+  timezone       String           @default("Asia/Dubai") @db.VarChar(64)
+  bufferMinutes  Int              @default(10) @map("buffer_minutes") @db.SmallInt
+  minNoticeHours Int              @default(12) @map("min_notice_hours") @db.SmallInt
+  maxDaysAhead   Int              @default(30) @map("max_days_ahead") @db.SmallInt
+  accepting      Boolean          @default(true)
+  updatedAt      DateTime         @default(now()) @map("updated_at") @db.Timestamptz
+  counselor      CounselorProfile @relation(fields: [counselorId], references: [userId], onDelete: Cascade)
+
+  @@map("counselor_schedules")
+}
+
+/// Weekly window in the counselor's time zone; weekday 1 = Monday … 7 = Sunday. No overlaps (exclusion constraint).
+model CounselorAvailability {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  counselorId String           @map("counselor_id") @db.Uuid
+  weekday     Int              @db.SmallInt
+  startMinute Int              @map("start_minute") @db.SmallInt
+  endMinute   Int              @map("end_minute") @db.SmallInt
+  counselor   CounselorProfile @relation(fields: [counselorId], references: [userId], onDelete: Cascade)
+
+  @@map("counselor_availability")
+}
+
+model CounselorTimeOff {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  counselorId String           @map("counselor_id") @db.Uuid
+  startsAt    DateTime         @map("starts_at") @db.Timestamptz
+  endsAt      DateTime         @map("ends_at") @db.Timestamptz
+  note        String?          @db.VarChar(120)
+  counselor   CounselorProfile @relation(fields: [counselorId], references: [userId], onDelete: Cascade)
+
+  @@index([counselorId, endsAt], map: "counselor_time_off_idx")
+  @@map("counselor_time_off")
+}
+
+/// Image or PDF on a support message (≤ 10 MB, ≤ 3 per message). Private storage, signed URLs.
+model TicketAttachment {
+  id         String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId   String?          @map("ticket_id") @db.Uuid
+  messageId  String?          @map("message_id") @db.Uuid
+  uploaderId String           @map("uploader_id") @db.Uuid
+  storageKey String           @unique @map("storage_key") @db.VarChar(200)
+  fileName   String           @map("file_name") @db.VarChar(120)
+  mime       String           @db.VarChar(80)
+  bytes      Int
+  status     AttachmentStatus @default(PENDING)
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  ticket     SupportTicket?   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  message    TicketMessage?   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId], map: "ticket_attachments_message_idx")
+  @@map("ticket_attachments")
+}
+
+/// FAQ shown in Help, in Arabic, English and French ({ar,en,fr} JSON).
+model FaqEntry {
+  id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  category  TicketCategory @default(OTHER)
+  question  Json
+  answer    Json
+  sortOrder Int            @default(0) @map("sort_order") @db.SmallInt
+  published Boolean        @default(true)
+  updatedAt DateTime       @default(now()) @map("updated_at") @db.Timestamptz
+
+  @@map("faq_entries")
 }

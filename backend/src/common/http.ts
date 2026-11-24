@@ -18,6 +18,7 @@ import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import { ENV, Env } from '../config/env';
+import { restrictionDetails, restrictionOf } from '../domain/restriction';
 import { hashIp } from '../domain/security';
 import { AppError, ErrorCode, fromPgError } from './errors';
 import { PrismaService, RateLimiter } from './infra';
@@ -205,14 +206,24 @@ export class AuthGuard implements CanActivate {
     // Session must still be live (logout / revoke take effect immediately).
     const session = await this.prisma.userSession.findUnique({
       where: { id: payload.sid },
-      select: { revokedAt: true, user: { select: { id: true, status: true, deletedAt: true, frozenAt: true, lastActiveAt: true, accountType: true } } },
+      select: { revokedAt: true, user: { select: { id: true, status: true, deletedAt: true, frozenAt: true, lastActiveAt: true, accountType: true, suspendedUntil: true, restrictionReason: true, restrictedAt: true } } },
     });
     if (!session || session.revokedAt || session.user.deletedAt || session.user.id !== payload.sub) {
       throw new AppError(ErrorCode.UNAUTHORIZED);
     }
-    const status = session.user.status;
-    if (status === 'BANNED') throw new AppError(ErrorCode.ACCOUNT_BANNED);
-    if (status === 'SUSPENDED' || status === 'DELETED') throw new AppError(ErrorCode.ACCOUNT_NOT_ACTIVE);
+    let status = session.user.status;
+    // Admin restrictions → the app shows the closed-account screen from these details.
+    const r = restrictionOf(session.user);
+    if (r.kind !== 'none') {
+      const appealToken = await this.jwt.signAsync({ sub: payload.sub, typ: 'appeal' }, { secret: this.env.JWT_ACCESS_SECRET, expiresIn: 7200 });
+      throw new AppError(r.kind === 'banned' ? ErrorCode.ACCOUNT_BANNED : ErrorCode.ACCOUNT_SUSPENDED, undefined, { ...restrictionDetails(r), appealToken });
+    }
+    if (status === 'SUSPENDED') {
+      // the suspension date has passed: active again (the daily job does the same in bulk)
+      await this.prisma.user.updateMany({ where: { id: payload.sub, status: 'SUSPENDED' }, data: { status: 'ACTIVE', suspendedUntil: null } });
+      status = 'ACTIVE';
+    }
+    if (status === 'DELETED') throw new AppError(ErrorCode.ACCOUNT_NOT_ACTIVE);
     if (!allowPending && status !== 'ACTIVE' && status !== 'RESTRICTED') throw new AppError(ErrorCode.ACCOUNT_NOT_ACTIVE);
     // A frozen account can only reach account routes (me, reactivate, settings, deletion).
     if (session.user.frozenAt && !allowPending) throw new AppError(ErrorCode.ACCOUNT_FROZEN);

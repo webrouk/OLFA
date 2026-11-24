@@ -10,6 +10,10 @@ import { AppLocaleCode, asLocale } from '../../domain/locale';
 
 /** Server-rendered push texts (the in-app list is rendered client-side from keys). */
 const PUSH_TEXT: Record<string, Record<AppLocaleCode, [string, string]>> = {
+  'push.support_reply': { ar: ['رد من الدعم', 'وصل رد جديد على طلب الدعم الخاص بك'], en: ['Support replied', 'There is a new reply to your support request'], fr: ['Réponse du support', 'Votre demande d’assistance a reçu une réponse'] },
+  'push.escrow_released': { ar: ['تم تحويل أجر الاستشارة', 'أكّد العميل الجلسة وقيّمها — أُضيف المبلغ إلى محفظتك'], en: ['Consultation fee released', 'The client confirmed and rated the session — the amount is in your wallet'], fr: ['Honoraires débloqués', 'Le client a confirmé et noté la séance — le montant est dans votre portefeuille'] },
+  'push.review_reminder': { ar: ['قيّم جلستك', 'أكّد حدوث الاستشارة وقيّم المستشار ليتم تحويل الأجر'], en: ['Rate your session', 'Confirm the consultation took place and rate the counselor to release the fee'], fr: ['Notez votre séance', 'Confirmez la consultation et notez le conseiller pour débloquer le paiement'] },
+  'push.escrow_disputed': { ar: ['استشارة قيد المراجعة', 'أفاد العميل بأن الجلسة لم تتم — سيتواصل معك فريق الدعم'], en: ['Consultation under review', 'The client reported the session did not happen — support will contact you'], fr: ['Consultation en examen', 'Le client indique que la séance n’a pas eu lieu — le support vous contactera'] },
   'push.new_match': { ar: ['توافق جديد', 'أعجب كلٌّ منكما بالآخر — ابدأ المحادثة'], en: ["It's a match", 'You both liked each other — say hello'], fr: ['C’est réciproque', 'Vous vous plaisez mutuellement — dites bonjour'] },
   'push.new_like': { ar: ['إعجاب جديد', 'أعجب شخص بملفك'], en: ['New like', 'Someone liked your profile'], fr: ['Nouveau j’aime', 'Quelqu’un a aimé votre profil'] },
   'push.new_message': { ar: ['رسالة جديدة', 'لديك رسالة جديدة'], en: ['New message', 'You have a new message'], fr: ['Nouveau message', 'Vous avez un nouveau message'] },

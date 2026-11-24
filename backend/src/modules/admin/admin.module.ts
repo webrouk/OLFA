@@ -3,7 +3,7 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { PlanCode, Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
-import { IsEmail, IsInt, IsObject, IsOptional, IsString, Length, Max, Min } from 'class-validator';
+import { IsDateString, IsEmail, IsIn, IsInt, IsObject, IsOptional, IsString, Length, Max, Min } from 'class-validator';
 import { ENV, Env } from '../../config/env';
 import { AppError, ErrorCode } from '../../common/errors';
 import { AuthAdmin, CurrentAdmin, OlfaRequest, Public, RateLimit, Req, RequirePermissions } from '../../common/http';
@@ -15,6 +15,18 @@ class AdminLoginDto {
   @ApiProperty() @IsEmail() email: string;
   @ApiProperty() @IsString() @Length(12, 200) password: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @Length(6, 6) totp?: string;
+}
+
+/** Admin panel: close an account permanently, or for a period (until a date). */
+class RestrictDto {
+  @ApiProperty({ enum: ['ban', 'suspend'] }) @IsIn(['ban', 'suspend']) action!: 'ban' | 'suspend';
+  /** Required for 'suspend' with a period; omitted = until lifted by an admin. */
+  @ApiPropertyOptional() @IsOptional() @IsDateString() until?: string;
+  /** Shown to the user on the closed-account screen. */
+  @ApiProperty() @IsString() @Length(3, 300) reason!: string;
+}
+class UnrestrictDto {
+  @ApiProperty() @IsString() @Length(3, 300) reason!: string;
 }
 
 class WeightsDto {
@@ -98,6 +110,37 @@ export class AdminService {
     return this.plans();
   }
 
+  /** Ban (permanent) or suspend (temporary) — sessions are revoked, the app shows the closed-account screen. */
+  async restrict(userId: string, dto: RestrictDto, admin: AuthAdmin) {
+    const until = dto.until ? new Date(dto.until) : null;
+    if (dto.action === 'suspend' && until && until.getTime() <= Date.now()) throw new AppError(ErrorCode.VALIDATION, 'until must be in the future');
+    const before = await this.prisma.user.findUnique({ where: { id: userId }, select: { status: true, suspendedUntil: true } });
+    if (!before) throw new AppError(ErrorCode.NOT_FOUND);
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: dto.action === 'ban'
+          ? { status: 'BANNED', suspendedUntil: null, restrictionReason: dto.reason, restrictedAt: now }
+          : { status: 'SUSPENDED', suspendedUntil: until, restrictionReason: dto.reason, restrictedAt: now },
+      });
+      await tx.userSession.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now, revokedReason: `admin_${dto.action}` } });
+      await this.audit.record({ actorType: 'ADMIN', actorId: admin.id, action: `user.${dto.action}`, entityType: 'user', entityId: userId, reason: dto.reason, before, after: { until: until?.toISOString() ?? null } }, tx);
+    });
+    return { userId, status: dto.action === 'ban' ? 'BANNED' : 'SUSPENDED', until: until?.toISOString() ?? null };
+  }
+
+  async unrestrict(userId: string, dto: UnrestrictDto, admin: AuthAdmin) {
+    const before = await this.prisma.user.findUnique({ where: { id: userId }, select: { status: true } });
+    if (!before) throw new AppError(ErrorCode.NOT_FOUND);
+    if (before.status !== 'BANNED' && before.status !== 'SUSPENDED') throw new AppError(ErrorCode.INVALID_STATE);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: userId }, data: { status: 'ACTIVE', suspendedUntil: null, restrictionReason: null, restrictedAt: null } });
+      await this.audit.record({ actorType: 'ADMIN', actorId: admin.id, action: 'user.unrestrict', entityType: 'user', entityId: userId, reason: dto.reason, before }, tx);
+    });
+    return { userId, status: 'ACTIVE' };
+  }
+
   async setSetting(key: string, value: Prisma.InputJsonValue, admin: AuthAdmin) {
     const known = await this.prisma.systemSetting.findUnique({ where: { key } });
     if (!known) throw new AppError(ErrorCode.NOT_FOUND, 'Unknown setting');
@@ -129,6 +172,16 @@ export class AdminController {
   @ApiBearerAuth() @RequirePermissions('settings.manage') @Put('settings/:key') @HttpCode(204)
   async setting(@Param('key') key: string, @Body() body: { value: Prisma.InputJsonValue }, @CurrentAdmin() a: AuthAdmin) {
     await this.admin.setSetting(key, body.value, a);
+  }
+
+  @ApiBearerAuth() @RequirePermissions('users.manage') @Post('users/:id/restrict') @HttpCode(200)
+  restrict(@Param('id') id: string, @Body() dto: RestrictDto, @CurrentAdmin() a: AuthAdmin) {
+    return this.admin.restrict(id, dto, a);
+  }
+
+  @ApiBearerAuth() @RequirePermissions('users.manage') @Post('users/:id/unrestrict') @HttpCode(200)
+  unrestrict(@Param('id') id: string, @Body() dto: UnrestrictDto, @CurrentAdmin() a: AuthAdmin) {
+    return this.admin.unrestrict(id, dto, a);
   }
 
   @ApiBearerAuth() @RequirePermissions('settings.manage') @Get('matching/weights')
