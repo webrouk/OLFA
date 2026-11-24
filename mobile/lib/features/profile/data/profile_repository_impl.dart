@@ -88,7 +88,15 @@ class ApiProfileRepository implements ProfileRepository, PhotoRepository {
           'REJECTED' => VerificationStatus.rejected,
           _ => VerificationStatus.pending,
         };
-        return VerificationInfo(status: status, reason: req?['rejectReason'] as String?, fixSteps: const []);
+        final selfie = r.data!['selfie'] as Map?;
+        return VerificationInfo(
+          status: status,
+          reason: req?['rejectReason'] as String?,
+          rejectCode: req?['rejectCode'] as String?,
+          selfieRequired: selfie?['required'] == true,
+          selfieStatus: selfie?['status'] as String?,
+          selfieRejectCode: selfie?['rejectCode'] as String?,
+        );
       });
 
   @override

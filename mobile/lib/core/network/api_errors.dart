@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../errors/failure.dart';
+import '../security/account_restriction.dart';
 
 /// Maps backend error envelopes `{ error: { code, details } }` (see backend
 /// src/common/errors.ts) to typed domain failures.
@@ -19,6 +20,13 @@ Failure toFailure(Object e, {String quota = 'likes'}) {
   final code = err is Map ? err['code'] as String? : null;
   final details = err is Map && err['details'] is Map ? Map<String, dynamic>.from(err['details'] as Map) : const <String, dynamic>{};
   int? intOf(String k) => details[k] is num ? (details[k] as num).toInt() : null;
+
+  if (code == 'ACCOUNT_BANNED' || code == 'ACCOUNT_SUSPENDED') {
+    // the router moves to the closed-account screen
+    final r = AccountRestriction.fromDetails(code!, details);
+    accountRestriction.value = r;
+    return AccountRestrictedFailure(permanent: r.permanent);
+  }
 
   return switch (code) {
     'UNAUTHORIZED' => const UnauthorizedFailure(),
@@ -42,7 +50,9 @@ Failure toFailure(Object e, {String quota = 'likes'}) {
     'NOT_PAID' => const ServerFailure('not_paid'),
     'ACCOUNT_TYPE_LOCKED' => const ServerFailure('account_type_locked'),
     'WRONG_ACCOUNT_TYPE' => const ServerFailure('wrong_account_type'),
-    'ACCOUNT_BANNED' => const ServerFailure('account_banned'),
+    'SLOT_TAKEN' || 'SLOT_UNAVAILABLE' => const SlotUnavailableFailure(),
+    'SELFIE_CHECKS_FAILED' => SelfieChecksFailure([for (final f in (details['failed'] as List? ?? const [])) '$f']),
+    'SELFIE_REQUIRED' => const ServerFailure('selfie_required'),
     'INSUFFICIENT_BALANCE' => const ServerFailure('insufficient_balance'),
     'REVIEW_REQUIRED' => const ServerFailure('review_required'),
     'STORE_VERIFICATION_FAILED' => const ServerFailure('store_verification_failed'),

@@ -785,10 +785,21 @@ class FaqEntry {
 }
 
 class VerificationInfo {
-  const VerificationInfo({required this.status, this.reason, this.fixSteps = const []});
+  const VerificationInfo({required this.status, this.reason, this.fixSteps = const [], this.rejectCode, this.selfieRequired = false, this.selfieStatus, this.selfieRejectCode});
   final VerificationStatus status;
   final String? reason;
   final List<String> fixSteps;
+  final String? rejectCode;
+
+  /// First sign-up: a live selfie must be taken (and is not approved yet).
+  final bool selfieRequired;
+
+  /// null (none yet) · PENDING · APPROVED · REJECTED
+  final String? selfieStatus;
+  final String? selfieRejectCode;
+
+  /// The team asked for a new selfie (or none was taken yet).
+  bool get needsSelfie => selfieRequired && (selfieStatus == null || selfieStatus == 'REJECTED');
 }
 
 /// Privacy choices — stored and enforced by the server (GET/PUT /me/privacy).

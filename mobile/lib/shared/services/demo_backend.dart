@@ -46,6 +46,7 @@ class DemoBackend {
   bool _notificationsRead = false;
   int _otpAttempts = 5;
   VerificationStatus verification = VerificationStatus.pending;
+  bool selfieSubmitted = false;
   PrivacySettings privacy = const PrivacySettings();
   bool deletionScheduled = false;
   String? locationCountry; // set by the location step
@@ -84,6 +85,8 @@ class DemoBackend {
                 ? ['استبدل الصورة الرئيسية بصورة حديثة وواضحة', 'تأكد من الإضاءة الجيدة وعدم وجود نظارات شمسية']
                 : ['Replace your main photo with a clear, recent one', 'Use good lighting and no sunglasses'])
             : const [],
+        selfieRequired: verification != VerificationStatus.approved,
+        selfieStatus: verification == VerificationStatus.approved ? 'APPROVED' : (selfieSubmitted ? 'PENDING' : null),
       ));
 
   Future<UserProfile> me() => _call(() => _me());

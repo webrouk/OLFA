@@ -338,6 +338,7 @@ model User {
   reviewsWritten       ConsultationReview[]
   rematchRequests      RematchRequest[]
 
+  selfieChallenges SelfieChallenge[]
   @@map("users")
 }
 
@@ -473,6 +474,9 @@ model VerificationRequest {
   reviewedBy   String?            @map("reviewed_by") @db.Uuid
   submittedAt  DateTime           @default(now()) @map("submitted_at") @db.Timestamptz
   reviewedAt   DateTime?          @map("reviewed_at") @db.Timestamptz
+  /// Selfie (LIVENESS): the gesture asked for, and whether a woman from the team should review it.
+  challengeGesture     String?    @map("challenge_gesture") @db.VarChar(20)
+  preferFemaleReviewer Boolean    @default(false) @map("prefer_female_reviewer")
   user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   reviewer     AdminUser?         @relation(fields: [reviewedBy], references: [id])
 
@@ -1575,4 +1579,19 @@ model FaqEntry {
   updatedAt DateTime       @default(now()) @map("updated_at") @db.Timestamptz
 
   @@map("faq_entries")
+}
+
+/// One-time selfie capture (random gesture + private upload slot, 10 minutes). Criteria: src/domain/selfie.ts.
+model SelfieChallenge {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  gesture    String    @db.VarChar(20)
+  storageKey String    @unique @map("storage_key") @db.VarChar(200)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz
+  usedAt     DateTime? @map("used_at") @db.Timestamptz
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)], map: "selfie_challenges_user_idx")
+  @@map("selfie_challenges")
 }

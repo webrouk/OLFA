@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/localization/generated/app_localizations.dart';
 import '../core/localization/locale_provider.dart';
 import '../core/routing/app_router.dart';
+import '../core/security/screen_protection.dart';
 import '../core/theme/olfa_theme.dart';
 import '../features/messaging/application/incoming_sounds.dart';
 import '../features/subscriptions/application/entitlements_controller.dart';
@@ -36,7 +37,7 @@ class OlfaApp extends ConsumerWidget {
         final mq = MediaQuery.of(context);
         return MediaQuery(
           data: mq.copyWith(textScaler: mq.textScaler.clamp(minScaleFactor: 0.9, maxScaleFactor: 1.3)),
-          child: child!,
+          child: CaptureShield(child: child!),
         );
       },
     );

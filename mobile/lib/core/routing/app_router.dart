@@ -29,6 +29,11 @@ import '../../features/settings/presentation/privacy_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/subscriptions/presentation/plans_screen.dart';
 import '../../features/support/presentation/help_screen.dart';
+import '../../features/support/presentation/support_thread_screen.dart';
+import '../../features/account/closed_account_screen.dart';
+import '../../features/consultations/presentation/counselor_schedule_screen.dart';
+import '../security/account_restriction.dart';
+import '../../features/verification/presentation/selfie_screen.dart';
 import '../widgets/floating_nav_bar.dart';
 import '../../shared/models/models.dart';
 import 'routes.dart';
@@ -42,11 +47,16 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: Routes.splash,
-    refreshListenable: accountTypeListenable,
+    refreshListenable: Listenable.merge([accountTypeListenable, accountRestriction]),
     // Each account type only reaches its own area (the server enforces the same rule).
     redirect: (context, state) {
-      final type = ref.read(accountTypeProvider);
       final loc = state.matchedLocation;
+      // A closed account only sees the closed-account screen (and the legal pages).
+      if (accountRestriction.value != null) {
+        return loc == Routes.closed || loc.startsWith('/legal/') ? null : Routes.closed;
+      }
+      if (loc == Routes.closed) return Routes.splash;
+      final type = ref.read(accountTypeProvider);
       if (type == null) return null;
       if (type.isProfessional && Routes.memberOnly(loc)) return Routes.counselorDesk;
       if (!type.isProfessional && Routes.professionalOnly(loc)) return Routes.discover;
@@ -68,6 +78,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       _root(Routes.preferences, (_) => const PreferencesScreen()),
       _root(Routes.photos, (_) => const PhotosScreen()),
       _root(Routes.location, (_) => const LocationScreen()),
+      _root(Routes.selfie, (_) => const SelfieScreen()),
+      _root(Routes.selfieRetake, (_) => const SelfieScreen(retake: true)),
       _root(Routes.verification, (_) => const VerificationScreen()),
       // Full-screen pages pushed above the tab shell
       _root(Routes.profileDetails, (s) => ProfileDetailsScreen(userId: s.pathParameters['id']!)),
@@ -98,6 +110,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       _root(Routes.terms, (_) => const LegalScreen.terms()),
       _root(Routes.privacyPolicy, (_) => const LegalScreen.privacy()),
       _root(Routes.frozen, (_) => const FrozenAccountScreen()),
+      _root(Routes.closed, (_) => const ClosedAccountScreen()),
+      _root(Routes.newTicket, (_) => const NewTicketScreen()),
+      _root(Routes.supportThread, (s) => SupportThreadScreen(ticketId: s.pathParameters['id']!)),
+      _root(Routes.counselorSchedule, (_) => const CounselorScheduleScreen()),
+      _root(Routes.counselorReviews, (_) => const CounselorReviewsScreen()),
       // C/D — Tabs with the floating navigation
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => MainShell(shell: shell),

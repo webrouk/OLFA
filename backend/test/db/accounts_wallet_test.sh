@@ -134,6 +134,18 @@ expect_error "only images and PDF" 23514 "INSERT INTO ticket_attachments (ticket
 expect_error "attachments up to 10 MB" 23514 "INSERT INTO ticket_attachments (ticket_id, uploader_id, storage_key, file_name, mime, bytes) VALUES ('$TK','$M1','x6','a.png','image/png',20000000)"
 expect_error "FAQ needs all three languages" 23514 "INSERT INTO faq_entries (question, answer) VALUES ('{\"ar\":\"س\",\"en\":\"Q\"}','{\"ar\":\"ج\",\"en\":\"A\",\"fr\":\"R\"}')"
 
+echo "selfie verification"
+CH=$(q "INSERT INTO selfie_challenges (user_id, gesture, storage_key, expires_at) VALUES ('$N','victory','v/n/1.jpg', now() + interval '10 minutes') RETURNING id" | head -1)
+check "a capture challenge is created" "$([ -n "$CH" ] && echo yes)" "yes"
+expect_error "only the listed gestures" 23514 "INSERT INTO selfie_challenges (user_id, gesture, storage_key, expires_at) VALUES ('$N','wave','v/n/2.jpg', now() + interval '10 minutes')"
+expect_error "a pending selfie has its picture" 23514 "INSERT INTO verification_requests (user_id, type) VALUES ('$N','LIVENESS')"
+q "INSERT INTO verification_requests (user_id, type, selfie_key, challenge_gesture, prefer_female_reviewer) VALUES ('$N','LIVENESS','v/n/1.jpg','victory',true)" >/dev/null
+expect_error "one selfie waiting for review per person" 23505 "INSERT INTO verification_requests (user_id, type, selfie_key) VALUES ('$N','LIVENESS','v/n/3.jpg')"
+q "UPDATE verification_requests SET status='APPROVED', reviewed_at = now() - interval '31 days' WHERE user_id='$N' AND type='LIVENESS'" >/dev/null
+check "reviewed selfies are deleted after the retention period" "$(q "SELECT olfa_purge_selfies()")" "1"
+check "… and their file is queued for removal" "$(q "SELECT count(*) FROM storage_garbage WHERE storage_key='v/n/1.jpg'")" "1"
+check "… the decision is kept" "$(q "SELECT status || ':' || coalesce(selfie_key,'none') FROM verification_requests WHERE user_id='$N' AND type='LIVENESS'")" "APPROVED:none"
+
 echo "support attachments"
 TK=$(q "INSERT INTO support_tickets (user_id, category, subject) VALUES ('$M1','OTHER','help') RETURNING id" | head -1)
 TM=$(q "INSERT INTO ticket_messages (ticket_id, author_type, author_id, body) VALUES ('$TK','USER','$M1','hello') RETURNING id" | head -1)

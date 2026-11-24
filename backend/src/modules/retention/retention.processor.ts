@@ -54,6 +54,8 @@ export class RetentionProcessor extends WorkerHost implements OnApplicationBoots
       await this.prisma.storageGarbage.deleteMany({ where: { storageKey: { in: batch.map((b) => b.storageKey) } } });
       removed += batch.length;
     }
+    // Reviewed selfies are deleted after verification.selfieRetentionDays; abandoned captures after a day.
+    const [{ selfies }] = await this.prisma.$queryRaw<{ selfies: number }[]>`SELECT olfa_purge_selfies() AS selfies`;
     // Temporary suspensions whose date passed → active again.
     const [{ lifted }] = await this.prisma.$queryRaw<{ lifted: number }[]>`SELECT olfa_lift_expired_suspensions() AS lifted`;
     // Escrow: optional auto-release (escrow.autoReleaseDays, 0 = never) …
@@ -80,7 +82,7 @@ export class RetentionProcessor extends WorkerHost implements OnApplicationBoots
       await this.notifications.notify(r.counselorId, 'WITHDRAWAL_UPDATE', 'push.earning_available', {}).catch((e: unknown) => this.log.warn(`notify failed: ${String(e)}`));
     }
     const counts = rows.reduce<Record<string, number>>((a, r) => ((a[r.action] = (a[r.action] ?? 0) + 1), a), {});
-    this.log.log(`sweep: ${JSON.stringify(counts)} bookingsExpired=${expired.count} incognitoReset=${reset} mediaRemoved=${removed} casesToReview=${toReview.count} earningsReleased=${released.length} suspensionsLifted=${lifted} escrowAutoReleased=${autoReleased} reviewReminders=${remind.length}`);
+    this.log.log(`sweep: ${JSON.stringify(counts)} bookingsExpired=${expired.count} incognitoReset=${reset} mediaRemoved=${removed} casesToReview=${toReview.count} earningsReleased=${released.length} suspensionsLifted=${lifted} escrowAutoReleased=${autoReleased} reviewReminders=${remind.length} selfiesPurged=${selfies}`);
     return { ...counts, bookingsExpired: expired.count, incognitoReset: reset };
   }
 }

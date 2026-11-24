@@ -144,6 +144,9 @@ String failureMessage(BuildContext context, Object error) {
         _ => l.errorEntitlement,
       },
     AlreadyActedFailure() => l.errorDuplicate,
+    AccountRestrictedFailure(:final permanent) => permanent ? l.closedPermanentTitle : l.closedTemporaryTitle,
+    SlotUnavailableFailure() => l.slotTaken,
+    SelfieChecksFailure() => l.selfieFailedTitle,
     ValidationFailure() => l.errorValidation,
     UnauthorizedFailure() => l.errorUnauthorized,
     ServerFailure(:final code) => switch (code) {
@@ -156,6 +159,7 @@ String failureMessage(BuildContext context, Object error) {
         'insufficient_balance' => l.errInsufficientBalance,
         'review_required' => l.errReviewRequired,
         'store_verification_failed' => l.errStoreVerification,
+        'selfie_required' => l.selfieStatusMissing,
         _ => l.errorGeneric,
       },
   };

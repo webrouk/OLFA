@@ -48,6 +48,13 @@ abstract final class Routes {
   static const terms = '/legal/terms';
   static const privacyPolicy = '/legal/privacy';
   static const frozen = '/account/frozen';
+  static const closed = '/account/closed'; // banned (permanent) or suspended (until a date)
+  static const selfie = '/setup/selfie'; // after the photos, first sign-up
+  static const selfieRetake = '/setup/selfie/retake';
+  static const supportThread = '/me/help/tickets/:id';
+  static const newTicket = '/me/help/new';
+  static const counselorSchedule = '/counselor/schedule';
+  static const counselorReviews = '/counselor/reviews';
 
   // 6. Family & marital consultations
   static const consultations = '/consultations';
@@ -75,6 +82,8 @@ abstract final class Routes {
 
   /// The professional workspace (members are sent to Discover).
   static bool professionalOnly(String loc) => loc.startsWith('/counselor/') || loc == professionalInfo;
+
+  static String ticket(String id) => '/me/help/tickets/$id';
 
   static String reviewConsultation(String id) => '/consultations/$id/review';
 

@@ -13,6 +13,8 @@ import '../../../shared/components/reference_pickers.dart';
 import '../../../shared/models/models.dart';
 import '../application/profile_controllers.dart';
 import '../domain/profile_draft.dart';
+import '../../verification/domain/selfie_criteria.dart';
+import '../../verification/presentation/selfie_screen.dart' show criterionFix;
 
 String? _err(AppLocalizations l, String? key) => switch (key) {
       null => null,
@@ -27,7 +29,8 @@ String? _err(AppLocalizations l, String? key) => switch (key) {
 
 /// Sign-up steps: members 6 (gender, account type, about you, partner,
 /// location, photos); professionals 5 (no partner preferences).
-int setupTotal(ProfileDraft d) => d.accountType?.isProfessional ?? false ? 5 : 6;
+/// Steps shown in the progress bar; the last one is the verification selfie (after the photos).
+int setupTotal(ProfileDraft d) => d.accountType?.isProfessional ?? false ? 6 : 7;
 
 /// 7 — Gender, with optional height and weight on the same page (step 1)
 class GenderScreen extends ConsumerWidget {
@@ -265,26 +268,8 @@ class PhotosScreen extends ConsumerStatefulWidget {
 }
 
 class _PhotosScreenState extends ConsumerState<PhotosScreen> {
-  bool _busy = false;
-
-  Future<void> _submit() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      final d = ref.read(profileDraftProvider);
-      if (d.accountType?.isProfessional ?? false) {
-        // The professional application was sent on the "about you" step; photos complete it.
-        await ref.read(profileDraftProvider.notifier).submitProfessionalPhotos();
-      } else {
-        await ref.read(profileDraftProvider.notifier).submit();
-      }
-      if (mounted) context.go(Routes.verification);
-    } catch (e) {
-      if (mounted) showToast(context, failureMessage(context, e));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
+  // Next: the verification selfie, which then sends the profile for review.
+  void _submit() => context.push(Routes.selfie);
 
   @override
   Widget build(BuildContext context) {
@@ -292,8 +277,8 @@ class _PhotosScreenState extends ConsumerState<PhotosScreen> {
     final d = ref.watch(profileDraftProvider);
     final ctrl = ref.read(profileDraftProvider.notifier);
     return FormPage(
-      header: SetupProgress(step: setupTotal(d), total: setupTotal(d)),
-      action: PrimaryButton(label: l.submitForReview, loading: _busy, onPressed: (d.accountType?.isProfessional ?? false ? d.professionalPhotosReady : d.photosReady) ? _submit : null),
+      header: SetupProgress(step: setupTotal(d) - 1, total: setupTotal(d)),
+      action: PrimaryButton(label: l.continueLabel, onPressed: (d.accountType?.isProfessional ?? false ? d.professionalPhotosReady : d.photosReady) ? _submit : null),
       children: [
         PageHeading(l.photosTitle, body: d.accountType?.isProfessional ?? false ? l.photosBodyProfessional : l.photosBody),
         PhotoGrid(slots: d.photoSlots, onToggle: ctrl.togglePhoto),
@@ -304,16 +289,7 @@ class _PhotosScreenState extends ConsumerState<PhotosScreen> {
             child: Row(children: [const Icon(Icons.check_rounded, color: OlfaColors.primary, size: 18), const SizedBox(width: 10), Expanded(child: Text(tip, style: context.type.bodyMedium))]),
           ),
         const SizedBox(height: 10),
-        TileGroup(children: [
-          OlfaListTile(
-            icon: Icons.camera_alt_outlined,
-            accent: true,
-            title: l.selfieTitle,
-            subtitle: l.selfieBody,
-            trailing: OlfaTag(l.optional),
-            onTap: () => showToast(context, l.selfieLater),
-          ),
-        ]),
+        InfoBanner(text: l.selfieNextNote, icon: Icons.photo_camera_front_outlined, accent: true),
         const SizedBox(height: 14),
         OlfaCheck(value: d.photoRightsConfirmed, onChanged: (v) => ctrl.update((x) => x.copyWith(photoRightsConfirmed: v)), label: l.photoRights),
         OlfaCheck(value: d.policyAccepted, onChanged: (v) => ctrl.update((x) => x.copyWith(policyAccepted: v)), label: l.photoPolicy),
@@ -428,6 +404,17 @@ class VerificationScreen extends ConsumerWidget {
                 VerificationStatus.approved => (Icons.check_rounded, l.verifApprovedTitle, l.verifApprovedBody),
               };
               final approved = v.status == VerificationStatus.approved;
+              // selfie reasons → the matching criterion's "how to fix"
+              final selfieFix = switch (v.rejectCode ?? v.selfieRejectCode) {
+                'selfie_no_face' || 'selfie_face_covered' => [criterionFix(l, SelfieCriterion.visible)],
+                'selfie_multiple_faces' => [criterionFix(l, SelfieCriterion.oneFace)],
+                'selfie_blurry' || 'selfie_dark' => [criterionFix(l, SelfieCriterion.quality)],
+                'selfie_gesture_wrong' => [criterionFix(l, SelfieCriterion.gesture)],
+                'selfie_not_match' => [criterionFix(l, SelfieCriterion.samePerson)],
+                'selfie_not_live' => [criterionFix(l, SelfieCriterion.live), criterionFix(l, SelfieCriterion.real)],
+                _ => const <String>[],
+              };
+              final steps = [...v.fixSteps, ...selfieFix];
               return Column(
                 children: [
                   Expanded(
@@ -476,12 +463,12 @@ class VerificationScreen extends ConsumerWidget {
                                 const SizedBox(height: 14),
                                 Text(l.howToFix, style: t.caption),
                                 const SizedBox(height: 8),
-                                for (var i = 0; i < v.fixSteps.length; i++)
+                                for (var i = 0; i < steps.length; i++)
                                   Padding(
                                     padding: const EdgeInsets.only(bottom: 8),
                                     child: Row(
                                       crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [OlfaTag('${i + 1}', style: OlfaTagStyle.accent), const SizedBox(width: 10), Expanded(child: Text(v.fixSteps[i], style: t.bodyMedium))],
+                                      children: [OlfaTag('${i + 1}', style: OlfaTagStyle.accent), const SizedBox(width: 10), Expanded(child: Text(steps[i], style: t.bodyMedium))],
                                     ),
                                   ),
                               ],
@@ -489,6 +476,19 @@ class VerificationScreen extends ConsumerWidget {
                           )
                         else
                           _Timeline(status: v.status),
+                        if (v.selfieStatus != null || v.selfieRequired) ...[
+                          const SizedBox(height: 12),
+                          InfoBanner(
+                            icon: Icons.photo_camera_front_outlined,
+                            accent: v.needsSelfie,
+                            text: switch (v.selfieStatus) {
+                              'APPROVED' => l.selfieStatusApproved,
+                              'PENDING' => l.selfieStatusPending,
+                              'REJECTED' => l.selfieStatusRejected,
+                              _ => l.selfieStatusMissing,
+                            },
+                          ),
+                        ],
                         if (approved) ...[
                           const SizedBox(height: 8),
                           InfoBanner(text: '${l.photosReviewed} — ${l.notIdentityNote}', icon: Icons.verified_rounded),
@@ -500,6 +500,8 @@ class VerificationScreen extends ConsumerWidget {
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
                     child: switch (v.status) {
                       VerificationStatus.approved => PrimaryButton(label: l.startDiscovering, onPressed: () => context.go(Routes.discover)),
+                      // the team asked for a new selfie → retake (the profile goes back to review by itself)
+                      _ when v.needsSelfie => PrimaryButton(label: l.selfieRetakeCta, icon: Icons.photo_camera_front_rounded, onPressed: () => context.push(Routes.selfieRetake)),
                       VerificationStatus.rejected => PrimaryButton(label: l.fixAndResubmit, onPressed: () => context.push(Routes.photos)),
                       VerificationStatus.pending => SecondaryButton(label: l.editProfile, onPressed: () => context.push(Routes.editProfile)),
                     },

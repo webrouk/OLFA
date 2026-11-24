@@ -197,3 +197,35 @@ Admin JWTs are separate (`POST /admin/auth/login`). Every admin route declares t
 ## Health
 
 `GET /health/live`, `GET /health/ready` (DB + Redis).
+
+## Verification selfie (first sign-up, after the photos)
+
+Criteria and review flow: [VERIFICATION.md](VERIFICATION.md).
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/v1/me/verification/selfie/challenge` | One-time capture: `{challengeId, gesture, expiresAt (10 min), criteria, limits, upload}` (presigned POST, image/jpeg ≤ 6 MB, private bucket) |
+| POST | `/v1/me/verification/selfie` | `{challengeId, deviceChecks{faces, faceRatio, yaw, roll, leftEyeOpen?, rightEyeOpen?}, preferFemaleReviewer?}` → automatic checks → `LIVENESS` request for the team. `422 SELFIE_CHECKS_FAILED {failed:[criteria]}` |
+| POST | `/v1/me/verification/submit` | `422 SELFIE_REQUIRED` until a selfie is waiting or approved |
+| GET | `/v1/me/verification` | adds `selfie {required, status, rejectCode, submittedAt}` |
+| GET | `/v1/admin/verification/queue` | profile reviews and stand-alone selfies, with `type` and `preferFemaleReviewer` |
+| GET | `/v1/admin/verification/:id` | adds `selfie {url (signed, 5 min), gesture, checks, preferFemaleReviewer, criteria}` |
+
+## Escrow, schedules, support, account closure (migration 20261124160000)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/v1/counselors/:id/slots?offeringId=` | Bookable start times (UTC) from the counselor's weekly hours, time off, bookings + buffer, notice and horizon |
+| POST | `/v1/consultations` | `slot` required when the counselor publishes a schedule; `409 SLOT_TAKEN`, `422 SLOT_UNAVAILABLE` |
+| POST | `/v1/consultations/:id/review` | `sessionHappened` — yes (questionnaire) releases the held fee; no (`disputeReason`) opens a dispute |
+| GET/PUT | `/v1/counselors/me/schedule` · PUT `/availability` · POST/DELETE `/time-off` | Controlled from the counselor's account |
+| GET | `/v1/counselors/me/reviews` · PUT `/reviews/:consultationId/reply` | Rating breakdown + public reply |
+| GET | `/v1/admin/consultations/disputes` · POST `/:id/escrow {decision: RELEASE|REFUND, reason}` | Support decides disputed fees |
+| GET | `/v1/support/faq?lang=` | Public, ar/en/fr |
+| POST | `/v1/support/attachments` | Image/PDF ≤ 10 MB, presigned private upload |
+| POST/GET | `/v1/support/tickets` · GET `/tickets/:id` · POST `/tickets/:id/messages` · POST `/tickets/:id/close` · GET `/unread` | In-page thread; staff replies arrive by socket `support:message` + push |
+| POST | `/v1/support/appeal` | Closed accounts: `Authorization: Bearer <appealToken>` from the sign-in error |
+| POST | `/v1/admin/users/:id/restrict {action: ban|suspend, until?, reason}` · `/unrestrict` | Permanent or temporary closure; sessions revoked |
+| … | `/v1/admin/support/*` | Queue, thread, reply, status, FAQ CRUD |
+
+Errors `403 ACCOUNT_BANNED` / `ACCOUNT_SUSPENDED` carry `{permanent, until, reason, since, appealToken}`. The app shows the closed-account screen from them.
