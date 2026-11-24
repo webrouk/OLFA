@@ -822,7 +822,7 @@ function admin(live){const d=ADEV[S.adev];const narrow=d.W<1000;
 /* ═══════════ CHROME + RENDER ═══════════ */
 const $=s=>document.querySelector(s);
 function chrome(){
- $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.5</small></span></div>
+ $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.6</small></span></div>
  <div class="seg"><button class="${S.mode==='app'?'on':''}" data-ui="mode" data-a="app">${t('vApp')}</button><button class="${S.mode==='admin'?'on':''}" data-ui="mode" data-a="admin">${t('vAdmin')}</button></div>
  ${S.mode==='app'?`<div class="seg"><button class="${S.view==='one'?'on':''}" data-ui="view" data-a="one">${t('vOne')}</button><button class="${S.view==='all'?'on':''}" data-ui="view" data-a="all">${t('vAll')}</button></div>`:''}
  <div class="seg"><button class="${S.lang==='ar'?'on':''}" data-ui="lang" data-a="ar">ع RTL</button><button class="${S.lang==='en'?'on':''}" data-ui="lang" data-a="en">EN LTR</button></div>
@@ -1036,7 +1036,7 @@ const chipRow=(opts,sel,act)=>`<div class="chips">${opts.map(([k,l])=>`<button c
 const convName=c=>AR()?c.nm[0]:c.nm[1];
 const convRow=(c,{locked=false,section='inbox'}={})=>{
  const left=section==='archive'?30-c.idle:15-c.idle,warn=section==='archive'?c.idle>=23:c.idle>=10;
- const sub=c.state==='unmatched'?`${tf('unmatchedAgo',{d:c.ago})} · ${tf('deletesIn',{d:30-c.ago})}`:(AR()?c.last[0]:c.last[1]);
+ const sub=c.state==='unmatched'?`${tf('unmatchedAgo',{d:c.ago})} · ${tf('deletesIn',{d:30-c.ago})}`:(c.lastMe?t('you')+': ':'')+(AR()?c.last[0]:c.last[1]);
  const tm=(c.tm||'').includes('|')?c.tm.split('|')[AR()?0:1]:c.tm;
  const chip=c.state==='unmatched'?(c.rematch==='incoming'?`<span class="tag pf">${t('reqIn')}</span>`:c.rematch==='sent'?`<span class="tag p">${t('reqSent')}</span>`:c.rematch==='used'?`<span class="tag">${t('reqUsed')}</span>`:''):'';
  return `<div class="crow ${locked?'locked':''} ${c.state==='unmatched'?'um':''}" ${locked?'data-act="lockedConv"':`data-act="openConv" data-a="${c.id}"`}>
@@ -1388,17 +1388,28 @@ document.addEventListener('input',e=>{const el=e.target;if(el.dataset.in==='msg'
 
 /* ── 18. Messages: instant search across names and message text ── */
 const _convs4=SC.convs;let _convRest='';
-const SEARCH_MSGS=[{c:0,ar:'نلتقي في المكتبة العامة يوم الجمعة؟',en:'Shall we meet at the public library on Friday?',tm:'9:30'},{c:1,ar:'أحب السفر إلى المدن القديمة',en:'I love travelling to old cities',tm:pick('أمس','Yesterday')},{c:0,ar:'شكرًا على الحديث اللطيف',en:'Thanks for the lovely chat',tm:'8:02'}];
-const hl=(s,q)=>{const i=s.toLowerCase().indexOf(q.toLowerCase());return i<0?s:`${s.slice(0,i)}<span class="hl">${s.slice(i,i+q.length)}</span>${s.slice(i+q.length)}`};
-const searchRes=()=>{const q=S.q.trim();if(q.length<2)return _convRest;const all=convs().filter(c=>c.state==='active'&&!isLocked(c));
- const names=all.filter(c=>convName(c).toLowerCase().includes(q.toLowerCase()));
- const msgs=SEARCH_MSGS.map(m=>({...m,txt:pick(m.ar,m.en),conv:all[m.c]})).filter(m=>m.conv&&m.txt.toLowerCase().includes(q.toLowerCase()));
- return `<div class="sres">${names.length?`<div class="sec pad" style="margin-top:4px">${t('sConvs')}</div>${names.map(c=>convRow(c)).join('')}`:''}
- ${msgs.length?`<div class="sec pad">${t('sMsgs')}</div>${msgs.map(m=>`<button class="crow" style="width:100%;border:0;background:none;text-align:start" data-act="openConv" data-a="${m.conv.id}"><span style="color:var(--p)">${I('chat',20)}</span><span style="flex:1;min-width:0"><div style="display:flex;gap:8px"><b style="flex:1">${convName(m.conv)}</b><span class="cap">${m.tm}</span></div><div class="bs mut" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${hl(m.txt,q)}</div></span></button>`).join('')}`:''}
- ${!names.length&&!msgs.length?`<p class="bm mut" style="text-align:center;padding:40px 20px">${tf('noRes',{q})}</p>`:''}</div>`};
-SC.convs=()=>{let h=_convs4();const k='<div class="sec pad" style="margin-top:0">';const i=h.indexOf(k);if(i<0)return h;
- _convRest=h.slice(i,h.lastIndexOf('</div>'));
+const SEARCH_MSGS=[{c:0,ar:'نلتقي في المكتبة العامة يوم الجمعة؟',en:'Shall we meet at the public library on Friday?',tm:['9:30','9:30']},{c:1,ar:'أحب السفر إلى المدن القديمة',en:'I love travelling to old cities',tm:['أمس','Yesterday']},{c:0,ar:'شكرًا على الحديث اللطيف',en:'Thanks for the lovely chat',tm:['8:02','8:02']}];
+/* Same folding as the app and the server: أ/إ/آ→ا, ة→ه, ى→ي, ؤ→و, ئ→ي, no harakat/tatweel, Arabic digits → 0-9 */
+const FOLDM={'أ':'ا','إ':'ا','آ':'ا','ٱ':'ا','ة':'ه','ى':'ي','ؤ':'و','ئ':'ي'};
+const foldU=c=>{const u=c.charCodeAt(0);if(u===0x640||(u>=0x64B&&u<=0x652)||u===0x670)return '';if(FOLDM[c])return FOLDM[c];if(u>=0x660&&u<=0x669)return String(u-0x660);if(u>=0x6F0&&u<=0x6F9)return String(u-0x6F0);return c.toLowerCase()};
+const fold=s=>[...s].map(foldU).join('');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+const hl=(s,q)=>{const fq=fold(q.trim());let f='',o=[];[...s].forEach((c,i)=>{const x=foldU(c);f+=x;for(const _ of x)o.push(i)});const at=fq?f.indexOf(fq):-1;if(at<0)return esc(s);const ch=[...s];let e=o[at+fq.length-1]+1;while(e<ch.length&&foldU(ch[e])==='')e++;return esc(ch.slice(0,o[at]).join(''))+`<span class="hl">${esc(ch.slice(o[at],e).join(''))}</span>`+esc(ch.slice(e).join(''))};
+const searchRes=()=>{const q=S.q.trim();if(q.length<2)return _convRest;const fq=fold(q);const all=convs().filter(c=>c.state!=='unmatched'&&!isLocked(c));
+ const names=all.filter(c=>fold(convName(c)).includes(fq));
+ // message text: the demo's extra history, each chat's last message, and the open chat's messages
+ const pool=[...SEARCH_MSGS.map(m=>({txt:pick(m.ar,m.en),tm:pick(...m.tm),conv:all[m.c],me:false})),
+  ...all.map(c=>({txt:pick(c.last[0],c.last[1]),tm:(c.tm||'').includes('|')?c.tm.split('|')[AR()?0:1]:c.tm,conv:c,me:!!c.lastMe})),
+  ...S.chat.filter(m=>m.s!=='sys'&&m.x).map(m=>({txt:pick(m.x,m.xe||m.x),tm:m.tm,conv:all.find(c=>c.id===S.cid)||all[0],me:m.s==='me'}))];
+ const seen=new Set();const msgs=pool.filter(m=>m.conv&&m.txt&&fold(m.txt).includes(fq)&&!seen.has(m.conv.id+m.txt)&&seen.add(m.conv.id+m.txt)).slice(0,30);
+ return `<div class="sres">${names.length?`<div class="sec pad" style="margin-top:4px">${t('sConvs')}</div>${names.map(c=>convRow(c,{section:c.folder||'inbox'})).join('')}`:''}
+ ${msgs.length?`<div class="sec pad">${t('sMsgs')}</div>${msgs.map(m=>`<button class="crow" style="width:100%;border:0;background:none;text-align:start" data-act="openConv" data-a="${m.conv.id}"><span style="color:var(--p)">${I('chat',20)}</span><span style="flex:1;min-width:0"><div style="display:flex;gap:8px"><b style="flex:1">${convName(m.conv)}</b><span class="cap">${esc(m.tm||'')}</span></div><div class="bs mut" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.me?t('you')+': ':''}${hl(m.txt,q)}</div></span></button>`).join('')}`:''}
+ ${!names.length&&!msgs.length?`<p class="bm mut" style="text-align:center;padding:40px 20px">${tf('noRes',{q:esc(q)})}</p>`:''}</div>`};
+SC.convs=()=>{let h=_convs4();const k='<div class="sec pad" style="margin-top:0">';
+ // swap the search field first, THEN locate the list (the swap changes the length)
  h=h.replace(`<input class="inp" placeholder="${t('searchConv')}">`,`<input class="inp" data-in="q" value="${S.q.replace(/"/g,'&quot;')}" placeholder="${t('searchNM')}" autocomplete="off">`);
+ const i=h.indexOf(k);if(i<0)return h;
+ _convRest=h.slice(i,h.lastIndexOf('</div>'));
  return h.slice(0,i)+`<div id="cres">${searchRes()}</div></div>`};
 document.addEventListener('input',e=>{const el=e.target;if(el.dataset.in==='q'){S.q=el.value;const b=$('#cres');if(b)b.innerHTML=searchRes()}});
 if(!ACT.openConv)ACT.openConv=a=>{S.cid=a;go('chat')};
@@ -1828,6 +1839,21 @@ Object.assign(AACT,{integSel:a=>{S.integSel=a;S.banAsk=null;render()},icSet:a=>{
 GROUPS[1][1].splice(1,0,'acctype');GROUPS.push(['g8',['proinfo','wallet','payouts','pchats','prome','propolicy','review']]);
 ORDER=GROUPS.flatMap(g=>g[1]);
 
+
+/* ═══════════ v0.6 — Messages page fixes ═══════════
+   opening a chat clears its unread badge; sending updates the row (preview, "You:", time, top of the list);
+   a reply that arrives while you're elsewhere shows as unread; search is Arabic-aware (see searchRes). */
+const _openConv6=ACT.openConv;
+ACT.openConv=a=>{const c=convs().find(x=>x.id===a);if(c)c.unread=0;S.q='';_openConv6(a)};
+const touchConv=(id,txt,me,unread)=>{const L=convs(),i=L.findIndex(x=>x.id===id);if(i<0)return;const c=L[i];const n=new Date();
+ c.last=[txt,txt];c.lastMe=me;c.tm=n.getHours()+':'+String(n.getMinutes()).padStart(2,'0');c.idle=0;if(unread)c.unread=(c.unread||0)+1;
+ if(c.kind!=='consult'){L.splice(i,1);const k=L.findIndex(x=>x.kind!=='consult');L.splice(k<0?L.length:k,0,c)}};
+const _push6=pushMine;
+pushMine=function(v,phone){const id=S.cid||convs()[0].id; // same fallback as SC.chat
+ const photo=S.att;_push6(v,phone);
+ touchConv(id,v||(photo?'📷 '+t('photoMsg'):''),true,false);
+ setTimeout(()=>{const r=S.chat[S.chat.length-1];if(r&&r.s==='th')touchConv(id,pick(r.x,r.xe||r.x),false,S.screen!=='chat'||S.cid!==id);if(S.screen==='convs')render()},1700)};
+const _recSend6=ACT.recSend;ACT.recSend=()=>{_recSend6();touchConv(S.cid,'🎙 '+t('voiceMsg'),true,false)};
 try{const q=new URLSearchParams(location.hash.slice(1));if(q.get('lang'))S.lang=q.get('lang');if(SC[q.get('s')])S.screen=q.get('s');if(q.get('mode'))S.mode=q.get('mode');if(q.get('dev')&&DEVICES[q.get('dev')])S.dev=q.get('dev');if(q.get('view'))S.view=q.get('view');if(q.get('adm'))S.adm=q.get('adm');if(q.get('adev'))S.adev=q.get('adev')}catch(e){}
 render();
 </script>

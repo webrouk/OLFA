@@ -43,6 +43,7 @@ class _ChatComposerState extends ConsumerState<ChatComposer> {
   Duration _elapsed = Duration.zero;
   StreamSubscription<Duration>? _tick;
   bool _preparing = false;
+  bool _sending = false; // guards double taps while the phone check / send runs
 
   ChatController get _chat => ref.read(chatControllerProvider(widget.conversationId).notifier);
 
@@ -85,14 +86,26 @@ class _ChatComposerState extends ConsumerState<ChatComposer> {
 
   Future<void> _send() async {
     final text = _input.text;
-    if (text.trim().isEmpty && _photos.isEmpty) return;
-    if (!await _confirmPhone(text)) return;
-    final media = _photos.isEmpty ? null : OutgoingMedia.photos(List.of(_photos));
-    _input.clear();
-    setState(_photos.clear);
-    final err = await _chat.send(text, media: media);
-    widget.onSent();
-    if (err != null && mounted && err is! NetworkFailure) showToast(context, failureMessage(context, err));
+    if (_sending || (text.trim().isEmpty && _photos.isEmpty)) return;
+    _sending = true;
+    try {
+      if (!await _confirmPhone(text)) return;
+      final photos = List.of(_photos);
+      final media = photos.isEmpty ? null : OutgoingMedia.photos(photos);
+      _input.clear();
+      setState(_photos.clear);
+      final err = await _chat.send(text, media: media);
+      widget.onSent();
+      if (!mounted || err == null || err is NetworkFailure) return; // network: the bubble offers "retry"
+      if (err is QuotaExceededFailure && _input.text.isEmpty) {
+        // Nothing was sent: give the draft back so it isn't lost.
+        _input.text = text;
+        setState(() => _photos.addAll(photos));
+      }
+      showToast(context, failureMessage(context, err));
+    } finally {
+      _sending = false;
+    }
   }
 
   Future<void> _startVoice() async {
@@ -123,10 +136,12 @@ class _ChatComposerState extends ConsumerState<ChatComposer> {
   Future<void> _finishVoice() async {
     final rec = _rec;
     if (rec == null) return;
+    // Clear first: the 60 s auto-stop and a tap on "send" can arrive together.
+    setState(() => _rec = null);
     final clip = await rec.stop();
     await _tick?.cancel();
-    setState(() => _rec = null);
     await rec.dispose();
+    if (!mounted) return;
     if (clip == null) return;
     HapticFeedback.lightImpact();
     final err = await _chat.send('', media: OutgoingMedia.voice(clip));
@@ -139,9 +154,10 @@ class _ChatComposerState extends ConsumerState<ChatComposer> {
   }
 
   Future<void> _cancelVoice() async {
-    await _tick?.cancel();
-    await _rec?.dispose();
+    final rec = _rec;
     setState(() => _rec = null);
+    await _tick?.cancel();
+    await rec?.dispose();
   }
 
   @override

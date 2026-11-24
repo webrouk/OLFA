@@ -35,18 +35,31 @@ class ApiMessagingRepository implements MessagingRepository {
     s.onConnect((_) => _onConnection(true));
     s.onDisconnect((_) => _onConnection(false));
     s.on('message:new', (data) async {
-      final m = Map<String, dynamic>.from(data as Map);
-      final convId = m['conversationId'] as String;
-      _events.add(ChatEvent.newMessage(ApiMappers.message(Map<String, dynamic>.from(m['message'] as Map), convId, await _me())));
+      try {
+        final m = Map<String, dynamic>.from(data as Map);
+        final convId = m['conversationId'] as String;
+        final j = Map<String, dynamic>.from(m['message'] as Map)..putIfAbsent('receipts', () => const []);
+        _events.add(ChatEvent.newMessage(ApiMappers.message(j, convId, await _me())));
+      } catch (_) {
+        // malformed event or /me unavailable: the next page load catches up
+      }
     });
     s.on('typing', (data) {
       final m = Map<String, dynamic>.from(data as Map);
       _events.add(ChatEvent.typingChanged(m['conversationId'] as String, m['on'] == true));
     });
-    s.on('message:read', (data) {
-      final m = Map<String, dynamic>.from(data as Map);
-      // Read receipts apply to all my messages in the conversation up to `at`.
-      _events.add(ChatEvent.readReceipt(m['conversationId'] as String, '*'));
+    s.on('message:read', (data) async {
+      try {
+        final m = Map<String, dynamic>.from(data as Map);
+        final convId = m['conversationId'] as String;
+        // The server also sends my own reads to my devices: those clear my unread
+        // badges and must never mark my sent messages as "read".
+        if (m['readerId'] == await _me()) {
+          _events.add(ChatEvent.readByMeEvent(convId));
+        } else {
+          _events.add(ChatEvent.readReceipt(convId, '*')); // all my messages up to `at`
+        }
+      } catch (_) {}
     });
     s.on('conversation:moved', (data) {
       final m = Map<String, dynamic>.from(data as Map);
@@ -100,8 +113,6 @@ class ApiMessagingRepository implements MessagingRepository {
           if (before != null) 'before': before.toUtc().toIso8601String(),
         });
         final items = (r.data!['items'] as List).map((j) => ApiMappers.message(Map<String, dynamic>.from(j as Map), conversationId, me)).toList();
-        // Opening the thread marks it read.
-        unawaited(_api.dio.post<void>('/conversations/$conversationId/read').catchError((_) => null));
         return (items: items, hasMore: r.data!['hasMore'] as bool);
       });
 
@@ -169,6 +180,15 @@ class ApiMessagingRepository implements MessagingRepository {
       });
 
   @override
+  Future<void> markRead(String conversationId) async {
+    try {
+      await _api.dio.post<void>('/conversations/$conversationId/read');
+    } catch (_) {
+      // best-effort: the next open marks it read
+    }
+  }
+
+  @override
   void setTyping(String conversationId, bool on) => sendTyping(conversationId, on);
 
   @override
@@ -208,6 +228,8 @@ class DemoMessagingRepository implements MessagingRepository {
   @override
   Future<ChatMessage> send(String conversationId, String clientId, String body, {OutgoingMedia? media}) => _b.send(conversationId, clientId, body, media: media);
   @override
+  Future<void> markRead(String conversationId) => _b.markRead(conversationId);
+  @override
   void setTyping(String conversationId, bool on) {} // the demo peer types on its own
   @override
   Future<ChatSearchResult> search(String query) => _b.searchChats(query);
@@ -239,10 +261,19 @@ final messagingRepositoryProvider = Provider<MessagingRepository>((ref) {
 });
 
 /// Re-fetched whenever a conversation moves between sections (socket event).
+/// Kept fresh by realtime events: a new message (preview, order, unread),
+/// my own reads (badges) and section moves. Bursts are coalesced.
 final conversationIndexProvider = FutureProvider<ConversationIndex>((ref) {
   final repo = ref.watch(messagingRepositoryProvider);
-  final sub = repo.events().where((e) => e.movedTo != null).listen((_) => ref.invalidateSelf());
-  ref.onDispose(sub.cancel);
+  Timer? debounce;
+  final sub = repo.events().where((e) => e.movedTo != null || e.message != null || e.readByMe).listen((_) {
+    debounce?.cancel();
+    debounce = Timer(const Duration(milliseconds: 400), ref.invalidateSelf);
+  });
+  ref.onDispose(() {
+    debounce?.cancel();
+    sub.cancel();
+  });
   return repo.index();
 });
 

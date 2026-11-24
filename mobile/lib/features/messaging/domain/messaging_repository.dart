@@ -9,6 +9,10 @@ abstract interface class MessagingRepository {
   /// Idempotent on [clientId]: retrying never duplicates a message.
   Future<ChatMessage> send(String conversationId, String clientId, String body, {OutgoingMedia? media});
 
+  /// Marks the conversation read up to now (opening it, or a message arriving
+  /// while it is open). Best-effort: never throws.
+  Future<void> markRead(String conversationId);
+
   /// "Typing…" for the other person (best-effort, never throws).
   void setTyping(String conversationId, bool on);
 

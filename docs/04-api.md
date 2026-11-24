@@ -102,7 +102,9 @@ Messages consume quota per `chat.messagesConsumeCredit` (`start_only` default; o
 | POST | `/conversations/:id/attachments {kind: IMAGE\|VOICE, mime, bytes, durationMs?, waveform?}` | returns a presigned S3 POST (private bucket). Photos ≤ 3 per message, compressed on device (≤2048 px, q86, EXIF stripped) and re-sanitised by the `chat-image` worker job. Voice ≤ 60 s, AAC-LC. |
 | POST | `/conversations/:id/messages {clientMessageId, body?, attachmentIds?}` | `body` may be empty when attachments exist. DB trigger `olfa_attachment_guard` rejects >3 photos, more than one voice, or mixing (SQLSTATE P0020). |
 | GET | `/conversations/:id/voice-quota` | `{used, limit}` — entitlement `voice_notes_per_conversation`: Free 10, Plus 30, Premium unlimited (-1). |
-| GET | `/conversations/search?q=` | one field: matches partner names and message text (pg_trgm indexes); returns `{conversations[], messages[]}` with highlights. |
+| GET | `/conversations/search?q=` | one field: partner names and message text, photo captions included. Arabic-aware via `olfa_fold()` (أ/إ/آ = ا, ة = ه, ى = ي, ؤ = و, ئ = ي, harakat/tatweel ignored, Arabic digits = 0-9) on trigram expression indexes; returns `{conversations[], messages[]}`. |
+
+`GET /conversations` returns each row's `unread` (one grouped query) and `lastMessage {body, type, senderId, mine}`. `POST /conversations/:id/read` is called when a chat opens and when a message arrives while it is open; the `message:read` event goes to the reader's own devices (to clear badges — clients must not treat it as the peer reading) and to the peer only when both keep read receipts on. `typing` is only relayed where a message could be sent (not unmatched or closed chats).
 
 Messages carry `containsPhone` (server-side detection, Arabic-Indic digits included). Clients show a safety note to both sides; the sender is warned before sending. Attachment URLs are short-lived signed GETs. Read receipts respect the reader's privacy setting (reciprocal).
 

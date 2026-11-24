@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/errors/failure.dart';
 import '../../../shared/models/models.dart';
 import '../data/messaging_repository_impl.dart';
+import '../domain/messaging_repository.dart';
 
 class ChatState {
   const ChatState({this.messages = const [], this.hasMore = true, this.loadingMore = false, this.peerTyping = false});
@@ -32,35 +33,75 @@ String newClientId() {
   return '${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}';
 }
 
-class ChatController extends FamilyAsyncNotifier<ChatState, String> {
+/// One open conversation. Auto-disposed when the chat screen closes, so every
+/// open re-reads the server, marks the thread read and stops "typing…".
+class ChatController extends AutoDisposeFamilyAsyncNotifier<ChatState, String> {
   StreamSubscription<dynamic>? _sub;
+  Timer? _readDebounce;
+  Timer? _peerTypingOff;
+
+  /// Captured in [build]: `ref` can't be used from dispose callbacks.
+  late MessagingRepository _repo;
 
   @override
   Future<ChatState> build(String conversationId) async {
-    final repo = ref.watch(messagingRepositoryProvider);
+    final repo = _repo = ref.watch(messagingRepositoryProvider);
     _sub = repo.events().where((e) => e.conversationId == conversationId).listen((e) {
       final s = state.valueOrNull;
       if (s == null) return;
-      if (e.typing != null) state = AsyncData(s.copyWith(peerTyping: e.typing));
+      if (e.typing != null) {
+        _peerTypingOff?.cancel();
+        // If the "stopped typing" event is lost, the indicator still clears.
+        if (e.typing!) _peerTypingOff = Timer(const Duration(seconds: 8), () => _setPeerTyping(false));
+        _setPeerTyping(e.typing!);
+      }
       if (e.readClientId != null) {
-        state = AsyncData(s.copyWith(
+        final cur = state.valueOrNull!;
+        state = AsyncData(cur.copyWith(
           messages: [
-            for (final m in s.messages)
-              (m.fromMe && (e.readClientId == '*' || m.clientId == e.readClientId)) ? m.copyWith(status: MessageStatus.read) : m,
+            for (final m in cur.messages)
+              (m.fromMe && m.status != MessageStatus.failed && m.status != MessageStatus.sending && (e.readClientId == '*' || m.clientId == e.readClientId))
+                  ? m.copyWith(status: MessageStatus.read)
+                  : m,
           ],
         ));
       }
       final msg = e.message;
-      if (msg != null && !s.messages.any((m) => m.clientId == msg.clientId)) {
-        state = AsyncData(s.copyWith(messages: [...s.messages, msg], peerTyping: false));
+      if (msg != null) {
+        final cur = state.valueOrNull!;
+        final i = cur.messages.indexWhere((m) => m.clientId == msg.clientId);
+        if (i < 0) {
+          _peerTypingOff?.cancel();
+          state = AsyncData(cur.copyWith(messages: [...cur.messages, msg], peerTyping: msg.fromMe ? cur.peerTyping : false));
+        } else if (cur.messages[i].status == MessageStatus.sending && msg.fromMe) {
+          // my own message echoed back before the send call returned
+          final list = [...cur.messages];
+          list[i] = msg.attachments.isEmpty || msg.attachments.first.url != null ? msg : msg.copyWith(attachments: list[i].attachments);
+          state = AsyncData(cur.copyWith(messages: list));
+        }
+        // A message arriving while the chat is open is read straight away.
+        if (!msg.fromMe) _scheduleRead();
       }
     });
     ref.onDispose(() {
       _sub?.cancel();
+      _readDebounce?.cancel();
+      _peerTypingOff?.cancel();
       _stopTyping();
     });
     final page = await repo.page(conversationId);
+    unawaited(repo.markRead(conversationId)); // opening the thread reads it
     return ChatState(messages: page.items, hasMore: page.hasMore);
+  }
+
+  void _setPeerTyping(bool on) {
+    final s = state.valueOrNull;
+    if (s != null && s.peerTyping != on) state = AsyncData(s.copyWith(peerTyping: on));
+  }
+
+  void _scheduleRead() {
+    _readDebounce?.cancel();
+    _readDebounce = Timer(const Duration(milliseconds: 600), () => _repo.markRead(arg));
   }
 
   Future<void> loadOlder() async {
@@ -84,7 +125,7 @@ class ChatController extends FamilyAsyncNotifier<ChatState, String> {
   /// Called on every keystroke: tells the other person "typing…" and stops
   /// after 3 s without input (or when the field is cleared / sent).
   void onInput(String text) {
-    final repo = ref.read(messagingRepositoryProvider);
+    final repo = _repo;
     if (text.trim().isEmpty) return _stopTyping();
     if (!_typing) {
       _typing = true;
@@ -96,7 +137,7 @@ class ChatController extends FamilyAsyncNotifier<ChatState, String> {
 
   void _stopTyping() {
     _typingOff?.cancel();
-    if (_typing) ref.read(messagingRepositoryProvider).setTyping(arg, false);
+    if (_typing) _repo.setTyping(arg, false);
     _typing = false;
   }
 
@@ -126,6 +167,8 @@ class ChatController extends FamilyAsyncNotifier<ChatState, String> {
     );
     final without = s.messages.where((x) => x.clientId != clientId).toList();
     state = AsyncData(s.copyWith(messages: [...without, pending]));
+    // Leaving the chat mid-send must not drop the result (or its retry state).
+    final keep = ref.keepAlive();
     try {
       final saved = await ref.read(messagingRepositoryProvider).send(arg, clientId, text, media: m);
       _pendingMedia.remove(clientId);
@@ -143,6 +186,8 @@ class ChatController extends FamilyAsyncNotifier<ChatState, String> {
         _replace(clientId, pending.copyWith(status: MessageStatus.failed));
       }
       return e;
+    } finally {
+      keep.close();
     }
   }
 
@@ -153,7 +198,7 @@ class ChatController extends FamilyAsyncNotifier<ChatState, String> {
   }
 }
 
-final chatControllerProvider = AsyncNotifierProvider.family<ChatController, ChatState, String>(ChatController.new);
+final chatControllerProvider = AsyncNotifierProvider.autoDispose.family<ChatController, ChatState, String>(ChatController.new);
 
 /// Voice notes left in a conversation (Free 10 · Plus 30 · Premium unlimited).
 final voiceQuotaProvider = FutureProvider.autoDispose.family<({int limit, int? remaining}), String>(

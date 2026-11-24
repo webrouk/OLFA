@@ -6,6 +6,7 @@ import '../../core/errors/failure.dart';
 import '../../core/localization/locale_provider.dart';
 import '../models/models.dart';
 import '../utils/phone_detect.dart';
+import '../utils/text_fold.dart';
 
 /// In-memory stand-in for the OLFA REST API + realtime gateway, used during
 /// the UI phase (Phase 2). It enforces the same rules the real server will
@@ -279,6 +280,7 @@ class DemoBackend {
       section: st.section,
       lastMessage: msgs.isEmpty ? null : msgs.last.body,
       lastMessageKind: msgs.isEmpty ? MessageKind.text : msgs.last.kind,
+      lastFromMe: msgs.isNotEmpty && msgs.last.fromMe,
       lastAt: msgs.isEmpty ? m.createdAt : msgs.last.sentAt,
       unread: msgs.where((x) => !x.fromMe && x.status != MessageStatus.read).length,
       expiresAt: exp,
@@ -305,6 +307,8 @@ class DemoBackend {
         section: ConversationSection.consultation,
         counselor: CounselorChatInfo(consultationId: k.id, name: k.clientName ?? k.counselorName, status: k.status, scheduledAt: k.scheduledAt),
         lastMessage: msgs.isEmpty ? null : msgs.last.body,
+        lastMessageKind: msgs.isEmpty ? MessageKind.text : msgs.last.kind,
+        lastFromMe: msgs.isNotEmpty && msgs.last.fromMe,
         lastAt: msgs.isEmpty ? k.createdAt : msgs.last.sentAt,
         unread: msgs.where((x) => !x.fromMe && x.status != MessageStatus.read).length,
       ));
@@ -393,6 +397,20 @@ class DemoBackend {
         return (items: older.sublist(start), hasMore: start > 0);
       });
 
+  /// Opening a thread (or a message arriving while it is open) reads it.
+  Future<void> markRead(String convId) async {
+    final list = _messages[convId];
+    if (list == null) return;
+    var changed = false;
+    for (var i = 0; i < list.length; i++) {
+      if (!list[i].fromMe && list[i].status != MessageStatus.read) {
+        list[i] = list[i].copyWith(status: MessageStatus.read);
+        changed = true;
+      }
+    }
+    if (changed) _events.add(ChatEvent.readByMeEvent(convId));
+  }
+
   Future<ChatMessage> send(String convId, String clientId, String body, {OutgoingMedia? media}) => _call(() {
         final list = _messages.putIfAbsent(convId, () => []);
         if (_sentClientIds.contains(clientId)) {
@@ -428,6 +446,7 @@ class DemoBackend {
                   : [for (final f in media.files) ChatAttachment(kind: MessageKind.image, localPath: f.path, width: f.width, height: f.height)],
         );
         list.add(msg);
+        _events.add(ChatEvent.newMessage(msg)); // like the server's echo to my devices
         _scheduleReply(convId, msg);
         return msg;
       }, ms: 250);
@@ -443,16 +462,16 @@ class DemoBackend {
 
   /// Names and message text, like GET /conversations/search.
   Future<ChatSearchResult> searchChats(String q) => _call(() {
-        final t = q.trim().toLowerCase();
+        final t = q.trim();
         if (t.length < 2) return ChatSearchResult.empty;
         final ix = _index();
-        final ids = ix.visible.where((c) => c.title.toLowerCase().contains(t)).map((c) => c.id).toList();
+        final ids = ix.visible.where((c) => foldedContains(c.title, t)).map((c) => c.id).toList();
         final allowed = ix.visible.map((c) => c.id).toSet();
         final msgs = [
           for (final e in _messages.entries)
             if (allowed.contains(e.key))
               for (final m in e.value)
-                if (m.kind == MessageKind.text && m.body.toLowerCase().contains(t)) m,
+                if (m.body.isNotEmpty && foldedContains(m.body, t)) m, // text and photo captions, Arabic-aware
         ]..sort((a, b) => b.sentAt.compareTo(a.sentAt));
         return ChatSearchResult(conversationIds: ids, messages: msgs.take(30).toList());
       }, ms: 120);

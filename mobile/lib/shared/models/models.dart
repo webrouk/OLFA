@@ -542,6 +542,7 @@ class Conversation {
     this.section = ConversationSection.inbox,
     this.lastMessage,
     this.lastMessageKind = MessageKind.text,
+    this.lastFromMe = false,
     this.lastAt,
     this.unread = 0,
     this.expiresAt,
@@ -557,6 +558,9 @@ class Conversation {
   final ConversationSection section;
   final String? lastMessage;
   final MessageKind lastMessageKind;
+
+  /// The last message was sent by me (the row shows "You: …").
+  final bool lastFromMe;
   final DateTime? lastAt;
   final int unread;
 
@@ -869,10 +873,14 @@ class BlockedUser {
 
 /// Realtime chat event (WebSocket in production).
 class ChatEvent {
-  const ChatEvent._(this.conversationId, {this.message, this.typing, this.readClientId, this.movedTo});
+  const ChatEvent._(this.conversationId, {this.message, this.typing, this.readClientId, this.movedTo, this.readByMe = false});
   factory ChatEvent.newMessage(ChatMessage m) => ChatEvent._(m.conversationId, message: m);
   factory ChatEvent.typingChanged(String convId, bool on) => ChatEvent._(convId, typing: on);
+  /// The other person read my messages (only when both keep read receipts on).
   factory ChatEvent.readReceipt(String convId, String clientId) => ChatEvent._(convId, readClientId: clientId);
+
+  /// I read this conversation (here or on another device): unread badges clear.
+  factory ChatEvent.readByMeEvent(String convId) => ChatEvent._(convId, readByMe: true);
 
   /// Unmatch / re-match / archive moved the conversation to another section.
   factory ChatEvent.moved(String convId, ConversationSection to) => ChatEvent._(convId, movedTo: to);
@@ -882,6 +890,7 @@ class ChatEvent {
   final bool? typing;
   final String? readClientId;
   final ConversationSection? movedTo;
+  final bool readByMe;
 }
 
 

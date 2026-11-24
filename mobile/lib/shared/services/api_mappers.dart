@@ -161,6 +161,7 @@ abstract final class ApiMappers {
             ),
       lastMessage: last?['body'] as String?,
       lastMessageKind: switch (last?['type']) { 'IMAGE' => MessageKind.image, 'VOICE' => MessageKind.voice, _ => MessageKind.text },
+      lastFromMe: last?['mine'] == true,
       lastAt: _date(j['lastMessageAt']),
       unread: (j['unread'] as num?)?.toInt() ?? 0,
       expiresAt: _date(j['expiresAt']),

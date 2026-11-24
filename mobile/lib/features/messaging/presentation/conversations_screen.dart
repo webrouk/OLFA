@@ -13,6 +13,7 @@ import '../../../core/theme/olfa_typography.dart';
 import '../../../core/widgets/olfa_widgets.dart';
 import '../../../shared/components/labels.dart';
 import '../../../shared/models/models.dart';
+import '../../../shared/utils/text_fold.dart';
 import '../../settings/presentation/report_sheet.dart';
 import '../application/chat_controller.dart';
 import '../data/messaging_repository_impl.dart';
@@ -104,7 +105,7 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
                 final inbox = ix.section(ConversationSection.inbox);
                 final locked = ix.lockedIn(ConversationSection.inbox);
                 final typed = _search.text.trim();
-                if (typed.length >= 2) return _SearchResults(query: _q.isEmpty ? typed : _q, index: ix);
+                if (typed.length >= 2) return _SearchResults(query: _q.isEmpty ? typed : _q, typed: typed, index: ix);
                 final shown = [...consult, ...inbox];
                 if (consult.isEmpty && inbox.isEmpty && locked.isEmpty) {
                   return EmptyState(
@@ -299,11 +300,13 @@ class ConversationTile extends ConsumerWidget {
           RematchStatus.declined => l.rematchDeclined,
           _ => (c.unmatchedByMe ?? false) ? l.unmatchedByYou : l.unmatchedByThem(c.title),
         },
-      _ => switch (c.lastMessageKind) {
-          MessageKind.voice => '🎙 ${l.voiceMessageShort}',
-          MessageKind.image when (c.lastMessage ?? '').isEmpty => '📷 ${l.photoMessageShort}',
-          _ => c.lastMessage ?? (c.isConsultation ? l.consultationChatNote : l.saySalam),
-        },
+      _ => (c.lastFromMe && c.lastMessage != null ? '${l.you}: ' : '') +
+          switch (c.lastMessageKind) {
+            MessageKind.voice => '🎙 ${l.voiceMessageShort}',
+            MessageKind.image when (c.lastMessage ?? '').isEmpty => '📷 ${l.photoMessageShort}',
+            MessageKind.image => '📷 ${c.lastMessage}',
+            _ => (c.lastMessage ?? '').isEmpty ? (c.isConsultation ? l.consultationChatNote : l.saySalam) : c.lastMessage!,
+          },
     };
     return InkWell(
       onTap: () => context.push(Routes.chatWith(c.id)),
@@ -492,8 +495,13 @@ class OfflineBar extends StatelessWidget {
 /// locally and on the server) and messages whose text matches (server, all
 /// unlocked conversations, including archived ones).
 class _SearchResults extends ConsumerWidget {
-  const _SearchResults({required this.query, required this.index});
+  const _SearchResults({required this.query, required this.typed, required this.index});
+
+  /// Debounced query sent to the server.
   final String query;
+
+  /// What is in the field right now: names are filtered locally on every key.
+  final String typed;
   final ConversationIndex index;
 
   @override
@@ -501,14 +509,16 @@ class _SearchResults extends ConsumerWidget {
     final l = AppLocalizations.of(context);
     final t = context.type;
     final res = ref.watch(chatSearchProvider(query));
-    final q = query.toLowerCase();
     final byId = {for (final c in index.visible) c.id: c};
     final serverNames = res.valueOrNull?.conversationIds ?? const <String>[];
+    // Arabic-aware: "احمد" finds "أحمد", "ساره" finds "سارة" (same folding as the server).
+    final local = index.visible.where((c) => foldedContains(c.title, typed)).toList();
     final names = <Conversation>[
-      ...index.visible.where((c) => c.title.toLowerCase().contains(q)),
-      ...serverNames.map((id) => byId[id]).whereType<Conversation>().where((c) => !c.title.toLowerCase().contains(q)),
+      ...local,
+      ...serverNames.map((id) => byId[id]).whereType<Conversation>().where((c) => !local.contains(c)),
     ];
     final messages = res.valueOrNull?.messages ?? const <ChatMessage>[];
+    final waiting = res.isLoading && !res.hasValue;
     return ListView(
       padding: EdgeInsets.only(bottom: OlfaSize.navBarClearance(context)),
       children: [
@@ -541,8 +551,17 @@ class _SearchResults extends ConsumerWidget {
               ),
             ),
         ],
-        if (!res.isLoading && names.isEmpty && messages.isEmpty)
-          Padding(padding: const EdgeInsets.all(32), child: Text(l.noResultsFor(query), textAlign: TextAlign.center, style: t.bodyMedium.copyWith(color: OlfaColors.textMuted))),
+        if (res.hasError && messages.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+            child: InfoBanner(
+              icon: Icons.wifi_off_rounded,
+              text: failureMessage(context, res.error!),
+              trailing: TextButton(onPressed: () => ref.invalidate(chatSearchProvider(query)), child: Text(l.retry)),
+            ),
+          ),
+        if (!waiting && !res.hasError && names.isEmpty && messages.isEmpty)
+          Padding(padding: const EdgeInsets.all(32), child: Text(l.noResultsFor(typed), textAlign: TextAlign.center, style: t.bodyMedium.copyWith(color: OlfaColors.textMuted))),
       ],
     );
   }
@@ -556,16 +575,16 @@ class _Highlighted extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final base = context.type.bodySmall.copyWith(color: OlfaColors.textMuted);
-    final i = text.toLowerCase().indexOf(query.toLowerCase());
-    if (i < 0 || query.isEmpty) return Text(text, maxLines: 2, overflow: TextOverflow.ellipsis, style: base);
+    final m = foldedMatch(text, query); // indexes into the original text
+    if (m == null) return Text(text, maxLines: 2, overflow: TextOverflow.ellipsis, style: base);
     // keep the match visible in long messages
-    final start = i > 40 ? i - 30 : 0;
-    final pre = (start > 0 ? '…' : '') + text.substring(start, i);
+    final start = m.start > 40 ? m.start - 30 : 0;
+    final pre = (start > 0 ? '…' : '') + text.substring(start, m.start);
     return Text.rich(
       TextSpan(style: base, children: [
         TextSpan(text: pre),
-        TextSpan(text: text.substring(i, i + query.length), style: const TextStyle(color: OlfaColors.primary, fontWeight: FontWeight.w700)),
-        TextSpan(text: text.substring(i + query.length)),
+        TextSpan(text: text.substring(m.start, m.end), style: const TextStyle(color: OlfaColors.primary, fontWeight: FontWeight.w700)),
+        TextSpan(text: text.substring(m.end)),
       ]),
       maxLines: 2,
       overflow: TextOverflow.ellipsis,

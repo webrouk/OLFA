@@ -128,8 +128,18 @@ expect_error "a voice note needs a duration" 23514 "INSERT INTO message_attachme
 q "DELETE FROM messages WHERE id='$M'" >/dev/null
 check "deleted media is queued for storage clean-up" "$(q "SELECT count(*) FROM storage_garbage WHERE storage_key LIKE 'chat/$C3/%'")" "3"
 q "INSERT INTO messages (conversation_id, sender_id, client_message_id, body) VALUES ('$C3','$ME',gen_random_uuid(),'نلتقي في المكتبة العامة')" >/dev/null
-check "message search uses the trigram index" "$(q "SET enable_seqscan=off; EXPLAIN SELECT id FROM messages WHERE deleted_at IS NULL AND type='TEXT' AND body ILIKE '%المكتبة%'" | grep -c messages_body_trgm_idx)" "1"
-check "message search finds Arabic text" "$(q "SELECT count(*) FROM messages WHERE deleted_at IS NULL AND type='TEXT' AND body ILIKE '%المكتبة%'")" "1"
+q "INSERT INTO messages (conversation_id, sender_id, client_message_id, body, type) VALUES ('$C3','$PE',gen_random_uuid(),'صورة من رحلة الإسكندرية','IMAGE')" >/dev/null
+check "message search has a folded trigram index" "$(q "SELECT count(*) FROM pg_indexes WHERE indexname='messages_body_fold_trgm_idx' AND indexdef LIKE '%olfa_fold%gin_trgm_ops%'")" "1"
+check "message search finds Arabic text" "$(q "SELECT count(*) FROM messages WHERE deleted_at IS NULL AND type IN ('TEXT','IMAGE') AND body <> '' AND olfa_fold(body) LIKE '%المكتبه%'")" "1"
+check "…whatever the hamza / taa marbuta spelling (العامه, الاسكندريه)" "$(q "SELECT count(*) FROM messages WHERE deleted_at IS NULL AND type IN ('TEXT','IMAGE') AND body <> '' AND olfa_fold(body) LIKE ANY(ARRAY['%العامه%','%الاسكندريه%'])")" "2"
+check "…including photo captions" "$(q "SELECT count(*) FROM messages WHERE deleted_at IS NULL AND type IN ('TEXT','IMAGE') AND body <> '' AND olfa_fold(body) LIKE '%رحله%'")" "1"
+q "INSERT INTO user_profiles (user_id, display_name, birth_date, gender, country_code, city, marital_status, education, occupation, marriage_timeline, bio) VALUES ('$PE','أحمد','1990-01-01','MALE','AE','دبي','NEVER_MARRIED','BACHELOR','doctor','WITHIN_1_YEAR','b')" >/dev/null
+check "names match without hamza (احمد → أحمد)" "$(q "SELECT count(*) FROM user_profiles WHERE olfa_fold(display_name) LIKE '%احمد%'")" "1"
+# unread = the other person's messages after my last read (one grouped query for the list)
+UNREAD="SELECT coalesce((SELECT n FROM (SELECT m.conversation_id, count(*)::int n FROM messages m JOIN conversation_members cm ON cm.conversation_id=m.conversation_id AND cm.user_id='$ME' WHERE m.conversation_id='$C3' AND m.deleted_at IS NULL AND m.sender_id<>'$ME' AND (cm.last_read_at IS NULL OR m.created_at>cm.last_read_at) GROUP BY 1) x),0)"
+check "unread counts only the other person's messages" "$(q "$UNREAD")" "1"
+q "UPDATE conversation_members SET last_read_at=now() WHERE conversation_id='$C3' AND user_id='$ME'" >/dev/null
+check "…and clears after reading" "$(q "$UNREAD")" "0"
 expect_error "height must be realistic" 23514 "INSERT INTO user_profiles (user_id, display_name, birth_date, gender, country_code, city, marital_status, education, occupation, marriage_timeline, bio, height_cm) VALUES ('$ME','n','1990-01-01','MALE','AE','c','NEVER_MARRIED','BACHELOR','doctor','WITHIN_1_YEAR','b',300)"
 check "voice-note plans: Free 10 · Plus 30 · Premium unlimited" "$(q "SELECT string_agg(p.code || '=' || fe.value, ',' ORDER BY CASE p.code::text WHEN 'FREE' THEN 0 WHEN 'PLUS' THEN 1 ELSE 2 END) FROM feature_entitlements fe JOIN subscription_plans p ON p.id=fe.plan_id WHERE fe.feature_key='voice_notes_per_conversation'")" "FREE=10,PLUS=30,PREMIUM=-1"
 echo "conversation tests: $pass passed, $fail failed"; [ "$fail" -eq 0 ]

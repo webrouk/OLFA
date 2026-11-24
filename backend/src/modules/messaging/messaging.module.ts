@@ -9,6 +9,7 @@ import { BullModule, InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { randomUUID } from 'node:crypto';
 import { containsPhoneNumber } from '../../domain/phone-detect';
+import { foldedLikePattern } from '../../domain/text-fold';
 import { IntegrityService } from '../integrity/integrity.module';
 import { MEDIA_QUEUE, MediaModule } from '../media/media.module';
 import { StorageService } from '../media/storage.service';
@@ -161,17 +162,26 @@ export class MessagingService {
       },
     });
     const byId = new Map(convs.map((c) => [c.id, c]));
+    // Unread per conversation in one query (was one COUNT per row).
+    const unreadRows = await this.prisma.$queryRaw<{ conversation_id: string; n: number }[]>`
+      SELECT m.conversation_id, count(*)::int AS n
+      FROM messages m
+      JOIN conversation_members cm ON cm.conversation_id = m.conversation_id AND cm.user_id = ${userId}::uuid
+      WHERE m.conversation_id = ANY(${ids}::uuid[]) AND m.deleted_at IS NULL AND m.sender_id <> ${userId}::uuid
+        AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
+      GROUP BY m.conversation_id`;
+    const unreadOf = new Map(unreadRows.map((r) => [r.conversation_id, r.n]));
+    const last = (c: (typeof convs)[number]) => (c.messages[0] ? { ...c.messages[0], mine: c.messages[0].senderId === userId } : null);
     return Promise.all(
       rows.map(async (r) => {
         const base = { id: r.conversation_id, section: r.section, locked: r.locked, expiresAt: r.expires_at, expiringSoon: r.warn };
         const c = byId.get(r.conversation_id);
         if (r.locked || !c) return base;
-        const lastReadAt = c.members[0]?.lastReadAt;
-        const unread = await this.prisma.message.count({ where: { conversationId: c.id, senderId: { not: userId }, deletedAt: null, ...(lastReadAt ? { createdAt: { gt: lastReadAt } } : {}) } });
+        const unread = unreadOf.get(c.id) ?? 0;
         const rematch = c.rematch ? { status: c.rematch.status, byMe: c.rematch.requestedBy === userId } : null;
         if (c.kind === 'CONSULTATION') {
           const k = c.consultation!;
-          return { ...base, kind: c.kind, unread, lastMessage: c.messages[0] ?? null, lastMessageAt: c.lastMessageAt, consultation: { id: k.id, status: k.status, scheduledAt: k.scheduledAt, counselor: k.clientId === userId ? k.counselor : null } };
+          return { ...base, kind: c.kind, unread, lastMessage: last(c), lastMessageAt: c.lastMessageAt, consultation: { id: k.id, status: k.status, scheduledAt: k.scheduledAt, counselor: k.clientId === userId ? k.counselor : null } };
         }
         const m = c.match!;
         const peer = m.userAId === userId ? m.userB : m.userA;
@@ -180,7 +190,7 @@ export class MessagingService {
           ...base,
           kind: c.kind,
           unread,
-          lastMessage: c.messages[0] ?? null,
+          lastMessage: last(c),
           lastMessageAt: c.lastMessageAt,
           unmatchedAt: r.section === 'UNMATCHED' ? m.endedAt : null,
           unmatchedByMe: r.section === 'UNMATCHED' ? m.endedBy === userId : null,
@@ -236,7 +246,7 @@ export class MessagingService {
   }
 
   async page(userId: string, conversationId: string, q: PageQuery) {
-    await this.assertCanChat(userId, conversationId).catch((e) => {
+    const { peerId } = await this.assertCanChat(userId, conversationId).catch((e) => {
       if (e instanceof AppError && e.code === ErrorCode.BLOCKED) throw new AppError(ErrorCode.NOT_FOUND);
       throw e;
     });
@@ -252,7 +262,6 @@ export class MessagingService {
     });
     const hasMore = items.length > q.limit;
     // Read receipts are reciprocal: hide "read" on my messages unless both of us keep them on.
-    const { peerId } = await this.assertCanChat(userId, conversationId).catch(() => ({ peerId: '' }));
     const prefs = await this.prisma.userPrivacySettings.findMany({ where: { userId: { in: [userId, peerId] } } });
     const mine = privacyOf(prefs.find((p) => p.userId === userId));
     const theirs = privacyOf(prefs.find((p) => p.userId === peerId));
@@ -406,8 +415,7 @@ export class MessagingService {
    * unlocked conversations are searched.
    */
   async search(userId: string, q: string) {
-    const term = q.trim();
-    const like = `%${term.replace(/[\\%_]/g, (c) => '\\' + c)}%`;
+    const like = foldedLikePattern(q); // Arabic spelling variants match (أ/ا, ة/ه, ى/ي…)
     const rows = await this.listRows(userId);
     const allowed = rows.filter((r) => !r.locked).map((r) => r.conversation_id);
     if (allowed.length === 0) return { conversations: [], messages: [] };
@@ -420,12 +428,13 @@ export class MessagingService {
         LEFT JOIN consultations k ON k.id = c.consultation_id
         LEFT JOIN counselor_profiles cp ON cp.user_id = k.counselor_id
         WHERE cm.conversation_id = ANY(${allowed}::uuid[]) AND cm.user_id <> ${userId}::uuid
-          AND (p.display_name ILIKE ${like} OR cp.display_name ILIKE ${like})
+          AND (olfa_fold(p.display_name) LIKE ${like} OR olfa_fold(cp.display_name) LIKE ${like})
         LIMIT 20`,
       this.prisma.$queryRaw<{ id: string; conversation_id: string; body: string; created_at: Date; sender_id: string }[]>`
         SELECT m.id, m.conversation_id, m.body, m.created_at, m.sender_id
         FROM messages m
-        WHERE m.conversation_id = ANY(${allowed}::uuid[]) AND m.deleted_at IS NULL AND m.type = 'TEXT' AND m.body ILIKE ${like}
+        WHERE m.conversation_id = ANY(${allowed}::uuid[]) AND m.deleted_at IS NULL AND m.type IN ('TEXT', 'IMAGE') AND m.body <> ''
+          AND olfa_fold(m.body) LIKE ${like}
         ORDER BY m.created_at DESC
         LIMIT 30`,
     ]);
@@ -523,7 +532,8 @@ export class ChatGateway implements OnGatewayConnection {
     const u = this.user(socket);
     try {
       await this.limiter.hit(`ws:typing:${u.id}`, 120, 60);
-      const { peerId } = await this.messaging.assertCanChat(u.id, payload.conversationId);
+      // Only where a message could actually be sent (not unmatched / closed chats).
+      const { peerId } = await this.messaging.assertCanChat(u.id, payload.conversationId, { forWrite: true });
       this.server.to(`user:${peerId}`).emit('typing', { conversationId: payload.conversationId, userId: u.id, on: !!payload.on });
     } catch {
       /* ignore: typing is best-effort */
