@@ -21,4 +21,13 @@ void main() {
     expect(h.substring(r.start, r.end), 'مُحَمَّد');
     expect(foldedMatch('abc', 'x'), isNull);
   });
+
+  test('pick lists ignore French accents and use the right list separator', () {
+    expect(foldForPicker('Égypte').contains(foldForPicker('egypte')), isTrue);
+    expect(foldForPicker('Médecin'), 'medecin');
+    expect(foldForPicker('Cœur'), 'coeur');
+    expect(foldForPicker('الإمارات'), 'الامارات');
+    expect(listSeparator('ar'), '، ');
+    expect(listSeparator('fr'), ', ');
+  });
 }

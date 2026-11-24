@@ -1,0 +1,157 @@
+# key	français
+doctor	Médecin
+surgeon	Chirurgien
+dentist	Dentiste
+pharmacist	Pharmacien
+nurse	Infirmier / infirmière
+midwife	Sage-femme
+physiotherapist	Kinésithérapeute
+psychologist	Psychologue
+psychiatrist	Psychiatre
+nutritionist	Nutritionniste
+lab_technician	Technicien de laboratoire
+radiologist	Manipulateur en radiologie
+optometrist	Optométriste
+veterinarian	Vétérinaire
+paramedic	Ambulancier
+speech_therapist	Orthophoniste
+occupational_therapist	Ergothérapeute
+healthcare_admin	Administrateur de santé
+software_engineer	Ingénieur logiciel
+web_developer	Développeur web
+mobile_developer	Développeur mobile
+data_scientist	Data scientist
+data_analyst	Analyste de données
+ai_engineer	Ingénieur IA / ML
+cybersecurity	Spécialiste en cybersécurité
+it_support	Technicien support informatique
+network_engineer	Ingénieur réseaux
+systems_admin	Administrateur systèmes
+devops	Ingénieur DevOps / cloud
+product_manager	Chef de produit
+ux_designer	Designer UX / UI
+qa_engineer	Ingénieur qualité logicielle
+game_developer	Développeur de jeux vidéo
+civil_engineer	Ingénieur civil
+mechanical_engineer	Ingénieur mécanique
+electrical_engineer	Ingénieur électricien
+chemical_engineer	Ingénieur chimiste
+petroleum_engineer	Ingénieur pétrolier
+industrial_engineer	Ingénieur industriel
+aerospace_engineer	Ingénieur aérospatial
+biomedical_engineer	Ingénieur biomédical
+environmental_engineer	Ingénieur en environnement
+architect	Architecte
+interior_designer	Architecte d’intérieur
+surveyor	Géomètre
+urban_planner	Urbaniste
+technician	Technicien
+teacher	Enseignant
+kindergarten_teacher	Enseignant en maternelle
+special_ed_teacher	Enseignant spécialisé
+professor	Professeur d’université
+lecturer	Maître de conférences
+researcher	Chercheur
+school_principal	Directeur d’école
+education_counselor	Conseiller d’orientation
+tutor	Professeur particulier
+librarian	Bibliothécaire
+quran_teacher	Enseignant du Coran
+student	Étudiant
+accountant	Comptable
+auditor	Auditeur
+financial_analyst	Analyste financier
+banker	Banquier
+investment_manager	Gestionnaire d’investissements
+actuary	Actuaire
+tax_advisor	Conseiller fiscal
+insurance	Spécialiste en assurance
+business_owner	Chef d’entreprise
+entrepreneur	Entrepreneur
+manager	Responsable / manager
+executive	Cadre dirigeant
+project_manager	Chef de projet
+consultant	Consultant en management
+hr	Ressources humaines
+recruiter	Recruteur
+marketing	Spécialiste marketing
+digital_marketing	Marketing digital
+sales	Commercial
+sales_manager	Directeur commercial
+customer_service	Service client
+administrative	Agent administratif
+secretary	Secrétaire / assistant de direction
+procurement	Acheteur
+supply_chain	Supply chain / logistique
+real_estate	Agent immobilier
+economist	Économiste
+lawyer	Avocat
+judge	Juge
+legal_advisor	Juriste
+notary	Notaire
+paralegal	Assistant juridique
+diplomat	Diplomate
+civil_servant	Fonctionnaire
+military	Officier militaire
+police	Policier
+firefighter	Pompier
+customs	Agent des douanes
+imam	Imam / prédicateur
+islamic_scholar	Savant en sciences islamiques
+journalist	Journaliste
+editor	Rédacteur / éditeur
+writer	Écrivain / auteur
+translator	Traducteur / interprète
+photographer	Photographe
+videographer	Vidéaste / réalisateur
+graphic_designer	Graphiste
+artist	Artiste
+musician	Musicien
+actor	Acteur
+content_creator	Créateur de contenu
+public_relations	Relations publiques
+broadcaster	Animateur TV / radio
+fashion_designer	Styliste de mode
+chef	Chef cuisinier
+baker	Boulanger
+hotel_manager	Directeur d’hôtel
+tourism	Spécialiste du tourisme
+flight_attendant	Personnel navigant
+event_planner	Organisateur d’événements
+pilot	Pilote
+ship_captain	Capitaine / officier de marine marchande
+driver	Chauffeur
+air_traffic	Contrôleur aérien
+mechanic	Mécanicien
+electrician	Électricien
+plumber	Plombier
+carpenter	Menuisier
+welder	Soudeur
+construction	Ouvrier du bâtiment
+contractor	Entrepreneur en bâtiment
+tailor	Tailleur / couturier
+barber	Barbier / coiffeur
+beautician	Esthéticien
+craftsman	Artisan
+farmer	Agriculteur
+agricultural_engineer	Ingénieur agronome
+fisherman	Pêcheur
+geologist	Géologue
+chemist	Chimiste
+physicist	Physicien
+biologist	Biologiste
+mathematician	Mathématicien
+statistician	Statisticien
+social_worker	Travailleur social
+family_counselor	Conseiller familial
+nonprofit	Associatif / ONG
+coach	Entraîneur sportif
+athlete	Athlète
+fitness_trainer	Coach sportif personnel
+retail	Employé de commerce
+merchant	Commerçant / négociant
+freelancer	Indépendant / freelance
+homemaker	Au foyer
+retired	Retraité
+job_seeker	En recherche d’emploi
+other	Autre

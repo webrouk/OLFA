@@ -2,6 +2,15 @@
 
 Base URL `https://<host>/v1`. JSON only. Interactive OpenAPI/Swagger at `/docs` (non-production), raw spec at `/docs/openapi.json`.
 
+## Languages
+
+The app and the API speak Arabic (`ar`), English (`en`) and French (`fr`). The app opens in the
+phone's language when it is one of these (any region) and in English otherwise; the user can
+override it in Settings. The app sends that language as `Accept-Language` on every request.
+The server applies the same rule (`src/domain/locale.ts`): SMS codes and new accounts take the
+request's language, push notifications use the saved `users.locale` (`PUT /me/locale {locale: ar|en|fr}`),
+and anything unknown falls back to English.
+
 ## Conventions
 
 - **Auth**: `Authorization: Bearer <accessToken>` (JWT, 15 min). Refresh with `POST /auth/refresh` — tokens rotate; replaying an old refresh token revokes the whole device family.

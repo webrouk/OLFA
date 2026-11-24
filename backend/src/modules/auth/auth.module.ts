@@ -6,6 +6,7 @@ import { AllowPending, AuthUser, CurrentUser, OlfaRequest, Public, RateLimit, Re
 import { OtpChallengeResponse, PushTokenDto, RefreshDto, RequestOtpDto, TokensResponse, VerifyOtpDto } from './auth.dto';
 import { AuthService } from './auth.service';
 import { LogSmsProvider, SMS_PROVIDER, TwilioSmsProvider } from './sms.provider';
+import { pickLocale } from '../../domain/locale';
 
 @ApiTags('auth')
 @Controller('v1/auth')
@@ -17,8 +18,8 @@ export class AuthController {
   @HttpCode(200)
   @ApiOkResponse({ type: OtpChallengeResponse })
   request(@Body() dto: RequestOtpDto, @Req() req: OlfaRequest) {
-    const lang = (req.headers['accept-language'] ?? 'ar').toString().startsWith('en') ? 'en' : 'ar';
-    return this.auth.requestOtp(dto, req.ipHash, lang);
+    // SMS in the phone's language: Arabic, English or French; anything else → English.
+    return this.auth.requestOtp(dto, req.ipHash, pickLocale(req.headers['accept-language']));
   }
 
   @Public()
@@ -27,7 +28,7 @@ export class AuthController {
   @HttpCode(200)
   @ApiOkResponse({ type: TokensResponse })
   verify(@Body() dto: VerifyOtpDto, @Req() req: OlfaRequest) {
-    return this.auth.verifyOtp(dto, { ipHash: req.ipHash, userAgent: req.headers['user-agent'] });
+    return this.auth.verifyOtp(dto, { ipHash: req.ipHash, userAgent: req.headers['user-agent'], locale: pickLocale(req.headers['accept-language']) });
   }
 
   @Public()

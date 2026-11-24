@@ -33,28 +33,29 @@ T _enum<T extends Enum>(List<T> values, Object? name, T fallback) =>
     values.firstWhere((e) => e.name == name, orElse: () => fallback);
 
 class Interest {
-  const Interest(this.key, this.ar, this.en, {this.basic = true});
+  const Interest(this.key, this.ar, this.en, this.fr, {this.basic = true});
   final String key;
   final String ar;
   final String en;
+  final String fr;
   final bool basic; // usable in free filters
 
-  String label(String lang) => lang == 'ar' ? ar : en;
+  String label(String lang) => switch (lang) { 'ar' => ar, 'fr' => fr, _ => en };
 }
 
 const kInterests = <Interest>[
-  Interest('reading', 'القراءة', 'Reading'),
-  Interest('travel', 'السفر', 'Travel'),
-  Interest('cooking', 'الطبخ', 'Cooking'),
-  Interest('fitness', 'الرياضة', 'Fitness'),
-  Interest('nature', 'الطبيعة', 'Nature'),
-  Interest('volunteering', 'العمل التطوعي', 'Volunteering', basic: false),
-  Interest('technology', 'التقنية', 'Technology', basic: false),
-  Interest('languages', 'اللغات', 'Languages', basic: false),
-  Interest('arts', 'الفنون', 'Arts', basic: false),
-  Interest('photography', 'التصوير', 'Photography', basic: false),
-  Interest('family', 'الأسرة', 'Family time', basic: false),
-  Interest('hiking', 'المشي', 'Hiking', basic: false),
+  Interest('reading', 'القراءة', 'Reading', 'Lecture'),
+  Interest('travel', 'السفر', 'Travel', 'Voyages'),
+  Interest('cooking', 'الطبخ', 'Cooking', 'Cuisine'),
+  Interest('fitness', 'الرياضة', 'Fitness', 'Sport'),
+  Interest('nature', 'الطبيعة', 'Nature', 'Nature'),
+  Interest('volunteering', 'العمل التطوعي', 'Volunteering', 'Bénévolat', basic: false),
+  Interest('technology', 'التقنية', 'Technology', 'Technologie', basic: false),
+  Interest('languages', 'اللغات', 'Languages', 'Langues', basic: false),
+  Interest('arts', 'الفنون', 'Arts', 'Arts', basic: false),
+  Interest('photography', 'التصوير', 'Photography', 'Photographie', basic: false),
+  Interest('family', 'الأسرة', 'Family time', 'Moments en famille', basic: false),
+  Interest('hiking', 'المشي', 'Hiking', 'Randonnée', basic: false),
 ];
 
 Interest? interestByKey(String key) {

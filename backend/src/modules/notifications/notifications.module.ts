@@ -6,34 +6,35 @@ import { getMessaging } from 'firebase-admin/messaging';
 import { ENV, Env } from '../../config/env';
 import { AllowPending, AuthUser, CurrentUser } from '../../common/http';
 import { PrismaService } from '../../common/infra';
+import { AppLocaleCode, asLocale } from '../../domain/locale';
 
 /** Server-rendered push texts (the in-app list is rendered client-side from keys). */
-const PUSH_TEXT: Record<string, { ar: [string, string]; en: [string, string] }> = {
-  'push.new_match': { ar: ['توافق جديد', 'أعجب كلٌّ منكما بالآخر — ابدأ المحادثة'], en: ["It's a match", 'You both liked each other — say hello'] },
-  'push.new_like': { ar: ['إعجاب جديد', 'أعجب شخص بملفك'], en: ['New like', 'Someone liked your profile'] },
-  'push.new_message': { ar: ['رسالة جديدة', 'لديك رسالة جديدة'], en: ['New message', 'You have a new message'] },
-  'push.new_photo': { ar: ['صورة جديدة', 'أرسل إليك صورة'], en: ['New photo', 'You received a photo'] },
-  'push.new_voice': { ar: ['رسالة صوتية', 'وصلتك رسالة صوتية'], en: ['Voice message', 'You received a voice message'] },
-  'push.verification_approved': { ar: ['تم اعتماد ملفك', 'ملفك ظاهر الآن لمن يناسبك'], en: ['Profile approved', 'Your profile is now live'] },
-  'push.verification_rejected': { ar: ['نحتاج بعض التعديلات', 'راجع سبب الرفض وأعد الإرسال'], en: ['Changes needed', 'See why and resubmit'] },
-  'push.new_compliment': { ar: ['رسالة إطراء', 'وصلك إطراء مع إعجاب — اطّلع عليه'], en: ['A compliment for you', 'Someone liked you and left a compliment'] },
-  'push.rematch_request': { ar: ['طلب إعادة تطابق', 'يرغب شخص في إعادة التطابق معك'], en: ['Re-match request', 'Someone would like to match again'] },
-  'push.rematch_accepted': { ar: ['تمت إعادة التطابق', 'المحادثة مفتوحة من جديد'], en: ['Matched again', 'Your chat is open again'] },
-  'push.conversation_expiring': { ar: ['محادثة ستُحذف قريبًا', 'أرسل رسالة لتبقى المحادثة'], en: ['A chat expires soon', 'Send a message to keep it'] },
-  'push.consultation_request': { ar: ['طلب استشارة مدفوع', 'لديك طلب جديد بانتظار التأكيد'], en: ['Paid consultation request', 'A new request is waiting for you'] },
-  'push.consultation_confirmed': { ar: ['تم تأكيد استشارتك', 'يمكنك الآن التحدث مع الاستشاري'], en: ['Consultation confirmed', 'You can now chat with your counselor'] },
-  'push.consultation_declined': { ar: ['اعتذر الاستشاري', 'سيُسترد المبلغ كاملًا'], en: ['Counselor declined', 'You will be refunded in full'] },
-  'push.consultation_completed': { ar: ['اكتملت الجلسة', 'شاركنا تقييمك للاستشاري'], en: ['Session completed', 'Rate your counselor'] },
-  'push.counselor_approved': { ar: ['تم اعتماد ملفك كاستشاري', 'أضف أسعارك لاستقبال الطلبات'], en: ['Counselor profile approved', 'Add your prices to receive requests'] },
-  'push.counselor_rejected': { ar: ['طلب الاستشاري', 'راجع ملاحظات المراجعة'], en: ['Counselor application', 'See the review notes'] },
-  'push.review_required': { ar: ['كيف كانت جلستك؟', 'أجب عن أسئلة التقييم القصيرة — تقييمك يحمي المجتمع'], en: ['How was your session?', 'Answer the short review — it keeps the community safe'] },
-  'push.integrity_case': { ar: ['مراجعة التزام بسياسة المختصين', 'نحتاج ردّك خلال 7 أيام — افتح لوحة المستشار'], en: ['Professional policy review', 'Please respond within 7 days — open your desk'] },
-  'push.integrity_decision': { ar: ['قرار المراجعة', 'اطّلع على نتيجة المراجعة في لوحة المستشار'], en: ['Review decision', 'See the outcome in your desk'] },
-  'push.withdrawal_paid': { ar: ['تم تحويل أرباحك', 'أُرسل طلب السحب إلى حسابك'], en: ['Payout sent', 'Your withdrawal was sent to your account'] },
-  'push.withdrawal_rejected': { ar: ['تعذّر تنفيذ طلب السحب', 'أُعيد المبلغ إلى محفظتك — راجع التفاصيل'], en: ['Withdrawal not completed', 'The amount is back in your wallet — see details'] },
-  'push.earning_available': { ar: ['أرباح متاحة للسحب', 'انتهت فترة الانتظار وأصبحت أرباحك متاحة'], en: ['Earnings available', 'Your earnings are now available to withdraw'] },
-  'push.subscription_billing_issue': { ar: ['مشكلة في تجديد الاشتراك', 'حدّث طريقة الدفع في المتجر لتستمر مزاياك'], en: ['Subscription payment issue', 'Update your payment method in the store to keep your plan'] },
-  'push.subscription_expired': { ar: ['انتهى اشتراكك', 'يمكنك التجديد في أي وقت من صفحة الخطط'], en: ['Your subscription ended', 'Renew any time from Plans'] },
+const PUSH_TEXT: Record<string, Record<AppLocaleCode, [string, string]>> = {
+  'push.new_match': { ar: ['توافق جديد', 'أعجب كلٌّ منكما بالآخر — ابدأ المحادثة'], en: ["It's a match", 'You both liked each other — say hello'], fr: ['C’est réciproque', 'Vous vous plaisez mutuellement — dites bonjour'] },
+  'push.new_like': { ar: ['إعجاب جديد', 'أعجب شخص بملفك'], en: ['New like', 'Someone liked your profile'], fr: ['Nouveau j’aime', 'Quelqu’un a aimé votre profil'] },
+  'push.new_message': { ar: ['رسالة جديدة', 'لديك رسالة جديدة'], en: ['New message', 'You have a new message'], fr: ['Nouveau message', 'Vous avez un nouveau message'] },
+  'push.new_photo': { ar: ['صورة جديدة', 'أرسل إليك صورة'], en: ['New photo', 'You received a photo'], fr: ['Nouvelle photo', 'Vous avez reçu une photo'] },
+  'push.new_voice': { ar: ['رسالة صوتية', 'وصلتك رسالة صوتية'], en: ['Voice message', 'You received a voice message'], fr: ['Message vocal', 'Vous avez reçu un message vocal'] },
+  'push.verification_approved': { ar: ['تم اعتماد ملفك', 'ملفك ظاهر الآن لمن يناسبك'], en: ['Profile approved', 'Your profile is now live'], fr: ['Profil approuvé', 'Votre profil est maintenant en ligne'] },
+  'push.verification_rejected': { ar: ['نحتاج بعض التعديلات', 'راجع سبب الرفض وأعد الإرسال'], en: ['Changes needed', 'See why and resubmit'], fr: ['Modifications nécessaires', 'Voyez pourquoi et renvoyez-le'] },
+  'push.new_compliment': { ar: ['رسالة إطراء', 'وصلك إطراء مع إعجاب — اطّلع عليه'], en: ['A compliment for you', 'Someone liked you and left a compliment'], fr: ['Un compliment pour vous', 'Quelqu’un vous a aimé(e) et a laissé un compliment'] },
+  'push.rematch_request': { ar: ['طلب إعادة تطابق', 'يرغب شخص في إعادة التطابق معك'], en: ['Re-match request', 'Someone would like to match again'], fr: ['Demande de reprise', 'Quelqu’un souhaite renouer l’affinité'] },
+  'push.rematch_accepted': { ar: ['تمت إعادة التطابق', 'المحادثة مفتوحة من جديد'], en: ['Matched again', 'Your chat is open again'], fr: ['Affinité rétablie', 'Votre conversation est de nouveau ouverte'] },
+  'push.conversation_expiring': { ar: ['محادثة ستُحذف قريبًا', 'أرسل رسالة لتبقى المحادثة'], en: ['A chat expires soon', 'Send a message to keep it'], fr: ['Une conversation expire bientôt', 'Envoyez un message pour la garder'] },
+  'push.consultation_request': { ar: ['طلب استشارة مدفوع', 'لديك طلب جديد بانتظار التأكيد'], en: ['Paid consultation request', 'A new request is waiting for you'], fr: ['Demande de consultation payée', 'Une nouvelle demande vous attend'] },
+  'push.consultation_confirmed': { ar: ['تم تأكيد استشارتك', 'يمكنك الآن التحدث مع الاستشاري'], en: ['Consultation confirmed', 'You can now chat with your counselor'], fr: ['Consultation confirmée', 'Vous pouvez maintenant échanger avec votre conseiller'] },
+  'push.consultation_declined': { ar: ['اعتذر الاستشاري', 'سيُسترد المبلغ كاملًا'], en: ['Counselor declined', 'You will be refunded in full'], fr: ['Le conseiller a refusé', 'Vous serez remboursé(e) intégralement'] },
+  'push.consultation_completed': { ar: ['اكتملت الجلسة', 'شاركنا تقييمك للاستشاري'], en: ['Session completed', 'Rate your counselor'], fr: ['Séance terminée', 'Évaluez votre conseiller'] },
+  'push.counselor_approved': { ar: ['تم اعتماد ملفك كاستشاري', 'أضف أسعارك لاستقبال الطلبات'], en: ['Counselor profile approved', 'Add your prices to receive requests'], fr: ['Profil de conseiller approuvé', 'Ajoutez vos tarifs pour recevoir des demandes'] },
+  'push.counselor_rejected': { ar: ['طلب الاستشاري', 'راجع ملاحظات المراجعة'], en: ['Counselor application', 'See the review notes'], fr: ['Candidature de conseiller', 'Consultez les remarques de l’examen'] },
+  'push.review_required': { ar: ['كيف كانت جلستك؟', 'أجب عن أسئلة التقييم القصيرة — تقييمك يحمي المجتمع'], en: ['How was your session?', 'Answer the short review — it keeps the community safe'], fr: ['Comment s’est passée votre séance ?', 'Répondez au court questionnaire — il protège la communauté'] },
+  'push.integrity_case': { ar: ['مراجعة التزام بسياسة المختصين', 'نحتاج ردّك خلال 7 أيام — افتح لوحة المستشار'], en: ['Professional policy review', 'Please respond within 7 days — open your desk'], fr: ['Examen de conformité professionnelle', 'Merci de répondre sous 7 jours — ouvrez votre bureau'] },
+  'push.integrity_decision': { ar: ['قرار المراجعة', 'اطّلع على نتيجة المراجعة في لوحة المستشار'], en: ['Review decision', 'See the outcome in your desk'], fr: ['Décision de l’examen', 'Consultez le résultat dans votre bureau'] },
+  'push.withdrawal_paid': { ar: ['تم تحويل أرباحك', 'أُرسل طلب السحب إلى حسابك'], en: ['Payout sent', 'Your withdrawal was sent to your account'], fr: ['Versement envoyé', 'Votre retrait a été envoyé sur votre compte'] },
+  'push.withdrawal_rejected': { ar: ['تعذّر تنفيذ طلب السحب', 'أُعيد المبلغ إلى محفظتك — راجع التفاصيل'], en: ['Withdrawal not completed', 'The amount is back in your wallet — see details'], fr: ['Retrait non effectué', 'Le montant est de retour dans votre portefeuille — voir les détails'] },
+  'push.earning_available': { ar: ['أرباح متاحة للسحب', 'انتهت فترة الانتظار وأصبحت أرباحك متاحة'], en: ['Earnings available', 'Your earnings are now available to withdraw'], fr: ['Gains disponibles', 'Vos gains peuvent maintenant être retirés'] },
+  'push.subscription_billing_issue': { ar: ['مشكلة في تجديد الاشتراك', 'حدّث طريقة الدفع في المتجر لتستمر مزاياك'], en: ['Subscription payment issue', 'Update your payment method in the store to keep your plan'], fr: ['Problème de paiement de l’abonnement', 'Mettez à jour votre moyen de paiement dans la boutique pour garder votre offre'] },
+  'push.subscription_expired': { ar: ['انتهى اشتراكك', 'يمكنك التجديد في أي وقت من صفحة الخطط'], en: ['Your subscription ended', 'Renew any time from Plans'], fr: ['Votre abonnement a pris fin', 'Renouvelez à tout moment depuis les Offres'] },
 };
 
 /** Message sounds vs. everything else; a match / compliment gets the warm chime. */
@@ -73,7 +74,7 @@ export class NotificationsService implements OnModuleInit {
       this.prisma.userSession.findMany({ where: { userId, revokedAt: null, fcmToken: { not: null } }, select: { id: true, fcmToken: true } }),
     ]);
     if (sessions.length === 0) return;
-    const text = PUSH_TEXT[key]?.[user?.locale ?? 'ar'];
+    const text = PUSH_TEXT[key]?.[asLocale(user?.locale)];
     const res = await getMessaging(this.fcm).sendEachForMulticast({
       tokens: sessions.map((s) => s.fcmToken!),
       notification: text ? { title: text[0], body: text[1] } : undefined,

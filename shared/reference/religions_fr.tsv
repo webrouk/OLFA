@@ -1,0 +1,21 @@
+# key (religion or religion.sect)	français
+islam	Islam
+islam.sunni	Sunnite
+islam.shia	Chiite
+islam.ibadi	Ibadite
+islam.other	Autre / je préfère ne pas préciser
+christianity	Christianisme
+christianity.coptic_orthodox	Copte orthodoxe
+christianity.greek_orthodox	Grec orthodoxe
+christianity.syriac_orthodox	Syriaque orthodoxe
+christianity.armenian_orthodox	Arménien apostolique
+christianity.catholic	Catholique
+christianity.maronite	Maronite
+christianity.melkite	Grec-catholique melkite
+christianity.protestant	Protestant
+christianity.evangelical	Évangélique
+christianity.other	Autre / je préfère ne pas préciser
+druze	Druze
+judaism	Judaïsme
+other	Autre religion
+undisclosed	Je préfère ne pas le dire

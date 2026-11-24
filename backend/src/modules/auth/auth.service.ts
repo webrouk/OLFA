@@ -9,6 +9,7 @@ import { isValidTimeZone } from '../../domain/quota-period';
 import { RequestOtpDto, VerifyOtpDto } from './auth.dto';
 import { SMS_PROVIDER, SmsProvider } from './sms.provider';
 import { BansService } from '../integrity/integrity.module';
+import { AppLocaleCode } from '../../domain/locale';
 
 @Injectable()
 export class AuthService {
@@ -24,7 +25,7 @@ export class AuthService {
   ) {}
 
   /** Steps 1–3: validate phone, apply abuse limits, store a hashed OTP, send SMS. */
-  async requestOtp(dto: RequestOtpDto, ipHash: string, locale: 'ar' | 'en' = 'ar') {
+  async requestOtp(dto: RequestOtpDto, ipHash: string, locale: AppLocaleCode = 'en') {
     const phone = toE164(dto.dialCode, dto.nationalNumber);
     if (!phone) throw new AppError(ErrorCode.VALIDATION, 'Invalid phone number', { field: 'nationalNumber' });
     // A permanently banned number gets no code (and no SMS cost).
@@ -56,13 +57,17 @@ export class AuthService {
         expiresAt: new Date(Date.now() + ttl * 1000),
       },
     });
-    const body = locale === 'ar' ? `رمز التحقق في أُلْفَة: ${code}. لا تشاركه مع أحد.` : `Your OLFA code is ${code}. Do not share it.`;
+    const body = {
+      ar: `رمز التحقق في أُلْفَة: ${code}. لا تشاركه مع أحد.`,
+      en: `Your OLFA code is ${code}. Do not share it.`,
+      fr: `Votre code OLFA est ${code}. Ne le partagez avec personne.`,
+    }[locale];
     await this.sms.send(phone, body);
     return { challengeId: challenge.id, expiresInSeconds: ttl, resendAfterSeconds: cooldown };
   }
 
   /** Steps 4–6: verify, create the account if new, open a device session. */
-  async verifyOtp(dto: VerifyOtpDto, meta: { ipHash: string; userAgent?: string }) {
+  async verifyOtp(dto: VerifyOtpDto, meta: { ipHash: string; userAgent?: string; locale?: AppLocaleCode }) {
     const c = await this.prisma.otpChallenge.findUnique({ where: { id: dto.challengeId } });
     if (!c || c.deviceId !== dto.deviceId) throw new AppError(ErrorCode.OTP_INVALID);
 
@@ -106,7 +111,8 @@ export class AuthService {
           phoneE164: c.phoneE164,
           phoneCountry: country,
           phoneVerifiedAt: now,
-          locale: dto.locale ?? 'ar',
+          // the app's language (it follows the phone: ar / en / fr, otherwise en)
+          locale: dto.locale ?? meta.locale ?? 'en',
           timezone: dto.timezone && isValidTimeZone(dto.timezone) ? dto.timezone : 'UTC',
         },
       });

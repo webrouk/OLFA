@@ -17,7 +17,7 @@ const kCurrencyExponent = {'AED': 2, 'SAR': 2, 'QAR': 2, 'OMR': 3, 'KWD': 3, 'BH
 /// Integer minor units → localized amount (never floats in storage).
 String money(BuildContext context, int minor, String currency) {
   final exp = kCurrencyExponent[currency] ?? 2;
-  final f = NumberFormat.currency(locale: langOf(context) == 'ar' ? 'ar_AE' : 'en', name: currency, symbol: '$currency ', decimalDigits: exp);
+  final f = NumberFormat.currency(locale: switch (langOf(context)) { 'ar' => 'ar_AE', 'fr' => 'fr', _ => 'en' }, name: currency, symbol: '$currency ', decimalDigits: exp);
   var div = 1;
   for (var i = 0; i < exp; i++) {
     div *= 10;
@@ -51,13 +51,16 @@ String serviceLabel(AppLocalizations l, ConsultationService s) => switch (s) {
 String kindLabel(AppLocalizations l, CounselorKind k) => k == CounselorKind.psychologist ? l.kindPsychologist : l.kindFamilyCounselor;
 
 String languageName(BuildContext context, String code) {
-  final ar = langOf(context) == 'ar';
+  // (Arabic, English, French)
   const names = {
-    'ar': ('العربية', 'Arabic'), 'en': ('الإنجليزية', 'English'), 'fr': ('الفرنسية', 'French'), 'tr': ('التركية', 'Turkish'), 'ur': ('الأردية', 'Urdu'),
-    'fa': ('الفارسية', 'Persian'), 'de': ('الألمانية', 'German'), 'es': ('الإسبانية', 'Spanish'), 'id': ('الإندونيسية', 'Indonesian'), 'ms': ('الملايوية', 'Malay'),
+    'ar': ('العربية', 'Arabic', 'Arabe'), 'en': ('الإنجليزية', 'English', 'Anglais'), 'fr': ('الفرنسية', 'French', 'Français'),
+    'tr': ('التركية', 'Turkish', 'Turc'), 'ur': ('الأردية', 'Urdu', 'Ourdou'), 'fa': ('الفارسية', 'Persian', 'Persan'),
+    'de': ('الألمانية', 'German', 'Allemand'), 'es': ('الإسبانية', 'Spanish', 'Espagnol'), 'id': ('الإندونيسية', 'Indonesian', 'Indonésien'),
+    'ms': ('الملايوية', 'Malay', 'Malais'),
   };
   final n = names[code];
-  return n == null ? code : (ar ? n.$1 : n.$2);
+  if (n == null) return code;
+  return switch (langOf(context)) { 'ar' => n.$1, 'fr' => n.$3, _ => n.$2 };
 }
 
 (String, Color, Color) statusStyle(AppLocalizations l, ConsultationStatus s) => switch (s) {

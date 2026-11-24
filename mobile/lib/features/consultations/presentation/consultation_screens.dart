@@ -19,6 +19,7 @@ import '../data/consultations_repository_impl.dart';
 import '../domain/consultations_repository.dart';
 import 'consult_labels.dart';
 import '../../profile/application/profile_controllers.dart';
+import '../../../shared/utils/text_fold.dart';
 
 /// C1 — Family & marital consultations: directory filtered by counselor
 /// type, service, language and duration.
@@ -163,7 +164,7 @@ class CounselorDetailsScreen extends ConsumerWidget {
                 OlfaListTile(icon: Icons.badge_outlined, title: kindLabel(l, c.kind), subtitle: l.counselorType, showChevron: false),
                 OlfaListTile(icon: Icons.verified_outlined, title: c.licenseAuthority, subtitle: '${l.licensedBy} · ${countryByIso(c.licenseCountry).label(langOf(context))}', showChevron: false),
                 OlfaListTile(icon: Icons.work_history_outlined, title: l.yearsCount(c.yearsExperience), subtitle: l.experience, showChevron: false),
-                OlfaListTile(icon: Icons.translate_rounded, title: c.languages.map((x) => languageName(context, x)).join('، '), subtitle: l.serviceLanguage, showChevron: false),
+                OlfaListTile(icon: Icons.translate_rounded, title: c.languages.map((x) => languageName(context, x)).join(listSeparator(langOf(context))), subtitle: l.serviceLanguage, showChevron: false),
               ]),
               SectionLabel(l.about),
               Text(c.bio, style: t.bodyMedium),

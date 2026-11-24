@@ -4,21 +4,26 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-const supportedLocales = [Locale('ar'), Locale('en')];
+/// The app's languages. Any other device language opens the app in English.
+const supportedLocales = [Locale('ar'), Locale('en'), Locale('fr')];
+const fallbackLocale = Locale('en');
 
 /// The user's language choice: follow the device (default, as Apple and Google
 /// recommend — iOS "Settings › OLFA › Language" and Android 13+ per-app
 /// language both change the device-side locale the app receives) or a fixed
 /// in-app choice that is remembered across launches.
-enum LanguageChoice { system, ar, en }
+enum LanguageChoice { system, ar, en, fr }
 
-/// Device locale → a supported one (Arabic for any Arabic region, else English).
+/// Device languages (in the user's order of preference) → the first one OLFA
+/// supports, whatever the region (ar-EG, fr-CA, en-GB …). If none of the
+/// phone's languages is Arabic, English or French, the app opens in English.
 Locale resolveDeviceLocale([List<Locale>? preferred]) {
   for (final l in preferred ?? PlatformDispatcher.instance.locales) {
-    if (l.languageCode == 'ar') return const Locale('ar');
-    if (l.languageCode == 'en') return const Locale('en');
+    for (final s in supportedLocales) {
+      if (l.languageCode.toLowerCase() == s.languageCode) return s;
+    }
   }
-  return const Locale('ar');
+  return fallbackLocale;
 }
 
 class LocaleController extends Notifier<Locale> with WidgetsBindingObserver {
@@ -69,8 +74,8 @@ class LocaleController extends Notifier<Locale> with WidgetsBindingObserver {
   }
 
   /// Onboarding language step: an explicit choice.
-  void set(Locale locale) => choose(locale.languageCode == 'ar' ? LanguageChoice.ar : LanguageChoice.en);
-  void toggle() => set(state.languageCode == 'ar' ? const Locale('en') : const Locale('ar'));
+  void set(Locale locale) =>
+      choose(LanguageChoice.values.firstWhere((c) => c.name == locale.languageCode, orElse: () => LanguageChoice.en));
 }
 
 final localeProvider = NotifierProvider<LocaleController, Locale>(LocaleController.new);

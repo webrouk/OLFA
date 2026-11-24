@@ -11,6 +11,7 @@ import '../../../core/theme/olfa_typography.dart';
 import '../../../core/widgets/olfa_widgets.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/security/secure_store.dart';
+import '../../../shared/components/labels.dart';
 
 /// 1 — Splash
 /// Where a returning user lands, from the server's view of the account.
@@ -413,8 +414,8 @@ class LanguageScreen extends ConsumerWidget {
       children: [
         const Padding(padding: EdgeInsets.only(bottom: 22), child: OlfaLogo(size: 56)),
         PageHeading(l.languageTitle, body: l.languageBody),
-        option('ar', 'العربية', 'Arabic · RTL'),
-        option('en', 'English', 'الإنجليزية · LTR'),
+        // Pre-selected from the phone's language (English if it isn't one of these).
+        for (final code in const ['ar', 'en', 'fr']) option(code, kNativeLanguageNames[code]!, languageNameIn(current, code)),
       ],
     );
   }

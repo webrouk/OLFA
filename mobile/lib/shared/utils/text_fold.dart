@@ -23,6 +23,28 @@ String foldForSearch(String s) {
   return b.toString();
 }
 
+/// For pick lists (countries, nationalities, occupations): also ignores Latin
+/// accents, so "egypte" finds "Égypte" and "medecin" finds "Médecin".
+String foldForPicker(String s) {
+  const from = 'àâäáãåçéèêëíìîïñóòôöõúùûüýÿœæ';
+  const to = 'aaaaaaceeeeiiiinooooouuuuyy';
+  final b = StringBuffer();
+  for (final ch in foldForSearch(s).split('')) {
+    final i = from.indexOf(ch);
+    if (ch == 'œ') {
+      b.write('oe');
+    } else if (ch == 'æ') {
+      b.write('ae');
+    } else {
+      b.write(i < 0 ? ch : to[i]);
+    }
+  }
+  return b.toString();
+}
+
+/// The list separator of the UI language ("، " in Arabic, ", " otherwise).
+String listSeparator(String lang) => lang == 'ar' ? '، ' : ', ';
+
 bool foldedContains(String text, String query) {
   final q = foldForSearch(query.trim());
   return q.isNotEmpty && foldForSearch(text).contains(q);

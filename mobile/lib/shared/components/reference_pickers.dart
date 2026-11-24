@@ -7,6 +7,7 @@ import '../../core/theme/olfa_typography.dart';
 import '../../core/widgets/inputs.dart';
 import '../models/models.dart';
 import 'labels.dart';
+import '../utils/text_fold.dart';
 
 /// Searchable dropdowns over the shared reference lists
 /// (shared/reference/*.tsv → generate.py): every country, every nationality
@@ -30,13 +31,9 @@ Future<String?> _pick(BuildContext context, {required String title, required Lis
   );
 }
 
-/// Arabic letter variants and case folded so "اماراات" finds "الإمارات".
-String _fold(String s) => s
-    .toLowerCase()
-    .replaceAll(RegExp('[أإآ]'), 'ا')
-    .replaceAll('ة', 'ه')
-    .replaceAll('ى', 'ي')
-    .replaceAll(RegExp('[ً-ْ]'), '');
+/// Arabic letter variants, Latin accents and case folded: "امارات" finds
+/// "الإمارات", "egypte" finds "Égypte".
+String _fold(String s) => foldForPicker(s);
 
 class _PickerSheet extends StatefulWidget {
   const _PickerSheet({required this.title, required this.options, this.selected});

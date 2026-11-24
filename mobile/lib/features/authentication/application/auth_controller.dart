@@ -8,7 +8,7 @@ import '../../account/account_type.dart';
 
 class AuthState {
   const AuthState({
-    this.country = const Country('AE', '+971', '🇦🇪', 'الإمارات العربية المتحدة', 'United Arab Emirates', 'AE'),
+    this.country = const Country('AE', '+971', '🇦🇪', 'الإمارات العربية المتحدة', 'United Arab Emirates', 'AE', 'Émirats arabes unis'),
     this.nationalNumber = '',
     this.busy = false,
     this.failure,

@@ -7,6 +7,8 @@
 /// user's acceptance (kTermsVersion). Have counsel review before release.
 library;
 
+import 'legal_content_fr.dart';
+
 const kLegalVersion = '2026-11';
 
 class LegalSection {
@@ -23,9 +25,10 @@ class LegalDoc {
   final List<LegalSection> sections;
 }
 
-LegalDoc termsOf(String lang) => lang == 'ar' ? _termsAr : _termsEn;
-LegalDoc privacyOf(String lang) => lang == 'ar' ? _privacyAr : _privacyEn;
-LegalDoc professionalPolicyOf(String lang) => lang == 'ar' ? _proAr : _proEn;
+/// Arabic, English or French; any other language gets English.
+LegalDoc termsOf(String lang) => switch (lang) { 'ar' => _termsAr, 'fr' => termsFr, _ => _termsEn };
+LegalDoc privacyOf(String lang) => switch (lang) { 'ar' => _privacyAr, 'fr' => privacyFr, _ => _privacyEn };
+LegalDoc professionalPolicyOf(String lang) => switch (lang) { 'ar' => _proAr, 'fr' => professionalPolicyFr, _ => _proEn };
 
 // ───────────────────────────── Terms (EN) ─────────────────────────────
 const _termsEn = LegalDoc(

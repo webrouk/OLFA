@@ -36,6 +36,15 @@ extension DomainLabels on AppLocalizations {
 
 String langOf(BuildContext context) => Localizations.localeOf(context).languageCode;
 
+/// A language's own name (shown the same in every UI language, as iOS and
+/// Android do) and its name in the current UI language.
+const kNativeLanguageNames = {'ar': 'العربية', 'en': 'English', 'fr': 'Français'};
+String languageNameIn(String uiLang, String code) => switch (uiLang) {
+      'ar' => const {'ar': 'العربية', 'en': 'الإنجليزية', 'fr': 'الفرنسية'}[code]!,
+      'fr' => const {'ar': 'Arabe', 'en': 'Anglais', 'fr': 'Français'}[code]!,
+      _ => const {'ar': 'Arabic', 'en': 'English', 'fr': 'French'}[code]!,
+    };
+
 String interestLabel(BuildContext context, String key) => interestByKey(key)?.label(langOf(context)) ?? key;
 
 String countryLabel(BuildContext context, String iso) => countryByIso(iso).label(langOf(context));

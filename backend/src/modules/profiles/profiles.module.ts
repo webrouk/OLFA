@@ -233,7 +233,7 @@ export class ProfilesService {
   }
 
   /** Push notifications and SMS use the same language as the app. */
-  async setLocale(userId: string, locale: 'ar' | 'en') {
+  async setLocale(userId: string, locale: 'ar' | 'en' | 'fr') {
     await this.prisma.user.update({ where: { id: userId }, data: { locale } });
     return { locale };
   }

@@ -14,6 +14,7 @@ import '../../../shared/components/labels.dart';
 import '../../../shared/models/models.dart';
 import '../../profile/application/profile_controllers.dart';
 import '../data/location_service.dart';
+import '../../../shared/utils/text_fold.dart';
 
 /// Setup step — approximate location so discovery can show the nearest
 /// people first, then the user's own country. Optional ("Later").
@@ -100,7 +101,7 @@ class _LocationScreenState extends ConsumerState<LocationScreen> {
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(l.locationFound, style: t.caption),
-                  Text([if (loc.city != null) loc.city!, if (c != null) '${c.flag} ${c.label(lang)}'].join('، '), style: t.h3),
+                  Text([if (loc.city != null) loc.city!, if (c != null) '${c.flag} ${c.label(lang)}'].join(listSeparator(lang)), style: t.h3),
                 ]),
               ),
               const Icon(Icons.check_rounded, color: OlfaColors.primary),

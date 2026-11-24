@@ -15,7 +15,7 @@ Widget host(Widget child, {Locale locale = const Locale('ar'), Size size = const
     data: MediaQueryData(size: size, padding: const EdgeInsets.only(top: 54, bottom: 34)),
     child: MaterialApp(
       locale: locale,
-      supportedLocales: const [Locale('ar'), Locale('en')],
+      supportedLocales: const [Locale('ar'), Locale('en'), Locale('fr')],
       localizationsDelegates: const [
         AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,

@@ -97,7 +97,7 @@ export class PrivacyDto {
 }
 
 export class LocaleDto {
-  @ApiProperty({ enum: ['ar', 'en'] }) @IsIn(['ar', 'en']) locale: 'ar' | 'en';
+  @ApiProperty({ enum: ['ar', 'en', 'fr'] }) @IsIn(['ar', 'en', 'fr']) locale: 'ar' | 'en' | 'fr';
 }
 
 export class FreezeDto {

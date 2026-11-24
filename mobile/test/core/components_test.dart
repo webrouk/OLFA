@@ -42,7 +42,7 @@ void main() {
     expect(v, isTrue);
   });
 
-  for (final locale in const [Locale('ar'), Locale('en')]) {
+  for (final locale in const [Locale('ar'), Locale('en'), Locale('fr')]) {
     testWidgets('FloatingNavBar: 5 tabs, taps, order follows direction (${locale.languageCode})', (tester) async {
       int? tapped;
       await tester.pumpWidget(host(Align(alignment: Alignment.bottomCenter, child: FloatingNavBar(index: 0, onTap: (i) => tapped = i)), locale: locale));
