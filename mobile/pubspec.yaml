@@ -39,7 +39,7 @@ dependencies:
   in_app_purchase_android: ^0.4.0
   in_app_purchase_storekit: ^0.3.20
   screen_protector: ^1.4.2 # members' photos: no screenshots / recordings (Android FLAG_SECURE, iOS secure layer + capture cover)
-  google_mlkit_face_detection: ^0.13.1 # selfie verification: on-device face checks (nothing is sent to Google)
+  google_mlkit_face_detection: ^0.14.0 # selfie verification: on-device face checks (nothing is sent to Google)
   file_picker: ^8.1.7 # support attachments: PDF files
   url_launcher: ^6.3.1 # payment history: manage subscription in App Store / Google Play
   # Phase 3 (needs Firebase project config files first):
