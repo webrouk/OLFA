@@ -1,5 +1,11 @@
 # OLFA — sukna.online (Apache / LiteSpeed on Hostinger)
 Options -Indexes
+
+# The site is deployed by a Git clone into this folder: never serve repository files.
+RedirectMatch 404 /\.git
+<FilesMatch "^(\.git.*|README\.md|DEPLOY\.md)$">
+  Require all denied
+</FilesMatch>
 DirectoryIndex index.html
 
 <IfModule mod_rewrite.c>
