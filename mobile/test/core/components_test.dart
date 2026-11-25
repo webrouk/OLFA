@@ -70,15 +70,16 @@ void main() {
     });
   }
 
-  testWidgets('nav badges: real counts only, 99+ cap, none for 0', (tester) async {
+  testWidgets('nav badges: a dot for real counts, none for 0', (tester) async {
     await tester.pumpWidget(host(Align(
       alignment: Alignment.bottomCenter,
       child: Builder(builder: (c) => FloatingNavBar(items: OlfaNavItems.member(AppLocalizations.of(c)), index: 0, badges: const {1: 0, 2: 3, 3: 250}, onTap: (_) {})),
     )));
     await tester.pumpAndSettle();
-    expect(find.byType(CountBadge), findsNWidgets(2));
-    expect(find.text('3'), findsOneWidget);
-    expect(find.text('99+'), findsOneWidget);
+    // the bar shows a dot per tab with something new, never a number
+    expect(find.byType(NavDot), findsNWidgets(2));
+    expect(find.text('3'), findsNothing);
+    expect(find.text('99+'), findsNothing);
   });
 
   testWidgets('side rail shows the same tabs as the bottom bar', (tester) async {

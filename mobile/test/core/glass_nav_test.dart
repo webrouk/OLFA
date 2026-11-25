@@ -37,10 +37,10 @@ void main() {
     expect(r.width, r.height, reason: 'the round button is a circle');
   });
 
-  testWidgets('Arabic: round button far left; capsule reads Menu, Chat, Explore, Marriage from left to right', (tester) async {
+  testWidgets('Arabic: round button far left; Explore first on the right, then Marriage, Chat, Menu', (tester) async {
     await tester.pumpWidget(bar(2, const Locale('ar')));
     expect(roundButton(tester).right, lessThan(capsule(tester).left));
-    final xs = ['القائمة', 'دردشة', 'استكشاف', 'الزواج'].map((s) => tester.getCenter(find.text(s)).dx).toList();
+    final xs = ['القائمة', 'دردشة', 'الزواج', 'استكشاف'].map((s) => tester.getCenter(find.text(s)).dx).toList();
     for (var i = 1; i < xs.length; i++) {
       expect(xs[i], greaterThan(xs[i - 1]));
     }
@@ -62,15 +62,29 @@ void main() {
     expect(tapped, 1, reason: 'round button = likes');
   });
 
-  testWidgets('badges keep their tabs and never block the tap', (tester) async {
+  testWidgets('new items show a dot (no numbers), on the right tabs, and never block the tap', (tester) async {
     var tapped = -1;
     await tester.pumpWidget(bar(2, const Locale('ar'), badges: const {1: 2, 3: 5}, onTap: (i) => tapped = i));
-    expect(find.text('2'), findsOneWidget);
-    expect(find.text('5'), findsOneWidget);
-    await tester.tapAt(tester.getCenter(find.text('5')));
+    expect(find.byType(NavDot), findsNWidgets(2));
+    expect(find.byType(CountBadge), findsNothing);
+    expect(find.text('5'), findsNothing);
+    final dots = find.byType(NavDot);
+    // the dot nearest the chat label belongs to chat; the other sits on the round button
+    final chat = tester.getCenter(find.text('دردشة'));
+    final onChat = tester.getCenter(dots.at(0)).dx - chat.dx < tester.getCenter(dots.at(1)).dx - chat.dx ? dots.at(0) : dots.at(1);
+    await tester.tapAt(tester.getCenter(onChat));
     expect(tapped, 3);
-    await tester.tapAt(tester.getCenter(find.text('2')));
+    expect(tester.getRect(dots.last).overlaps(roundButton(tester)) || tester.getRect(dots.first).overlaps(roundButton(tester)), isTrue);
+    await tester.tapAt(roundButton(tester).center);
     expect(tapped, 1);
+  });
+
+  testWidgets('the marker is fully rounded, concentric with the capsule', (tester) async {
+    await tester.pumpWidget(bar(0, const Locale('ar')));
+    await tester.pumpAndSettle();
+    final r = tester.getRect(pillFinder.first);
+    final box = tester.widget<DecoratedBox>(find.descendant(of: pillFinder.first, matching: find.byType(DecoratedBox)).first);
+    expect((box.decoration as BoxDecoration).borderRadius, BorderRadius.all(Radius.circular(r.height / 2)));
   });
 
   testWidgets('the marker glides to the new tab and fades out when the round button is active', (tester) async {
@@ -91,7 +105,7 @@ void main() {
     var tapped = -1;
     await tester.pumpWidget(bar(2, const Locale('ar'), onTap: (i) => tapped = i));
     final r = capsule(tester);
-    // Arabic: from the right end (Marriage) to the left end (Menu)
+    // Arabic: from the right end (Explore) to the left end (Menu)
     await tester.dragFrom(Offset(r.right - 30, r.center.dy), Offset(-(r.width - 60), 0));
     await tester.pumpAndSettle();
     expect(tapped, 4);

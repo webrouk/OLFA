@@ -27,10 +27,11 @@ abstract final class OlfaNavItems {
         OlfaNavItem(Icons.person_outline_rounded, Icons.person_rounded, l.navMenu),
       ];
 
-  /// Member phone bar: Marriage · Explore · Chat · Menu in the capsule (reading
-  /// order — in Arabic, Menu … Marriage from left to right) and Likes on its own
-  /// round button at the far end (far left in Arabic), icon only.
-  static const memberLayout = OlfaNavLayout(bar: [2, 0, 3, 4], solo: 1);
+  /// Member phone bar: Explore · Marriage · Chat · Menu in the capsule (reading
+  /// order — in Arabic, Explore first on the right, then Marriage, Chat, Menu)
+  /// and Likes on its own round button at the far end (far left in Arabic),
+  /// icon only.
+  static const memberLayout = OlfaNavLayout(bar: [0, 2, 3, 4], solo: 1);
 
   static List<OlfaNavItem> professional(AppLocalizations l) => [
         OlfaNavItem(Icons.dashboard_customize_outlined, Icons.dashboard_customize_rounded, l.navDesk),
@@ -214,6 +215,7 @@ class _FloatingNavBarState extends State<FloatingNavBar> with SingleTickerProvid
                             onGlass: true,
                             showLabel: false,
                             radius: h / 2,
+                            iconSize: 30,
                           ),
                         ]),
                       ),
@@ -265,7 +267,7 @@ class _FloatingNavBarState extends State<FloatingNavBar> with SingleTickerProvid
                   child: AnimatedOpacity(
                     opacity: shown ? 1 : 0,
                     duration: motion(context, const Duration(milliseconds: 180)),
-                    child: Transform.scale(scaleY: squash * (pressed ? 1.05 : 1), child: _GlassPill(opaque: opaque)),
+                    child: Transform.scale(scaleY: squash * (pressed ? 1.05 : 1), child: _GlassPill(opaque: opaque, radius: c.maxHeight / 2)),
                   ),
                 ),
                 Row(children: [
@@ -277,6 +279,7 @@ class _FloatingNavBarState extends State<FloatingNavBar> with SingleTickerProvid
                         count: widget.badges[tab] ?? 0,
                         onTap: () => widget.onTap(tab),
                         onGlass: true,
+                        radius: c.maxHeight / 2,
                       ),
                     ),
                 ]),
@@ -407,7 +410,7 @@ class OlfaSideNav extends StatelessWidget {
 }
 
 class _NavButton extends StatefulWidget {
-  const _NavButton({required this.item, required this.active, required this.count, required this.onTap, this.onGlass = false, this.showLabel = true, this.radius = 17});
+  const _NavButton({required this.item, required this.active, required this.count, required this.onTap, this.onGlass = false, this.showLabel = true, this.radius = 17, this.iconSize = 26});
   final OlfaNavItem item;
   final bool active;
   final int count;
@@ -419,6 +422,7 @@ class _NavButton extends StatefulWidget {
   /// The round button shows its icon alone (the label stays for screen readers).
   final bool showLabel;
   final double radius;
+  final double iconSize;
 
   @override
   State<_NavButton> createState() => _NavButtonState();
@@ -475,11 +479,15 @@ class _NavButtonState extends State<_NavButton> {
                       duration: motion(context, const Duration(milliseconds: 160)),
                       switchInCurve: Curves.easeOut,
                       switchOutCurve: Curves.easeIn,
-                      child: Icon(active ? item.activeIcon : item.icon, key: ValueKey(active), size: 26, color: color),
+                      child: Icon(active ? item.activeIcon : item.icon, key: ValueKey(active), size: widget.iconSize, color: color),
                     ),
                   ),
                   // over the icon's top corner, outside it; never takes taps (the whole tab does)
-                  if (count > 0) PositionedDirectional(top: -6, end: -12, child: IgnorePointer(child: CountBadge(count: count, ring: onGlass ? OlfaColors.black : OlfaColors.white))),
+                  // on the glass bar a dot says "something new"; the rail keeps the count
+                  if (count > 0)
+                    onGlass
+                        ? const PositionedDirectional(top: -1, end: -3, child: IgnorePointer(child: NavDot()))
+                        : PositionedDirectional(top: -6, end: -12, child: IgnorePointer(child: CountBadge(count: count))),
                 ],
               ),
               if (widget.showLabel) const SizedBox(height: 3),
@@ -497,6 +505,18 @@ class _NavButtonState extends State<_NavButton> {
       ),
     );
   }
+}
+
+/// The bottom bar's "new" marker: a small burgundy dot ringed in the bar's
+/// black, on the icon's top corner. The count stays in the tab's spoken label.
+class NavDot extends StatelessWidget {
+  const NavDot({super.key});
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 10,
+        height: 10,
+        decoration: BoxDecoration(color: OlfaColors.primary, shape: BoxShape.circle, border: Border.all(color: OlfaColors.black, width: 1.5)),
+      );
 }
 
 /// "1"…"99", then "99+".

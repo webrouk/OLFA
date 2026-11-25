@@ -828,7 +828,7 @@ function admin(live){const d=ADEV[S.adev];const narrow=d.W<1000;
 /* ═══════════ CHROME + RENDER ═══════════ */
 const $=s=>document.querySelector(s);
 function chrome(){
- $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.16</small></span></div>
+ $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.17</small></span></div>
  <div class="seg"><button class="${S.mode==='app'?'on':''}" data-ui="mode" data-a="app">${t('vApp')}</button><button class="${S.mode==='admin'?'on':''}" data-ui="mode" data-a="admin">${t('vAdmin')}</button></div>
  ${S.mode==='app'?`<div class="seg"><button class="${S.view==='one'?'on':''}" data-ui="view" data-a="one">${t('vOne')}</button><button class="${S.view==='all'?'on':''}" data-ui="view" data-a="all">${t('vAll')}</button></div>`:''}
  <div class="seg"><button class="${S.lang==='ar'?'on':''}" data-ui="lang" data-a="ar">ع RTL</button><button class="${S.lang==='en'?'on':''}" data-ui="lang" data-a="en">EN LTR</button><button class="${S.lang==='fr'?'on':''}" data-ui="lang" data-a="fr">FR LTR</button></div>
@@ -2551,18 +2551,20 @@ const st14=document.createElement('style');st14.textContent=`
  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 0 0 1px rgba(255,255,255,.14),0 10px 26px rgba(26,26,26,.22),0 2px 6px rgba(26,26,26,.10)}
 .nsolo button{width:100%;height:100%;border:0;border-radius:50%;background:transparent;color:rgba(255,255,255,.72);display:grid;place-items:center;position:relative;-webkit-tap-highlight-color:transparent;transition:background .18s ease,box-shadow .18s ease,color .16s ease}
 .nsolo.on button{background:rgba(255,255,255,.15);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.30),inset 0 0 0 1px rgba(255,255,255,.20),0 3px 10px rgba(26,26,26,.18)}
-.nsolo .nic{position:relative;display:inline-grid;overflow:visible}.nsolo .nic svg{width:26px;height:26px}.nsolo .nic{transition:transform .26s cubic-bezier(.34,1.56,.64,1)}.nsolo.on .nic{transform:scale(1.08)}.nsolo button:active .nic{transform:scale(.88);transition-duration:.09s}
+.nsolo .nic{position:relative;display:inline-grid;overflow:visible}.nsolo .nic svg{width:30px;height:30px}.nsolo .nic{transition:transform .26s cubic-bezier(.34,1.56,.64,1)}.nsolo.on .nic{transform:scale(1.08)}.nsolo button:active .nic{transform:scale(.88);transition-duration:.09s}
 .nsolo .cbadge{border-color:#1A1A1A;pointer-events:none}
+.npill{border-radius:999px}.nav.glass button{border-radius:999px}
+.ndot{position:absolute;top:-1px;inset-inline-end:-3px;width:10px;height:10px;box-sizing:border-box;border-radius:50%;background:var(--p);border:1.5px solid #1A1A1A;pointer-events:none}
 @media (prefers-contrast:more){.nav.glass{background:#1A1A1A;-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.3),0 10px 26px rgba(26,26,26,.22)}.npill{background:rgba(255,255,255,.22);box-shadow:inset 0 0 0 1px rgba(255,255,255,.55)}.nsolo{background:#1A1A1A;-webkit-backdrop-filter:none;backdrop-filter:none}}`;document.head.appendChild(st14);
 const _navbar14=navbar;
 Object.assign(T.ar,{nMenu:'القائمة',nChat:'دردشة',nExplore:'استكشاف',nMarriage:'الزواج'});Object.assign(T.en,{nMenu:'Menu',nChat:'Chat',nExplore:'Explore',nMarriage:'Marriage'});Object.assign(T.fr,{nMenu:'Menu',nChat:'Discussion',nExplore:'Explorer',nMarriage:'Mariage'});
-/* phone bar (members): a capsule — Marriage · Explore · Chat · Menu in reading order, so Arabic reads Menu … Marriage from left to right —
+/* phone bar (members): a capsule — Explore · Marriage · Chat · Menu in reading order, so in Arabic Explore comes first on the right —
    and Likes on its own round glass button at the far end (far left in Arabic), icon only. Professionals keep all their tabs in the capsule. */
-const BAR_M=['matches','discover','convs','me'],SOLO_M='likes';
+const BAR_M=['discover','matches','convs','me'],SOLO_M='likes';
 navbar=function(on,rail){const h=_navbar14(on,rail);if(rail||DEVICES[S.dev].W>=840)return h; // tablets turn the bar into a side rail
  const all=NAVITEMS(),n=NAVCOUNT(),pro=isPro();
  const bar=pro?all:BAR_M.map(k=>all.find(x=>x[0]===k)),solo=pro?null:all.find(x=>x[0]===SOLO_M);
- const btn=([k,ic,l],round)=>`<button class="${on===k?'on':''}" data-tab="${k}" aria-current="${on===k}" aria-label="${t(l)}${n[k]?' — '+tf('navNew',{n:n[k]}):''}"><span class="nic">${I(k===on&&ic==='heart'?'heartf':ic,23,on===k?2.1:1.8)}${n[k]?cbadge(n[k]):''}</span>${round?'':`<span>${t(l)}</span>`}</button>`;
+ const btn=([k,ic,l],round)=>`<button class="${on===k?'on':''}" data-tab="${k}" aria-current="${on===k}" aria-label="${t(l)}${n[k]?' — '+tf('navNew',{n:n[k]}):''}"><span class="nic">${I(k===on&&ic==='heart'?'heartf':ic,23,on===k?2.1:1.8)}${n[k]?'<i class="ndot"></i>':''}</span>${round?'':`<span>${t(l)}</span>`}</button>`; /* a dot, not a number; the count stays in aria-label */
  const i=bar.findIndex(x=>x[0]===on);
  return `<nav class="nav glass${solo?' hasSolo':''}" aria-label="main" style="--n:${bar.length}"><i class="npill${i<0?' off':''}" aria-hidden="true" data-to="${Math.max(0,i)}"></i>${bar.map(x=>btn(x)).join('')}</nav>${solo?`<div class="nsolo${on===solo[0]?' on':''}">${btn(solo,true)}</div>`:''}`};
 const reduceM=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
