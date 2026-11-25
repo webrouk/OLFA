@@ -1,12 +1,13 @@
 # Website and admin dashboard (sukna.online)
 
 - Source: `web/` (see `web/README.md`). Hosting: Hostinger Business, order 61000645, account u185135406, website `sukna.online` (static).
-- Deploy steps:
+- Deploy (current method): the branch `site/sukna-online` holds only the built `web/dist`. Hostinger clones it into `public_html` (`hosting_git_deploy-website-repository`, public HTTPS URL).
+  To update the site:
   1. `npm run build` in `web/`.
-  2. Zip the contents of `dist/`, with `index.html` at the root.
-  3. Upload the zip with `hosting_files_generate-upload-url` (TUS) as `site.zip`.
-  4. Run `hosting_websites_deploy-static-site-archive` with `archive_path: site.zip`.
-  Every deploy replaces the whole site.
+  2. Replace the branch contents with `dist/`, then commit and push.
+  3. Call the same operation again; it pulls the branch.
+  The root `.htaccess` blocks `.git` and `DEPLOY.md`.
+- Alternative: upload a zip of `dist/` with `hosting_files_generate-upload-url` (TUS), then run `hosting_websites_deploy-static-site-archive`. This replaces the whole site.
 - Admin API added for the dashboard (all under `/v1/admin`, admin JWT):
 
 | Method | Path | Permission | Notes |
