@@ -27,7 +27,7 @@ class TotpCodeDto {
 
 class UsersQuery {
   @ApiPropertyOptional({ description: 'name, phone or user id' }) @IsOptional() @IsString() @Length(1, 80) q?: string;
-  @ApiPropertyOptional() @IsOptional() @IsIn(['PENDING_VERIFICATION', 'ACTIVE', 'REJECTED', 'SUSPENDED', 'BANNED', 'DELETED']) status?: string;
+  @ApiPropertyOptional() @IsOptional() @IsIn(['PENDING_VERIFICATION', 'ACTIVE', 'REJECTED', 'SUSPENDED', 'RESTRICTED', 'BANNED', 'DELETED']) status?: string;
   @ApiPropertyOptional() @IsOptional() @IsIn(['MEMBER', 'PSYCHOLOGIST', 'FAMILY_COUNSELOR']) accountType?: string;
   @ApiPropertyOptional({ default: 1 }) @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
 }
