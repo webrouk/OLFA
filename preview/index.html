@@ -828,7 +828,7 @@ function admin(live){const d=ADEV[S.adev];const narrow=d.W<1000;
 /* ═══════════ CHROME + RENDER ═══════════ */
 const $=s=>document.querySelector(s);
 function chrome(){
- $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.13</small></span></div>
+ $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.14</small></span></div>
  <div class="seg"><button class="${S.mode==='app'?'on':''}" data-ui="mode" data-a="app">${t('vApp')}</button><button class="${S.mode==='admin'?'on':''}" data-ui="mode" data-a="admin">${t('vAdmin')}</button></div>
  ${S.mode==='app'?`<div class="seg"><button class="${S.view==='one'?'on':''}" data-ui="view" data-a="one">${t('vOne')}</button><button class="${S.view==='all'?'on':''}" data-ui="view" data-a="all">${t('vAll')}</button></div>`:''}
  <div class="seg"><button class="${S.lang==='ar'?'on':''}" data-ui="lang" data-a="ar">ع RTL</button><button class="${S.lang==='en'?'on':''}" data-ui="lang" data-a="en">EN LTR</button><button class="${S.lang==='fr'?'on':''}" data-ui="lang" data-a="fr">FR LTR</button></div>
@@ -2529,6 +2529,24 @@ AS.users=()=>{const p=byId(2);return `<div class="pnl" style="margin-bottom:16px
 ACT.amgrRevoke=()=>{S.amgrOff=true;PEOPLE.find(x=>x.id===2).mgd=null;render();flash(t('saved'))};
 const _aset13=AS.set;
 AS.set=()=>_aset13()+`<div class="pnl" style="margin-top:16px"><h3>${t('setKeep')}</h3><p class="bs">${t('setKeepD')}</p></div>`;
+
+
+/* ═══════════ v0.14 — bottom bar in frosted glass, with a glass pill that slides between tabs ═══════════ */
+const st14=document.createElement('style');st14.textContent=`
+.nav.glass{background:rgba(255,255,255,.72);-webkit-backdrop-filter:blur(22px) saturate(160%);backdrop-filter:blur(22px) saturate(160%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.75),0 0 0 1px rgba(26,26,26,.06),0 12px 32px rgba(26,26,26,.12)}
+.nav.glass button{position:relative;z-index:1;background:none!important}
+.nav.glass button .nic{transition:transform .26s cubic-bezier(.34,1.56,.64,1)}.nav.glass button.on .nic{transform:scale(1.08)}
+.npill{position:absolute;top:7px;bottom:7px;width:calc((100% - 12px) / var(--n) - 4px);inset-inline-start:calc(8px + (100% - 12px) / var(--n) * var(--i));border-radius:18px;background:rgba(255,255,255,.92);box-shadow:0 0 0 1px rgba(139,13,43,.22),0 4px 14px rgba(139,13,43,.14);transition:inset-inline-start .42s cubic-bezier(.34,1.56,.64,1);pointer-events:none;z-index:0}
+@media (prefers-reduced-motion:reduce){.npill,.nav.glass button .nic{transition:none}}
+@media (prefers-contrast:more){.nav.glass{background:#fff;-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:0 0 0 1px var(--g),0 10px 30px rgba(26,26,26,.10)}}`;document.head.appendChild(st14);
+const _navbar14=navbar;
+navbar=function(on,rail){const h=_navbar14(on,rail);if(rail||DEVICES[S.dev].W>=840)return h; // tablets turn the bar into a side rail
+const items=NAVITEMS();const i=Math.max(0,items.findIndex(x=>x[0]===on));const from=S.navFrom!=null&&S.navFrom<items.length?S.navFrom:i;
+ return h.replace('<nav class="nav" aria-label="main">',`<nav class="nav glass" aria-label="main" style="--n:${items.length}"><i class="npill" aria-hidden="true" style="--i:${from}" data-to="${i}"></i>`)};
+const _render14=render;
+render=function(){const r=_render14.apply(this,arguments);
+ document.querySelectorAll('.npill[data-to]').forEach(p=>{const to=+p.dataset.to;if(p.closest('#dev')){S.navFrom=to;requestAnimationFrame(()=>requestAnimationFrame(()=>p.style.setProperty('--i',to)))}else{p.style.transition='none';p.style.setProperty('--i',to)}});
+ return r};
 
 try{const q=new URLSearchParams(location.hash.slice(1));if(q.get('lang'))S.lang=q.get('lang');if(SC[q.get('s')])S.screen=q.get('s');if(q.get('mode'))S.mode=q.get('mode');if(q.get('dev')&&DEVICES[q.get('dev')])S.dev=q.get('dev');if(q.get('view'))S.view=q.get('view');if(q.get('adm'))S.adm=q.get('adm');if(q.get('adev'))S.adev=q.get('adev');if(q.get('acct'))S.acct=q.get('acct');if(q.get('sheet'))S.sheet=q.get('sheet');if(q.get('cid'))S.cid=q.get('cid');if(q.get('detail'))S.detail=+q.get('detail')}catch(e){}
 render();

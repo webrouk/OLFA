@@ -104,3 +104,8 @@
 - **Public profile:** tap the left/right of the photo (or swipe) to move between photos, a photo counter, the next photos fetched ahead; header with the single mark, place, online, compatibility and plans; a pinned jump bar (Photos · About · Basics · Background · Marriage · Interests · Trust); details in labelled cards; "Managed by: Father" where it applies.
 - **Payment:** one bottom sheet over the booking page (what, when, price, method, total, pay). Processing can't be dismissed; success, declined and cancelled each have their own state. A failed or cancelled payment keeps the booking and its time; "Try again" pays the same booking. Bookings waiting for payment have "Complete payment" in My consultations.
 - **Managed accounts:** at sign-up a member chooses "For me" or "For a family member"; the manager gives their name, relation, whose phone signs in, and confirms the owner's agreement. Settings → Account management to change or end it. Profiles show the relation only.
+
+## Bottom bar: frosted glass
+- The floating bar is frosted glass: the page shows through, blurred (σ 22), under a 72 % white pane with a light rim and a soft shadow (`FloatingNavBar`). No gradients; the four brand colours only.
+- The active tab sits on a brighter glass pill with a thin burgundy edge that **slides** from tab to tab (420 ms, slight overshoot), following the reading direction; the icon lifts slightly as it arrives.
+- High contrast / "reduce transparency" → an opaque white bar; reduce motion → the pill moves without animation. Tablets keep the side rail.

@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -32,8 +34,11 @@ abstract final class OlfaNavItems {
       ];
 }
 
-/// Floating, rounded bottom navigation (phones). Order follows the reading
-/// direction (RTL/LTR). Badges show real counts only.
+/// Floating bottom navigation (phones) in frosted glass: the page shows
+/// through, blurred, behind a translucent white bar. The active tab sits on a
+/// glass pill that slides from tab to tab (follows the reading direction).
+/// "Reduce transparency" / high contrast → an opaque white bar; reduce motion →
+/// the pill moves without animation. Badges show real counts only.
 class FloatingNavBar extends StatelessWidget {
   const FloatingNavBar({super.key, required this.items, required this.index, required this.onTap, this.badges = const {}});
 
@@ -47,6 +52,9 @@ class FloatingNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
+    final opaque = MediaQuery.highContrastOf(context);
+    final radius = OlfaRadius.all(OlfaRadius.navBar);
+    final rtl = Directionality.of(context) == TextDirection.rtl;
     return Padding(
       padding: EdgeInsets.fromLTRB(OlfaSize.navBarMargin, 0, OlfaSize.navBarMargin, bottom + 12),
       child: Center(
@@ -54,26 +62,68 @@ class FloatingNavBar extends StatelessWidget {
         child: ConstrainedBox(
           // Comfortable on large phones / small tablets instead of stretching edge to edge.
           constraints: const BoxConstraints(maxWidth: 520),
-          child: Container(
-            height: OlfaSize.navBarHeight,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: DecoratedBox(
+            // the soft shadow lives outside the clip so the glass edge stays crisp
             decoration: BoxDecoration(
-              color: OlfaColors.white,
-              borderRadius: OlfaRadius.all(OlfaRadius.navBar),
-              border: Border.all(color: OlfaColors.gray),
-              boxShadow: [BoxShadow(color: OlfaColors.black.withValues(alpha: 0.10), blurRadius: 30, offset: const Offset(0, 10))],
+              borderRadius: radius,
+              boxShadow: [BoxShadow(color: OlfaColors.black.withValues(alpha: 0.12), blurRadius: 32, offset: const Offset(0, 12))],
             ),
-            child: Row(
-              children: [
-                for (var i = 0; i < items.length; i++)
-                  Expanded(child: _NavButton(item: items[i], active: i == index, count: badges[i] ?? 0, onTap: () => onTap(i))),
-              ],
+            child: ClipRRect(
+              borderRadius: radius,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: opaque ? 0 : 22, sigmaY: opaque ? 0 : 22),
+                child: Container(
+                  height: OlfaSize.navBarHeight,
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: OlfaColors.white.withValues(alpha: opaque ? 1 : 0.72),
+                    borderRadius: radius,
+                    // light rim + hairline: reads as glass on light and dark content
+                    border: Border.all(color: opaque ? OlfaColors.gray : OlfaColors.white.withValues(alpha: 0.75), width: 1),
+                  ),
+                  child: LayoutBuilder(builder: (context, c) {
+                    final slot = c.maxWidth / items.length;
+                    // slot measured from the start edge; Positioned needs a physical left
+                    final start = slot * index;
+                    final left = rtl ? c.maxWidth - start - slot : start;
+                    return Stack(children: [
+                      AnimatedPositioned(
+                        duration: motion(context, const Duration(milliseconds: 420)),
+                        curve: Curves.easeOutBack,
+                        left: left + 2,
+                        top: 0,
+                        bottom: 0,
+                        width: slot - 4,
+                        child: const _GlassPill(),
+                      ),
+                      Row(children: [
+                        for (var i = 0; i < items.length; i++)
+                          Expanded(child: _NavButton(item: items[i], active: i == index, count: badges[i] ?? 0, onTap: () => onTap(i), onGlass: true)),
+                      ]),
+                    ]);
+                  }),
+                ),
+              ),
             ),
           ),
         ),
       ),
     );
   }
+}
+
+/// The active-tab marker: a brighter pane of glass with a burgundy edge.
+class _GlassPill extends StatelessWidget {
+  const _GlassPill();
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+        decoration: BoxDecoration(
+          color: OlfaColors.white.withValues(alpha: 0.92),
+          borderRadius: OlfaRadius.all(18),
+          border: Border.all(color: OlfaColors.primary.withValues(alpha: 0.22)),
+          boxShadow: [BoxShadow(color: OlfaColors.primary.withValues(alpha: 0.14), blurRadius: 14, offset: const Offset(0, 4))],
+        ),
+      );
 }
 
 /// The same tabs as a vertical rail at the start edge (tablets, landscape).
@@ -110,11 +160,14 @@ class OlfaSideNav extends StatelessWidget {
 }
 
 class _NavButton extends StatelessWidget {
-  const _NavButton({required this.item, required this.active, required this.count, required this.onTap});
+  const _NavButton({required this.item, required this.active, required this.count, required this.onTap, this.onGlass = false});
   final OlfaNavItem item;
   final bool active;
   final int count;
   final VoidCallback onTap;
+
+  /// On the glass bar the sliding pill marks the active tab (no own background).
+  final bool onGlass;
 
   @override
   Widget build(BuildContext context) {
@@ -139,14 +192,23 @@ class _NavButton extends StatelessWidget {
           curve: Curves.easeOut,
           constraints: const BoxConstraints(minHeight: 54, minWidth: OlfaSize.minTap),
           margin: const EdgeInsets.symmetric(horizontal: 2),
-          decoration: BoxDecoration(color: active ? OlfaColors.primaryTint() : Colors.transparent, borderRadius: OlfaRadius.all(17)),
+          decoration: BoxDecoration(color: active && !onGlass ? OlfaColors.primaryTint() : Colors.transparent, borderRadius: OlfaRadius.all(17)),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  Icon(active ? item.activeIcon : item.icon, size: 23, color: color),
+                  // a small lift as the glass arrives under the tab
+                  AnimatedScale(
+                    scale: active ? 1.08 : 1,
+                    duration: motion(context, const Duration(milliseconds: 260)),
+                    curve: Curves.easeOutBack,
+                    child: AnimatedSwitcher(
+                      duration: motion(context, const Duration(milliseconds: 180)),
+                      child: Icon(active ? item.activeIcon : item.icon, key: ValueKey(active), size: 23, color: color),
+                    ),
+                  ),
                   if (count > 0) PositionedDirectional(top: -6, end: -12, child: CountBadge(count: count)),
                 ],
               ),
