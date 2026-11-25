@@ -48,13 +48,13 @@ void main() {
       await tester.pumpWidget(host(Align(alignment: Alignment.bottomCenter, child: Builder(builder: (c) => FloatingNavBar(items: OlfaNavItems.member(AppLocalizations.of(c)), index: 0, onTap: (i) => tapped = i))), locale: locale));
       await tester.pumpAndSettle();
       final l = await AppLocalizations.delegate.load(locale);
-      for (final label in [l.navDiscover, l.navLikes, l.navMatches, l.navMessages, l.navProfile]) {
+      for (final label in [l.navExplore, l.navLikes, l.navMarriage, l.navChat, l.navMenu]) {
         expect(find.text(label), findsOneWidget);
       }
-      await tester.tap(find.text(l.navMessages));
+      await tester.tap(find.text(l.navChat));
       expect(tapped, 3);
-      final first = tester.getCenter(find.text(l.navDiscover)).dx;
-      final last = tester.getCenter(find.text(l.navProfile)).dx;
+      final first = tester.getCenter(find.text(l.navExplore)).dx;
+      final last = tester.getCenter(find.text(l.navMenu)).dx;
       expect(locale.languageCode == 'ar' ? first > last : first < last, isTrue);
     });
   }
@@ -63,7 +63,7 @@ void main() {
     testWidgets('FloatingNavBar fits ${e.key} at 1.3× text', (tester) async {
       await tester.pumpWidget(MediaQuery(
         data: MediaQueryData(size: e.value, textScaler: const TextScaler.linear(1.3)),
-        child: host(Align(alignment: Alignment.bottomCenter, child: Builder(builder: (c) => FloatingNavBar(items: OlfaNavItems.member(AppLocalizations.of(c)), index: 2, badges: const {1: 120, 3: 4}, onTap: (_) {}))), size: e.value, locale: const Locale('en')),
+        child: host(Align(alignment: Alignment.bottomCenter, child: Builder(builder: (c) => FloatingNavBar(items: OlfaNavItems.member(AppLocalizations.of(c)), index: 2, badges: const {1: 120, 3: 4}, layout: OlfaNavItems.memberLayout, onTap: (_) {}))), size: e.value, locale: const Locale('en')),
       ));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);

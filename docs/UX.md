@@ -105,10 +105,12 @@
 - **Payment:** one bottom sheet over the booking page (what, when, price, method, total, pay). Processing can't be dismissed; success, declined and cancelled each have their own state. A failed or cancelled payment keeps the booking and its time; "Try again" pays the same booking. Bookings waiting for payment have "Complete payment" in My consultations.
 - **Managed accounts:** at sign-up a member chooses "For me" or "For a family member"; the manager gives their name, relation, whose phone signs in, and confirms the owner's agreement. Settings → Account management to change or end it. Profiles show the relation only.
 
-## Bottom bar: tinted liquid glass
-- **Glass:** the page shows through, blurred (σ 24) and a little more saturated, under a pane tinted between clear and the brand burgundy (white 52 % + burgundy 10 %). No gradients; the four brand colours only.
-- **Light on the glass:** a bright rim along the top edge, a soft specular glint near the start corner, a faint burgundy rim along the bottom, and a light-and-burgundy shadow for depth.
-- **Active tab:** a burgundy-tinted glass pill with its own bright top rim. It slides to the next tab and stretches like liquid on the way (wider and slightly flatter mid-way), then settles with a small spring. It follows the reading direction.
-- **Icons:** 26 px (were 23); the active icon lifts to 112 % with a spring; a press squeezes it to 86 % (no ripple on the glass); labels 11 px.
-- **Drag to switch:** slide a finger along the bar; the pill follows, a light haptic tick on each tab, and the tab under the finger opens on release. Taps work as before; re-tapping the current tab scrolls to the top.
-- **Accessibility:** high contrast or "reduce transparency" → an opaque white bar with an outlined pill; reduce motion → the pill moves without stretching. Tablets keep the side rail.
+## Bottom bar: dark glass capsule + round button
+- **Shape (members, phones):** two floating pieces above the home indicator — a fully rounded capsule with four tabs and, 10 px beside it at the far end, a separate round button (far left in Arabic, far right in English/French).
+- **Placement:** capsule, Arabic left → right: القائمة (Menu → profile page), دردشة (Chat → messages), استكشاف (Explore → discover), الزواج (Marriage → matches). Round button: الإعجابات (likes), icon only; its name stays for screen readers. Every item keeps its page, icon and badge; only the labels and positions changed (`OlfaNavItems.memberLayout`). Professionals keep their four tabs in the capsule. Tablets keep the side rail.
+- **Glass:** both pieces are semi-transparent brand black (#1A1A1A at 70 %) over a light blur of the page (σ 18 + a little saturation), with a thin translucent white border, a faint light rim on top and a soft shadow. Solid colours only, no gradients.
+- **Active tab:** a lighter glass capsule (white 15 %) behind the active item, with a soft border and a light shadow. It glides to the next tab in 340 ms (a slight stretch on the way, no long bounce). When the round button is active it fills with the same lighter glass and the capsule's marker fades out; coming back, the marker fades in under the new tab. Icon and label turn white and the icon lifts to 108 %; a press squeezes it to 88 %.
+- **Badges:** on each icon's top corner, ringed in the bar's black; they never take taps (the whole item does).
+- **Drag to switch:** slide along the capsule; the marker follows with a light tick on each tab, and the tab opens on release.
+- **Accessibility:** high contrast → opaque black; reduce motion → no glide. Tap targets ≥ 54 px tall; labels capped at 1.2× text scale.
+

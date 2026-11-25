@@ -235,7 +235,7 @@ class AppShell extends ConsumerWidget {
     return Scaffold(
       extendBody: true,
       body: NavChrome(bottomBar: !keyboard, child: shell),
-      bottomNavigationBar: keyboard ? null : FloatingNavBar(items: items, index: shell.currentIndex, badges: badges, onTap: (i) => _onTap(ref, i)),
+      bottomNavigationBar: keyboard ? null : FloatingNavBar(items: items, index: shell.currentIndex, badges: badges, layout: professional ? null : OlfaNavItems.memberLayout, onTap: (i) => _onTap(ref, i)),
     );
   }
 }
