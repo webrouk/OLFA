@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -34,12 +35,18 @@ abstract final class OlfaNavItems {
       ];
 }
 
-/// Floating bottom navigation (phones) in frosted glass: the page shows
-/// through, blurred, behind a translucent white bar. The active tab sits on a
-/// glass pill that slides from tab to tab (follows the reading direction).
-/// "Reduce transparency" / high contrast → an opaque white bar; reduce motion →
-/// the pill moves without animation. Badges show real counts only.
-class FloatingNavBar extends StatelessWidget {
+/// Floating bottom navigation (phones) in tinted "liquid" glass, as on iOS:
+///  - the page shows through, blurred and slightly more saturated, under a
+///    pane tinted with the brand burgundy (between clear and the brand colour);
+///  - light breaks on the glass: a bright rim along the top edge, a soft
+///    specular glint, and a faint burgundy rim below (solid colours, no gradients);
+///  - the active tab sits on a burgundy glass pill that slides to the next tab
+///    and stretches like liquid on the way, then settles with a small spring;
+///  - drag along the bar to scrub between tabs (the pill follows the finger,
+///    a light tick on each tab, the tab opens on release); a press squeezes the icon.
+/// High contrast / "reduce transparency" → an opaque bar; reduce motion → the
+/// pill jumps without stretching. Order follows the reading direction.
+class FloatingNavBar extends StatefulWidget {
   const FloatingNavBar({super.key, required this.items, required this.index, required this.onTap, this.badges = const {}});
 
   final List<OlfaNavItem> items;
@@ -50,11 +57,77 @@ class FloatingNavBar extends StatelessWidget {
   final Map<int, int> badges;
 
   @override
+  State<FloatingNavBar> createState() => _FloatingNavBarState();
+}
+
+class _FloatingNavBarState extends State<FloatingNavBar> with SingleTickerProviderStateMixin {
+  late final AnimationController _move = AnimationController(vsync: this, duration: const Duration(milliseconds: 520));
+  double _from = 0; // pill position, in tab slots (0 = first tab at the start edge)
+  double _to = 0;
+  int? _scrub; // tab under the finger while dragging
+
+  @override
+  void initState() {
+    super.initState();
+    _from = _to = widget.index.toDouble();
+  }
+
+  @override
+  void didUpdateWidget(FloatingNavBar old) {
+    super.didUpdateWidget(old);
+    if (old.index != widget.index) _slideTo(widget.index.toDouble());
+  }
+
+  @override
+  void dispose() {
+    _move.dispose();
+    super.dispose();
+  }
+
+  double get _pos => _from + (_to - _from) * Curves.easeOutBack.transform(_move.value);
+
+  void _slideTo(double target) {
+    _from = _pos;
+    _to = target;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _move.value = 1;
+    } else {
+      _move.forward(from: 0);
+    }
+  }
+
+  int _slotAt(Offset local, double width) {
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    final x = rtl ? width - local.dx : local.dx;
+    return (x / (width / widget.items.length)).floor().clamp(0, widget.items.length - 1).toInt();
+  }
+
+  void _drag(Offset local, double width) {
+    final i = _slotAt(local, width);
+    if (i == _scrub) return;
+    HapticFeedback.selectionClick();
+    setState(() => _scrub = i);
+    _slideTo(i.toDouble());
+  }
+
+  void _release() {
+    final i = _scrub;
+    setState(() => _scrub = null);
+    if (i == null) return;
+    if (i != widget.index) {
+      widget.onTap(i);
+    } else {
+      _slideTo(i.toDouble());
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
     final opaque = MediaQuery.highContrastOf(context);
     final radius = OlfaRadius.all(OlfaRadius.navBar);
     final rtl = Directionality.of(context) == TextDirection.rtl;
+    final items = widget.items;
     return Padding(
       padding: EdgeInsets.fromLTRB(OlfaSize.navBarMargin, 0, OlfaSize.navBarMargin, bottom + 12),
       child: Center(
@@ -63,45 +136,101 @@ class FloatingNavBar extends StatelessWidget {
           // Comfortable on large phones / small tablets instead of stretching edge to edge.
           constraints: const BoxConstraints(maxWidth: 520),
           child: DecoratedBox(
-            // the soft shadow lives outside the clip so the glass edge stays crisp
+            // depth: a soft shadow outside the clip, faintly burgundy
             decoration: BoxDecoration(
               borderRadius: radius,
-              boxShadow: [BoxShadow(color: OlfaColors.black.withValues(alpha: 0.12), blurRadius: 32, offset: const Offset(0, 12))],
+              boxShadow: [
+                BoxShadow(color: OlfaColors.black.withValues(alpha: 0.10), blurRadius: 30, offset: const Offset(0, 12)),
+                BoxShadow(color: OlfaColors.primary.withValues(alpha: 0.10), blurRadius: 18, offset: const Offset(0, 6)),
+              ],
             ),
             child: ClipRRect(
               borderRadius: radius,
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: opaque ? 0 : 22, sigmaY: opaque ? 0 : 22),
-                child: Container(
+                // blur + a little more saturation, so colours behind the glass stay alive
+                filter: opaque ? ImageFilter.blur() : ImageFilter.compose(outer: _saturate(1.7), inner: ImageFilter.blur(sigmaX: 24, sigmaY: 24)),
+                child: SizedBox(
                   height: OlfaSize.navBarHeight,
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: OlfaColors.white.withValues(alpha: opaque ? 1 : 0.72),
-                    borderRadius: radius,
-                    // light rim + hairline: reads as glass on light and dark content
-                    border: Border.all(color: opaque ? OlfaColors.gray : OlfaColors.white.withValues(alpha: 0.75), width: 1),
-                  ),
-                  child: LayoutBuilder(builder: (context, c) {
-                    final slot = c.maxWidth / items.length;
-                    // slot measured from the start edge; Positioned needs a physical left
-                    final start = slot * index;
-                    final left = rtl ? c.maxWidth - start - slot : start;
-                    return Stack(children: [
-                      AnimatedPositioned(
-                        duration: motion(context, const Duration(milliseconds: 420)),
-                        curve: Curves.easeOutBack,
-                        left: left + 2,
-                        top: 0,
-                        bottom: 0,
-                        width: slot - 4,
-                        child: const _GlassPill(),
+                  child: Stack(children: [
+                    // the tint: between clear and the brand colour
+                    Positioned.fill(child: ColoredBox(color: opaque ? OlfaColors.white : OlfaColors.white.withValues(alpha: 0.52))),
+                    if (!opaque) Positioned.fill(child: ColoredBox(color: OlfaColors.primary.withValues(alpha: 0.10))),
+                    // light breaking on the glass: top rim + specular glint + lower rim
+                    if (!opaque) ...[
+                      Positioned.fill(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: radius,
+                            border: Border.all(color: OlfaColors.white.withValues(alpha: 0.45)),
+                          ),
+                        ),
                       ),
-                      Row(children: [
-                        for (var i = 0; i < items.length; i++)
-                          Expanded(child: _NavButton(item: items[i], active: i == index, count: badges[i] ?? 0, onTap: () => onTap(i), onGlass: true)),
-                      ]),
-                    ]);
-                  }),
+                      Positioned(left: 22, right: 22, top: 0.5, height: 1.2, child: ColoredBox(color: OlfaColors.white.withValues(alpha: 0.85))),
+                      Positioned(left: 26, right: 26, bottom: 0.5, height: 1, child: ColoredBox(color: OlfaColors.primary.withValues(alpha: 0.14))),
+                      PositionedDirectional(
+                        top: -14,
+                        start: 30,
+                        width: 120,
+                        height: 26,
+                        child: IgnorePointer(
+                          child: ImageFiltered(
+                            imageFilter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                            child: DecoratedBox(decoration: BoxDecoration(color: OlfaColors.white.withValues(alpha: 0.55), borderRadius: OlfaRadius.all(20))),
+                          ),
+                        ),
+                      ),
+                    ] else
+                      Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(borderRadius: radius, border: Border.all(color: OlfaColors.gray)))),
+                    Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: LayoutBuilder(builder: (context, c) {
+                        final slot = c.maxWidth / items.length;
+                        return GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onHorizontalDragStart: (d) => _drag(d.localPosition, c.maxWidth),
+                          onHorizontalDragUpdate: (d) => _drag(d.localPosition, c.maxWidth),
+                          onHorizontalDragEnd: (_) => _release(),
+                          onHorizontalDragCancel: _release,
+                          child: AnimatedBuilder(
+                            animation: _move,
+                            builder: (context, _) {
+                              // liquid: wider and a touch flatter mid-way, back to shape on arrival
+                              final t = _move.isAnimating ? _move.value : 1.0;
+                              final travel = (_to - _from).abs().clamp(0.0, 1.0);
+                              final stretch = math.sin(math.pi * t) * 0.38 * travel;
+                              final w = (slot - 4) * (1 + stretch);
+                              final center = slot * _pos + slot / 2;
+                              final startX = center - w / 2;
+                              final left = rtl ? c.maxWidth - startX - w : startX;
+                              final squash = 1 - stretch * 0.22;
+                              final pressed = _scrub != null;
+                              return Stack(children: [
+                                Positioned(
+                                  left: left,
+                                  width: w,
+                                  top: 0,
+                                  bottom: 0,
+                                  child: Transform.scale(scaleY: squash * (pressed ? 1.06 : 1), child: _GlassPill(opaque: opaque)),
+                                ),
+                                Row(children: [
+                                  for (var i = 0; i < items.length; i++)
+                                    Expanded(
+                                      child: _NavButton(
+                                        item: items[i],
+                                        active: i == (_scrub ?? widget.index),
+                                        count: widget.badges[i] ?? 0,
+                                        onTap: () => widget.onTap(i),
+                                        onGlass: true,
+                                      ),
+                                    ),
+                                ]),
+                              ]);
+                            },
+                          ),
+                        );
+                      }),
+                    ),
+                  ]),
                 ),
               ),
             ),
@@ -110,20 +239,38 @@ class FloatingNavBar extends StatelessWidget {
       ),
     );
   }
+
+  static ColorFilter _saturate(double s) {
+    const r = 0.2126, g = 0.7152, b = 0.0722;
+    final i = 1 - s;
+    return ColorFilter.matrix(<double>[
+      r * i + s, g * i, b * i, 0, 0,
+      r * i, g * i + s, b * i, 0, 0,
+      r * i, g * i, b * i + s, 0, 0,
+      0, 0, 0, 1, 0,
+    ]);
+  }
 }
 
-/// The active-tab marker: a brighter pane of glass with a burgundy edge.
+/// The active-tab marker: a pane of burgundy-tinted glass with a bright top
+/// rim — light catching its edge — and a soft burgundy glow below.
 class _GlassPill extends StatelessWidget {
-  const _GlassPill();
+  const _GlassPill({required this.opaque});
+  final bool opaque;
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-        decoration: BoxDecoration(
-          color: OlfaColors.white.withValues(alpha: 0.92),
-          borderRadius: OlfaRadius.all(18),
-          border: Border.all(color: OlfaColors.primary.withValues(alpha: 0.22)),
-          boxShadow: [BoxShadow(color: OlfaColors.primary.withValues(alpha: 0.14), blurRadius: 14, offset: const Offset(0, 4))],
+  Widget build(BuildContext context) => Stack(children: [
+        Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: opaque ? OlfaColors.primaryTint(0.12) : OlfaColors.primary.withValues(alpha: 0.13),
+              borderRadius: OlfaRadius.all(20),
+              border: Border.all(color: opaque ? OlfaColors.primary.withValues(alpha: 0.35) : OlfaColors.white.withValues(alpha: 0.55)),
+              boxShadow: opaque ? null : [BoxShadow(color: OlfaColors.primary.withValues(alpha: 0.18), blurRadius: 16, offset: const Offset(0, 6))],
+            ),
+          ),
         ),
-      );
+        if (!opaque) Positioned(left: 14, right: 14, top: 1, height: 1.2, child: ColoredBox(color: OlfaColors.white.withValues(alpha: 0.9))),
+      ]);
 }
 
 /// The same tabs as a vertical rail at the start edge (tablets, landscape).
@@ -159,7 +306,7 @@ class OlfaSideNav extends StatelessWidget {
   }
 }
 
-class _NavButton extends StatelessWidget {
+class _NavButton extends StatefulWidget {
   const _NavButton({required this.item, required this.active, required this.count, required this.onTap, this.onGlass = false});
   final OlfaNavItem item;
   final bool active;
@@ -170,7 +317,15 @@ class _NavButton extends StatelessWidget {
   final bool onGlass;
 
   @override
+  State<_NavButton> createState() => _NavButtonState();
+}
+
+class _NavButtonState extends State<_NavButton> {
+  bool _down = false;
+
+  @override
   Widget build(BuildContext context) {
+    final item = widget.item, active = widget.active, count = widget.count, onTap = widget.onTap, onGlass = widget.onGlass;
     final l = AppLocalizations.of(context);
     // Inactive tabs use the muted text colour (≥ 4.5:1 on white), not the disabled one.
     final color = active ? OlfaColors.primary : OlfaColors.textMuted;
@@ -184,6 +339,10 @@ class _NavButton extends StatelessWidget {
           HapticFeedback.selectionClick();
           onTap();
         },
+        onHighlightChanged: (v) => setState(() => _down = v),
+        // the glass shows the press itself (the icon squeezes): no ripple on it
+        splashFactory: onGlass ? NoSplash.splashFactory : null,
+        highlightColor: onGlass ? Colors.transparent : null,
         containedInkWell: true,
         highlightShape: BoxShape.rectangle,
         borderRadius: OlfaRadius.all(17),
@@ -201,12 +360,13 @@ class _NavButton extends StatelessWidget {
                 children: [
                   // a small lift as the glass arrives under the tab
                   AnimatedScale(
-                    scale: active ? 1.08 : 1,
-                    duration: motion(context, const Duration(milliseconds: 260)),
-                    curve: Curves.easeOutBack,
+                    // pressed: squeeze · active: a small lift as the glass arrives
+                    scale: _down ? 0.86 : (active ? 1.12 : 1),
+                    duration: motion(context, Duration(milliseconds: _down ? 90 : 320)),
+                    curve: _down ? Curves.easeOut : Curves.elasticOut,
                     child: AnimatedSwitcher(
                       duration: motion(context, const Duration(milliseconds: 180)),
-                      child: Icon(active ? item.activeIcon : item.icon, key: ValueKey(active), size: 23, color: color),
+                      child: Icon(active ? item.activeIcon : item.icon, key: ValueKey(active), size: 26, color: color),
                     ),
                   ),
                   if (count > 0) PositionedDirectional(top: -6, end: -12, child: CountBadge(count: count)),
@@ -218,7 +378,7 @@ class _NavButton extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.2),
-                style: TextStyle(fontSize: 10.5, fontWeight: active ? FontWeight.w700 : FontWeight.w500, color: color),
+                style: TextStyle(fontSize: 11, fontWeight: active ? FontWeight.w700 : FontWeight.w500, color: color),
               ),
             ],
           ),

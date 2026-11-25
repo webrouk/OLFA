@@ -828,7 +828,7 @@ function admin(live){const d=ADEV[S.adev];const narrow=d.W<1000;
 /* ═══════════ CHROME + RENDER ═══════════ */
 const $=s=>document.querySelector(s);
 function chrome(){
- $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.14</small></span></div>
+ $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.15</small></span></div>
  <div class="seg"><button class="${S.mode==='app'?'on':''}" data-ui="mode" data-a="app">${t('vApp')}</button><button class="${S.mode==='admin'?'on':''}" data-ui="mode" data-a="admin">${t('vAdmin')}</button></div>
  ${S.mode==='app'?`<div class="seg"><button class="${S.view==='one'?'on':''}" data-ui="view" data-a="one">${t('vOne')}</button><button class="${S.view==='all'?'on':''}" data-ui="view" data-a="all">${t('vAll')}</button></div>`:''}
  <div class="seg"><button class="${S.lang==='ar'?'on':''}" data-ui="lang" data-a="ar">ع RTL</button><button class="${S.lang==='en'?'on':''}" data-ui="lang" data-a="en">EN LTR</button><button class="${S.lang==='fr'?'on':''}" data-ui="lang" data-a="fr">FR LTR</button></div>
@@ -2531,22 +2531,48 @@ const _aset13=AS.set;
 AS.set=()=>_aset13()+`<div class="pnl" style="margin-top:16px"><h3>${t('setKeep')}</h3><p class="bs">${t('setKeepD')}</p></div>`;
 
 
-/* ═══════════ v0.14 — bottom bar in frosted glass, with a glass pill that slides between tabs ═══════════ */
+/* ═══════════ v0.15 — bottom bar in tinted "liquid" glass (as on iOS): burgundy-tinted pane, light breaking on its edges, a glass pill that stretches as it slides, drag to switch, bigger icons ═══════════ */
 const st14=document.createElement('style');st14.textContent=`
-.nav.glass{background:rgba(255,255,255,.72);-webkit-backdrop-filter:blur(22px) saturate(160%);backdrop-filter:blur(22px) saturate(160%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.75),0 0 0 1px rgba(26,26,26,.06),0 12px 32px rgba(26,26,26,.12)}
-.nav.glass button{position:relative;z-index:1;background:none!important}
-.nav.glass button .nic{transition:transform .26s cubic-bezier(.34,1.56,.64,1)}.nav.glass button.on .nic{transform:scale(1.08)}
-.npill{position:absolute;top:7px;bottom:7px;width:calc((100% - 12px) / var(--n) - 4px);inset-inline-start:calc(8px + (100% - 12px) / var(--n) * var(--i));border-radius:18px;background:rgba(255,255,255,.92);box-shadow:0 0 0 1px rgba(139,13,43,.22),0 4px 14px rgba(139,13,43,.14);transition:inset-inline-start .42s cubic-bezier(.34,1.56,.64,1);pointer-events:none;z-index:0}
-@media (prefers-reduced-motion:reduce){.npill,.nav.glass button .nic{transition:none}}
-@media (prefers-contrast:more){.nav.glass{background:#fff;-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:0 0 0 1px var(--g),0 10px 30px rgba(26,26,26,.10)}}`;document.head.appendChild(st14);
+.nav.glass{background:rgba(247,236,239,.6);-webkit-backdrop-filter:blur(24px) saturate(180%) brightness(1.03);backdrop-filter:blur(24px) saturate(180%) brightness(1.03);
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.85),inset 0 0 0 1px rgba(255,255,255,.45),inset 0 -1px 0 rgba(139,13,43,.12),0 0 0 .5px rgba(139,13,43,.10),0 12px 30px rgba(26,26,26,.10),0 6px 18px rgba(139,13,43,.10);overflow:hidden;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.nav.glass::after{content:'';position:absolute;top:-14px;inset-inline-start:30px;width:120px;height:26px;border-radius:20px;background:rgba(255,255,255,.55);filter:blur(10px);pointer-events:none;z-index:2;mix-blend-mode:screen}
+.nav.glass button{position:relative;z-index:3;background:none!important;-webkit-tap-highlight-color:transparent}
+.nav.glass button .nic svg{width:26px;height:26px}.nav.glass button span:last-child{font-size:11px}
+.nav.glass button .nic{transition:transform .32s cubic-bezier(.34,1.8,.64,1)}.nav.glass button.on .nic{transform:scale(1.12)}
+.nav.glass button:active .nic{transform:scale(.86);transition-duration:.09s}
+.npill{position:absolute;top:7px;bottom:7px;border-radius:20px;background:rgba(139,13,43,.13);-webkit-backdrop-filter:blur(6px) saturate(200%);backdrop-filter:blur(6px) saturate(200%);
+ box-shadow:inset 0 1.2px 0 rgba(255,255,255,.9),inset 0 0 0 1px rgba(255,255,255,.55),0 6px 16px rgba(139,13,43,.18);pointer-events:none;z-index:1;will-change:left,width,transform}
+.nav.glass.scrub .npill{transform:scaleY(1.06)}
+@media (prefers-contrast:more){.nav.glass{background:#fff;-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:0 0 0 1px var(--g),0 10px 30px rgba(26,26,26,.10)}.nav.glass::after{display:none}.npill{background:var(--p8);box-shadow:0 0 0 1px rgba(139,13,43,.35);backdrop-filter:none}}`;document.head.appendChild(st14);
 const _navbar14=navbar;
 navbar=function(on,rail){const h=_navbar14(on,rail);if(rail||DEVICES[S.dev].W>=840)return h; // tablets turn the bar into a side rail
-const items=NAVITEMS();const i=Math.max(0,items.findIndex(x=>x[0]===on));const from=S.navFrom!=null&&S.navFrom<items.length?S.navFrom:i;
- return h.replace('<nav class="nav" aria-label="main">',`<nav class="nav glass" aria-label="main" style="--n:${items.length}"><i class="npill" aria-hidden="true" style="--i:${from}" data-to="${i}"></i>`)};
+ const items=NAVITEMS();const i=Math.max(0,items.findIndex(x=>x[0]===on));
+ return h.replace('<nav class="nav" aria-label="main">',`<nav class="nav glass" aria-label="main" style="--n:${items.length}"><i class="npill" aria-hidden="true" data-to="${i}"></i>`)};
+const reduceM=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
+/* physical left/width of the pill under tab k */
+const pillBox=(nav,k)=>{const b=nav.querySelectorAll('button')[k];const nr=nav.getBoundingClientRect(),r=b.getBoundingClientRect();return {left:r.left-nr.left,width:r.width}};
+/* liquid move: stretches and flattens a little mid-way, settles with a small spring */
+function pillTo(p,from,to,dur=520){const travel=Math.min(1,Math.abs(to.left-from.left)/(to.width||1));
+ if(reduceM()||!travel){Object.assign(p.style,{left:to.left+'px',width:to.width+'px'});return}
+ const midW=to.width*(1+.38*travel),midL=(from.left+to.left)/2-(midW-to.width)/2;
+ p.animate([{left:from.left+'px',width:from.width+'px',transform:'scaleY(1)'},{left:midL+'px',width:midW+'px',transform:`scaleY(${1-.08*travel})`,offset:.45},{left:(to.left+(to.left-from.left)*.04)+'px',width:to.width+'px',transform:'scaleY(1)',offset:.8},{left:to.left+'px',width:to.width+'px',transform:'scaleY(1)'}],{duration:dur,easing:'cubic-bezier(.3,.7,.3,1)'});
+ Object.assign(p.style,{left:to.left+'px',width:to.width+'px'})}
 const _render14=render;
 render=function(){const r=_render14.apply(this,arguments);
- document.querySelectorAll('.npill[data-to]').forEach(p=>{const to=+p.dataset.to;if(p.closest('#dev')){S.navFrom=to;requestAnimationFrame(()=>requestAnimationFrame(()=>p.style.setProperty('--i',to)))}else{p.style.transition='none';p.style.setProperty('--i',to)}});
+ document.querySelectorAll('.nav.glass .npill[data-to]').forEach(p=>{const nav=p.parentElement,to=pillBox(nav,+p.dataset.to);
+  if(p.closest('#dev')&&S.navPill){pillTo(p,S.navPill,to)}else Object.assign(p.style,{left:to.left+'px',width:to.width+'px'});
+  if(p.closest('#dev'))S.navPill=to});
  return r};
+/* drag along the bar to scrub between tabs: the pill follows, a tab opens on release */
+let scrub=null;
+document.addEventListener('pointerdown',e=>{const nav=e.target.closest('#dev .nav.glass');if(!nav)return;scrub={nav,x:e.clientX,moved:false,k:null}},true);
+document.addEventListener('pointermove',e=>{if(!scrub)return;if(!scrub.moved&&Math.abs(e.clientX-scrub.x)<8)return;scrub.moved=true;scrub.nav.classList.add('scrub');
+ const bs=[...scrub.nav.querySelectorAll('button')];const k=bs.findIndex(b=>{const r=b.getBoundingClientRect();return e.clientX>=r.left&&e.clientX<=r.right});
+ if(k>=0&&k!==scrub.k){const p=scrub.nav.querySelector('.npill');const to=pillBox(scrub.nav,k);pillTo(p,{left:parseFloat(p.style.left),width:parseFloat(p.style.width)},to,300);S.navPill=to;scrub.k=k;bs.forEach((b,i)=>b.classList.toggle('on',i===k))}},true);
+document.addEventListener('pointerup',e=>{if(!scrub)return;const s2=scrub;scrub=null;s2.nav.classList.remove('scrub');if(!s2.moved)return;
+ // swallow the click that follows a drag, then open the tab under the finger
+ const kill=ev=>{ev.stopPropagation();ev.preventDefault();document.removeEventListener('click',kill,true)};document.addEventListener('click',kill,true);setTimeout(()=>document.removeEventListener('click',kill,true),50);
+ if(s2.k!=null){const b=s2.nav.querySelectorAll('button')[s2.k];S.hist=[];go(b.dataset.tab,false)}},true);
 
 try{const q=new URLSearchParams(location.hash.slice(1));if(q.get('lang'))S.lang=q.get('lang');if(SC[q.get('s')])S.screen=q.get('s');if(q.get('mode'))S.mode=q.get('mode');if(q.get('dev')&&DEVICES[q.get('dev')])S.dev=q.get('dev');if(q.get('view'))S.view=q.get('view');if(q.get('adm'))S.adm=q.get('adm');if(q.get('adev'))S.adev=q.get('adev');if(q.get('acct'))S.acct=q.get('acct');if(q.get('sheet'))S.sheet=q.get('sheet');if(q.get('cid'))S.cid=q.get('cid');if(q.get('detail'))S.detail=+q.get('detail')}catch(e){}
 render();

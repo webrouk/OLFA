@@ -7,6 +7,8 @@ import 'package:olfa/core/widgets/olfa_widgets.dart';
 
 import '../helpers.dart';
 
+final pill = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_GlassPill');
+
 void main() {
   Widget bar(int index, Locale locale) => host(
         Align(alignment: Alignment.bottomCenter, child: Builder(builder: (c) => FloatingNavBar(items: OlfaNavItems.member(AppLocalizations.of(c)), index: index, onTap: (_) {}))),
@@ -19,17 +21,29 @@ void main() {
     expect(f.filter, isA<ImageFilter>());
   });
 
+  testWidgets('drag along the bar to scrub between tabs: the tab opens on release', (tester) async {
+    var tapped = -1;
+    await tester.pumpWidget(host(
+      Align(alignment: Alignment.bottomCenter, child: Builder(builder: (c) => FloatingNavBar(items: OlfaNavItems.member(AppLocalizations.of(c)), index: 0, onTap: (i) => tapped = i))),
+      locale: const Locale('en'),
+    ));
+    final r = tester.getRect(find.byType(BackdropFilter));
+    await tester.dragFrom(Offset(r.left + 30, r.center.dy), Offset(r.width - 60, 0));
+    await tester.pumpAndSettle();
+    expect(tapped, 4);
+  });
+
   testWidgets('the glass pill sits under the active tab and follows the reading direction', (tester) async {
     for (final (locale, firstOnLeft) in [(const Locale('en'), true), (const Locale('ar'), false)]) {
       await tester.pumpWidget(bar(0, locale));
       await tester.pumpAndSettle();
-      final pill = tester.getRect(find.byType(AnimatedPositioned));
+      final pill = tester.getRect(pill);
       final barRect = tester.getRect(find.byType(BackdropFilter));
       expect(firstOnLeft ? pill.left < barRect.center.dx : pill.right > barRect.center.dx, isTrue, reason: '$locale');
       // moving to the last tab slides the pill to the other end
       await tester.pumpWidget(bar(4, locale));
       await tester.pumpAndSettle();
-      final moved = tester.getRect(find.byType(AnimatedPositioned));
+      final moved = tester.getRect(pill);
       expect(firstOnLeft ? moved.left > barRect.center.dx : moved.right < barRect.center.dx, isTrue, reason: '$locale');
     }
   });
