@@ -110,6 +110,10 @@ class DemoBackend {
       complimentsUsed: complimentsUsed,
       complimentsResetAt: DateTime(DateTime.now().year, DateTime.now().month + 1),
       visibleConversations: visibleLimit,
+      // Demo build: Google's public *test* native ad units (ads are labelled "Test Ad").
+      ads: plan == PlanCode.free
+          ? const DiscoveryAds(enabled: true, firstAfter: 3, interval: 5, androidUnitId: 'ca-app-pub-3940256099942544/2247696110', iosUnitId: 'ca-app-pub-3940256099942544/3986624511')
+          : DiscoveryAds.off,
       resetsAt: DateTime.now().toUtc().add(const Duration(days: 1)).copyWith(hour: 0, minute: 0, second: 0, millisecond: 0, microsecond: 0).toLocal(),
     );
   }

@@ -229,3 +229,15 @@ Criteria and review flow: [VERIFICATION.md](VERIFICATION.md).
 | … | `/v1/admin/support/*` | Queue, thread, reply, status, FAQ CRUD |
 
 Errors `403 ACCOUNT_BANNED` / `ACCOUNT_SUSPENDED` carry `{permanent, until, reason, since, appealToken}`. The app shows the closed-account screen from them.
+
+## Discovery ads (native, Free plan only) — see docs/ADS.md
+
+- `GET /v1/me/entitlements` adds `ads`:
+  - Off: `{enabled:false, reason:'paid_plan'|'plan_off'|'switched_off'|'not_configured'}`.
+  - On: `{enabled:true, placement:'discovery', firstAfter, interval, maxPerSession, preloadAhead, personalized, maxAdContentRating, units:{android, ios}}`.
+  - Paid plans always get `enabled:false`.
+- `GET /v1/admin/ads` and `PUT /v1/admin/ads` (permission `settings.manage`):
+  - Body: `{enabled, freePlanShowsAds, firstAfter (1–50), interval (3–50), maxPerSession (0–50), preloadAhead (1–3), personalized, maxAdContentRating: G|PG|T|MA, units:{android, ios}}`.
+  - Unit ids must look like `ca-app-pub-<16 digits>/<10 digits>`, or be empty.
+  - Switching ads on needs at least one unit id. The change is audited (`settings.ads`).
+- `PUT /v1/admin/plans/:code/entitlements` accepts `show_ads` for FREE only. A paid plan → 400, and the DB refuses it too (P0060).

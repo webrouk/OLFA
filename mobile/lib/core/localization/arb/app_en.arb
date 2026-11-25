@@ -1635,5 +1635,8 @@
   "msgSent": "Sent",
   "msgDelivered": "Delivered",
   "msgRead": "Read",
-  "deleteUnsent": "Delete (not sent)"
+  "deleteUnsent": "Delete (not sent)",
+  "adSponsored": "Sponsored",
+  "adRemove": "Remove ads",
+  "adContinue": "Continue"
 }

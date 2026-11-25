@@ -822,7 +822,7 @@ function admin(live){const d=ADEV[S.adev];const narrow=d.W<1000;
 /* ═══════════ CHROME + RENDER ═══════════ */
 const $=s=>document.querySelector(s);
 function chrome(){
- $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.8.1</small></span></div>
+ $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.9</small></span></div>
  <div class="seg"><button class="${S.mode==='app'?'on':''}" data-ui="mode" data-a="app">${t('vApp')}</button><button class="${S.mode==='admin'?'on':''}" data-ui="mode" data-a="admin">${t('vAdmin')}</button></div>
  ${S.mode==='app'?`<div class="seg"><button class="${S.view==='one'?'on':''}" data-ui="view" data-a="one">${t('vOne')}</button><button class="${S.view==='all'?'on':''}" data-ui="view" data-a="all">${t('vAll')}</button></div>`:''}
  <div class="seg"><button class="${S.lang==='ar'?'on':''}" data-ui="lang" data-a="ar">ع RTL</button><button class="${S.lang==='en'?'on':''}" data-ui="lang" data-a="en">EN LTR</button><button class="${S.lang==='fr'?'on':''}" data-ui="lang" data-a="fr">FR LTR</button></div>
@@ -2084,6 +2084,47 @@ SC.chat=()=>{let h=_ch81();const off=!S.net?`<div class="banner p" style="margin
  const i=h.indexOf('<div class="msgs" id="msgs"');return i<0?h:h.slice(0,i)+off+tgl+h.slice(i)};
 const _cvs81=SC.convs;
 SC.convs=()=>{const h=_cvs81();const k='<div class="quota">';return h.includes(k)?h.replace(k,`<div style="text-align:center;margin:-4px 0 6px"><button class="btn sm ghost" style="color:var(--p);font-size:12px;height:auto;padding:4px 8px" data-act="simIncoming">${t('simIn')}</button></div>`+k):h};
+
+/* ═══════════ v0.9 — native ads in Discovery (Free plan only), linked to the admin "Ads" page ═══════════ */
+L8({adSponsored:['إعلان مُموَّل','Sponsored','Sponsorisé'],adRemove:['إزالة الإعلانات','Remove ads','Supprimer les pubs'],adContinue:['متابعة','Continue','Continuer'],
+ adSlotT:['مكان الإعلان الأصلي (Google AdMob)','Native ad slot (Google AdMob)','Emplacement de pub native (Google AdMob)'],
+ adSlotD:['في التطبيق يظهر هنا إعلان حقيقي من AdMob بنفس أبعاد البطاقة. هذه معاينة للتصميم فقط، وليست إعلانًا.','In the app a real AdMob ad appears here, in the same frame as a profile card. This is a layout preview, not an ad.','Dans l’app, une vraie pub AdMob apparaît ici, au format d’une carte de profil. Ceci est un aperçu de mise en page, pas une pub.'],
+ adHead:['عنوان المعلن','Advertiser headline','Titre de l’annonceur'],adBody:['نص الإعلان يظهر هنا بسطرين كحد أقصى.','The ad text appears here, two lines at most.','Le texte de la pub s’affiche ici, deux lignes au plus.'],adCta:['زر الإجراء','Call to action','Bouton d’action'],
+ a_ads:['الإعلانات','Ads','Publicités'],adsOn:['تشغيل الإعلانات (المفتاح الرئيسي)','Ads on (master switch)','Publicités activées'],adsFree:['عرض الإعلانات للخطة المجانية','Show ads to the Free plan','Afficher au plan gratuit'],
+ adsFirst:['أول إعلان بعد (ملفات)','First ad after (profiles)','Première pub après (profils)'],adsEvery:['ثم كل (ملفات)','Then every (profiles)','Puis tous les (profils)'],adsMax:['الحد في الجلسة','Max per session','Max par session'],
+ adsPaid:['Plus وPremium بلا إعلانات دائمًا.','Plus and Premium never show ads.','Plus et Premium n’affichent jamais de pub.'],adsTry:['جرّب: غيّر الأرقام ثم عُد إلى صفحة الاكتشاف في التطبيق.','Try it: change the numbers, then go back to Discover in the app.','Essayez : changez les valeurs puis revenez à Découvrir dans l’app.'],
+ adsState:['الحالة','Status','État'],adsLive:['تظهر الآن لعضو مجاني','Showing to Free members','Affichées aux membres gratuits'],adsOff:['متوقفة','Off','Désactivées']});
+S.ads={on:true,free:true,first:2,every:3,max:8};
+/* preview: shorter than the server default (4 / 6) so the card is easy to see */
+S.adDecided=0;S.adUsed=0;S.adShow=false;
+const adsLive=()=>S.ads.on&&S.ads.free&&S.userPlan==='free';
+const _doSwipe9=doSwipe;doSwipe=function(kind){const before=S.deck;_doSwipe9(kind);
+ setTimeout(()=>{if(S.deck===before||!adsLive())return;S.adDecided++;
+  if(!S.adShow&&S.adUsed<S.ads.max&&S.adDecided>=S.ads.first+S.adUsed*S.ads.every){S.adShow=true;if(S.screen==='discover')render()}},330)};
+ACT.adNext=()=>{S.adShow=false;S.adUsed++;render()};
+const _disc9=SC.discover;
+SC.discover=()=>{let h=_disc9();if(!S.adShow||!adsLive())return h;
+ const i=h.indexOf('<div class="card " id="topcard"'),j=h.indexOf('\n <div class="acts">');if(i<0||j<0)return h;
+ const ad=`<div class="card adcard" role="group" aria-label="${t('adSponsored')}"><div class="adhd"><span class="adtag">${t('adSponsored')}</span><button class="btn sm ghost" style="color:var(--p)" data-go="plans">${t('adRemove')}</button></div>
+  <div class="adbox"><div class="admedia">${I('chart',34)}<div class="h3" style="margin-top:8px">${t('adSlotT')}</div><p class="cap" style="max-width:260px">${t('adSlotD')}</p></div>
+  <div class="adtx"><div class="h3">${t('adHead')}</div><p class="bs mut" style="margin:4px 0 10px">${t('adBody')}</p><div class="adcta">${t('adCta')}</div></div></div></div>`;
+ const d=h.lastIndexOf('<div class="deck">',i),top=h.slice(i,j).replace(/<\/div>\s*$/,'');
+ const behind=top.replace('<div class="card " id="topcard"','<div class="card back" aria-hidden="true"').replace(/<span class="stamp (like|pass)">[^<]*<\/span>/g,'');
+ h=h.slice(0,d)+'<div class="deck">'+behind+ad+'</div>'+h.slice(j);
+ return h.replace(/<div class="acts">[\s\S]*?<\/div>/,`<div class="acts"><button class="adnext" data-act="adNext">${t('adContinue')} ${Ix('fwd',18)}</button></div>`)};
+const _swipe9=swipe;swipe=function(){if(S.adShow&&adsLive())return;_swipe9()};
+const st9=document.createElement('style');st9.textContent=`.card.adcard{touch-action:auto}.adhd{display:flex;align-items:center;justify-content:space-between;padding:12px 10px 6px 16px}.adtag{background:var(--k);color:var(--w);font:700 12px/1 Tajawal,Montserrat,sans-serif;padding:6px 10px;border-radius:19px}
+.adbox{flex:1;min-height:0;margin:0 8px 8px;border-radius:18px;border:1px solid var(--g);display:flex;flex-direction:column;overflow:hidden}.admedia{flex:1;min-height:0;background:var(--g);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:16px;color:var(--k)}
+.adtx{padding:12px 14px 14px}.acts button.adnext{display:inline-flex;gap:8px;align-items:center;width:auto;height:56px;padding:0 30px;border-radius:14px;background:var(--p);color:var(--w);font:700 16px Tajawal,Montserrat,sans-serif;box-shadow:none}.adcta{background:var(--p);color:var(--w);text-align:center;border-radius:14px;padding:11px;font-weight:700}`;document.head.appendChild(st9);
+ASEC.splice(ASEC.findIndex(a=>a[0]==='set'),0,['ads','chart']);
+AS.ads=()=>{const a=S.ads,num=(k,lab,lo,hi)=>`<div class="fld" style="flex:1"><label class="lbl">${t(lab)}</label><input class="inp" type="number" min="${lo}" max="${hi}" value="${a[k]}" data-adsn="${k}"></div>`;
+ return `<div class="banner p" style="margin-bottom:16px">${I('info',18)}<span>${t('adsTry')}</span></div><div class="cols"><div class="pnl"><h3>${t('adsState')}</h3>
+ <p><span class="tag ${adsLive()||(a.on&&a.free)?'p':''}">${a.on&&a.free?t('adsLive'):t('adsOff')}</span></p><p class="cap">${t('adsPaid')}</p>
+ <div class="row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0"><span>${t('adsOn')}</span>${tg(a.on,'adsT:on')}</div>
+ <div class="row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0"><span>${t('adsFree')}</span>${tg(a.free,'adsT:free')}</div></div>
+ <div class="pnl"><h3>${t('a_ads')}</h3><div style="display:flex;gap:10px">${num('first','adsFirst',1,50)}${num('every','adsEvery',3,50)}${num('max','adsMax',0,50)}</div><button class="btn sm" data-act="adsSave">${t('save')}</button></div></div>`};
+ACT.adsT=k=>{S.ads[k]=!S.ads[k];S.adShow=false;render()};
+ACT.adsSave=()=>{document.querySelectorAll('[data-adsn]').forEach(i=>{const k=i.dataset.adsn,lim={first:[1,50],every:[3,50],max:[0,50]}[k];S.ads[k]=Math.min(lim[1],Math.max(lim[0],Math.trunc(+i.value)||lim[0]))});S.adDecided=0;S.adUsed=0;S.adShow=false;render();flash(t('saved'))};
 try{const q=new URLSearchParams(location.hash.slice(1));if(q.get('lang'))S.lang=q.get('lang');if(SC[q.get('s')])S.screen=q.get('s');if(q.get('mode'))S.mode=q.get('mode');if(q.get('dev')&&DEVICES[q.get('dev')])S.dev=q.get('dev');if(q.get('view'))S.view=q.get('view');if(q.get('adm'))S.adm=q.get('adm');if(q.get('adev'))S.adev=q.get('adev')}catch(e){}
 render();
 </script>

@@ -4,7 +4,7 @@ import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestj
 import { PlanCode, Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { Type } from 'class-transformer';
-import { IsDateString, IsEmail, IsIn, IsInt, IsObject, IsOptional, IsString, Length, Max, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsEmail, IsIn, IsInt, IsObject, IsOptional, IsString, Length, Max, Min, ValidateNested } from 'class-validator';
 import { ENV, Env } from '../../config/env';
 import { AppError, ErrorCode } from '../../common/errors';
 import { AdminMfaSetup, AuthAdmin, CurrentAdmin, OlfaRequest, Public, RateLimit, Req, RequirePermissions } from '../../common/http';
@@ -12,6 +12,7 @@ import * as box from '../../domain/payout';
 import { newTotpSecret, otpauthUrl, verifyTotp } from '../../domain/totp';
 import { AuditService, PrismaService, SettingsService } from '../../common/infra';
 import { parseWeights } from '../../domain/matching';
+import { adsForMember, ADS_LIMITS, AdContentRating, invalidAdsFields, parseAdsSettings } from '../../domain/ads';
 import { EntitlementsService } from '../quotas/quotas.module';
 
 class AdminLoginDto {
@@ -73,7 +74,25 @@ const FEATURE_KEYS: Record<string, 'number' | 'boolean'> = {
   see_who_liked_you: 'boolean',
   incognito: 'boolean',
   priority_visibility: 'boolean',
+  show_ads: 'boolean', // Free plan only — refused for paid plans here and by a DB trigger
 };
+
+class AdUnitsDto {
+  @ApiProperty({ description: 'AdMob native ad unit id for Android, or empty' }) @IsString() @Length(0, 60) android!: string;
+  @ApiProperty({ description: 'AdMob native ad unit id for iOS, or empty' }) @IsString() @Length(0, 60) ios!: string;
+}
+
+class AdsDto {
+  @ApiProperty() @IsBoolean() enabled!: boolean;
+  @ApiProperty({ description: 'Show ads to Free-plan members (paid plans never see ads)' }) @IsBoolean() freePlanShowsAds!: boolean;
+  @ApiProperty() @IsInt() @Min(ADS_LIMITS.firstAfter[0]) @Max(ADS_LIMITS.firstAfter[1]) firstAfter!: number;
+  @ApiProperty() @IsInt() @Min(ADS_LIMITS.interval[0]) @Max(ADS_LIMITS.interval[1]) interval!: number;
+  @ApiProperty() @IsInt() @Min(ADS_LIMITS.maxPerSession[0]) @Max(ADS_LIMITS.maxPerSession[1]) maxPerSession!: number;
+  @ApiProperty() @IsInt() @Min(ADS_LIMITS.preloadAhead[0]) @Max(ADS_LIMITS.preloadAhead[1]) preloadAhead!: number;
+  @ApiProperty() @IsBoolean() personalized!: boolean;
+  @ApiProperty({ enum: ['G', 'PG', 'T', 'MA'] }) @IsIn(['G', 'PG', 'T', 'MA']) maxAdContentRating!: AdContentRating;
+  @ApiProperty({ type: AdUnitsDto }) @ValidateNested() @Type(() => AdUnitsDto) units!: AdUnitsDto;
+}
 
 @Injectable()
 export class AdminService {
@@ -265,6 +284,7 @@ export class AdminService {
 
   /** Quota / feature edits apply to all users of the plan within ~30 s, no app update needed. */
   async setEntitlements(code: PlanCode, dto: EntitlementsDto, admin: AuthAdmin) {
+    if (code !== 'FREE' && dto.values.show_ads === true) throw new AppError(ErrorCode.VALIDATION, 'Paid plans never show ads', { field: 'show_ads' });
     for (const [k, v] of Object.entries(dto.values)) {
       const t = FEATURE_KEYS[k];
       if (!t || typeof v !== t || (t === 'number' && (!Number.isInteger(v) || (v as number) < 0 || (v as number) > 10000))) {
@@ -281,6 +301,33 @@ export class AdminService {
     this.entitlements.invalidate();
     await this.audit.record({ actorType: 'ADMIN', actorId: admin.id, action: 'plan.entitlements', entityType: 'subscription_plan', entityId: code, before, after: dto.values });
     return this.plans();
+  }
+
+  /** Discovery ads: settings, the Free-plan switch and what a Free member gets right now. */
+  async ads() {
+    const settings = parseAdsSettings(await this.settings.get('ads.discovery', {}));
+    const row = await this.prisma.featureEntitlement.findFirst({ where: { featureKey: 'show_ads', plan: { code: 'FREE' } }, select: { value: true } });
+    const freePlanShowsAds = row?.value === true;
+    return { ...settings, freePlanShowsAds, effective: adsForMember('FREE', freePlanShowsAds, settings) };
+  }
+
+  async setAds(dto: AdsDto, admin: AuthAdmin) {
+    const { freePlanShowsAds, ...rest } = dto;
+    const next = { ...rest, units: { android: dto.units.android.trim(), ios: dto.units.ios.trim() } };
+    const bad = invalidAdsFields(next);
+    if (bad.length) throw new AppError(ErrorCode.VALIDATION, `Invalid: ${bad.join(', ')}`, { fields: bad });
+    const before = await this.ads();
+    const free = await this.prisma.subscriptionPlan.findUniqueOrThrow({ where: { code: 'FREE' }, select: { id: true } });
+    await this.prisma.featureEntitlement.upsert({
+      where: { planId_featureKey: { planId: free.id, featureKey: 'show_ads' } },
+      create: { planId: free.id, featureKey: 'show_ads', value: freePlanShowsAds },
+      update: { value: freePlanShowsAds },
+    });
+    await this.settings.set('ads.discovery', next as unknown as Prisma.InputJsonValue, admin.id);
+    this.entitlements.invalidate();
+    const after = await this.ads();
+    await this.audit.record({ actorType: 'ADMIN', actorId: admin.id, action: 'settings.ads', entityType: 'system_setting', entityId: 'ads.discovery', before, after });
+    return after;
   }
 
   /** Ban (permanent) or suspend (temporary) — sessions are revoked, the app shows the closed-account screen. */
@@ -420,6 +467,16 @@ export class AdminController {
   @ApiBearerAuth() @RequirePermissions('plans.manage') @Get('plans')
   plans() {
     return this.admin.plans();
+  }
+
+  @ApiBearerAuth() @RequirePermissions('settings.manage') @Get('ads')
+  ads() {
+    return this.admin.ads();
+  }
+
+  @ApiBearerAuth() @RequirePermissions('settings.manage') @Put('ads')
+  setAds(@Body() dto: AdsDto, @CurrentAdmin() a: AuthAdmin) {
+    return this.admin.setAds(dto, a);
   }
 
   @ApiBearerAuth() @RequirePermissions('plans.manage') @Put('plans/:code/entitlements')

@@ -36,3 +36,44 @@ The app opens in the phone's language when it is Arabic, English or French
 (any region: ar-EG, fr-CA, en-GB …) and in English for every other language.
 Users can override it in Settings › Language; "Device language" follows the
 phone again. The server uses the same rule for SMS codes and push notifications.
+
+## Google AdMob (native ads in Discovery, Free plan only)
+
+The AdMob **app id** is per platform and lives only in the native build config,
+never in Dart code. Ad **unit ids** come from the server (admin dashboard → Ads).
+
+Android — `android/app/build.gradle`:
+
+```gradle
+android {
+  defaultConfig {
+    // debug: Google's public sample app id; release: your own (gradle.properties or CI: -PadmobAppIdAndroid=…)
+    manifestPlaceholders += [admobAppId: project.findProperty('admobAppIdAndroid') ?: 'ca-app-pub-3940256099942544~3347511713']
+  }
+}
+gradle.taskGraph.whenReady { g ->
+  if (g.allTasks.any { it.name.toLowerCase().contains('release') } && !project.hasProperty('admobAppIdAndroid'))
+    throw new GradleException('Set admobAppIdAndroid (AdMob app id) for release builds')
+}
+```
+
+`android/app/src/main/AndroidManifest.xml`, inside `<application>`:
+
+```xml
+<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="${admobAppId}"/>
+<!-- the SDK starts only when a Free member with ads switched on opens Discovery -->
+<meta-data android:name="com.google.android.gms.ads.DELAY_APP_MEASUREMENT_INIT" android:value="true"/>
+```
+
+iOS — `ios/Flutter/Release.xcconfig` / `Debug.xcconfig`: `ADMOB_APP_ID=ca-app-pub-…~…`
+(Debug may use Google's sample `ca-app-pub-3940256099942544~1458002511`), then in `Info.plist`:
+
+```xml
+<key>GADApplicationIdentifier</key><string>$(ADMOB_APP_ID)</string>
+<key>GADDelayAppMeasurementInit</key><true/>
+<key>SKAdNetworkItems</key><array><dict><key>SKAdNetworkIdentifier</key><string>cstr6suwn9.skadnetwork</string></dict><!-- + Google's current list --></array>
+```
+
+No App Tracking Transparency prompt is shown: ads are non-personalized unless the
+admin turns personalization on (and even then iOS gets no IDFA without ATT).
+Minimum versions follow google_mobile_ads (iOS 13+, Android minSdk 23 at the time of writing).

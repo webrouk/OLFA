@@ -1034,5 +1034,8 @@
   "msgSent": "Envoyé",
   "msgDelivered": "Distribué",
   "msgRead": "Lu",
-  "deleteUnsent": "Supprimer (non envoyé)"
+  "deleteUnsent": "Supprimer (non envoyé)",
+  "adSponsored": "Sponsorisé",
+  "adRemove": "Supprimer les pubs",
+  "adContinue": "Continuer"
 }

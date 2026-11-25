@@ -3,7 +3,8 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Prisma, PlanCode } from '@prisma/client';
 import { fromPgError } from '../../common/errors';
 import { AllowPending, AuthUser, CurrentUser, Public } from '../../common/http';
-import { PrismaService } from '../../common/infra';
+import { PrismaService, SettingsService } from '../../common/infra';
+import { adsForMember, parseAdsSettings } from '../../domain/ads';
 import { dayWindow, DayWindow, monthWindow } from '../../domain/quota-period';
 
 export interface Entitlements {
@@ -24,6 +25,8 @@ export interface Entitlements {
   monthlyCompliments: number;
   /** Voice notes a member may send in one conversation; -1 = unlimited. */
   voiceNotesPerConversation: number;
+  /** Native ads in Discovery: only ever true on the Free plan. */
+  showAds: boolean;
 }
 
 /** Resolves the user's effective plan and its feature values from the DB. */
@@ -56,6 +59,7 @@ export class EntitlementsService {
       visibleConversations: typeof v['visible_conversations'] === 'number' ? (v['visible_conversations'] as number) : 5,
       monthlyCompliments: num('monthly_compliments'),
       voiceNotesPerConversation: typeof v['voice_notes_per_conversation'] === 'number' ? (v['voice_notes_per_conversation'] as number) : 10,
+      showAds: plan === 'FREE' && bool('show_ads'),
     };
   }
 
@@ -78,7 +82,11 @@ export type CounterKey = 'likes' | 'messages' | 'undos' | 'compliments' | `msg:$
 /** Server-side daily quotas. UTC storage, user-local reset. */
 @Injectable()
 export class QuotaService {
-  constructor(private readonly prisma: PrismaService, private readonly entitlements: EntitlementsService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly entitlements: EntitlementsService,
+    private readonly settings: SettingsService,
+  ) {}
 
   async window(userId: string, now = new Date()): Promise<DayWindow> {
     const u = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
@@ -118,6 +126,7 @@ export class QuotaService {
       this.used(userId, 'compliments', mw),
     ]);
     const c = (used: number, limit: number) => ({ used, limit, remaining: Math.max(0, limit - used) });
+    const ads = adsForMember(e.plan, e.showAds, parseAdsSettings(await this.settings.get('ads.discovery', {})));
     return {
       plan: e.plan,
       planExpiresAt: e.planExpiresAt,
@@ -138,6 +147,8 @@ export class QuotaService {
         voiceNotesPerConversation: e.voiceNotesPerConversation,
         monthlyCompliments: e.monthlyCompliments,
       },
+      // Discovery native ads (Free plan only); the app re-reads this after any plan change.
+      ads,
     };
   }
 }

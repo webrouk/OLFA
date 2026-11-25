@@ -78,6 +78,11 @@ SELECT r.id, p.id FROM roles r JOIN permissions p ON
   OR (r.key = 'viewer' AND p.key IN ('users.read','payments.read','audit.read'))
 ON CONFLICT DO NOTHING;
 
+-- Native ads in Discovery: Free plan only (a trigger refuses true on paid plans).
+INSERT INTO feature_entitlements (plan_id, feature_key, value)
+SELECT p.id, 'show_ads', (p.code = 'FREE')::text::jsonb FROM subscription_plans p
+ON CONFLICT (plan_id, feature_key) DO NOTHING;
+
 -- Voice notes per conversation (-1 = unlimited).
 INSERT INTO feature_entitlements (plan_id, feature_key, value)
 SELECT p.id, v.k, v.val::jsonb FROM subscription_plans p

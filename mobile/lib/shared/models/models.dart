@@ -201,7 +201,12 @@ class Entitlements {
     this.complimentsUsed = 0,
     this.complimentsResetAt,
     this.accountActive = true,
+    this.ads = DiscoveryAds.off,
   });
+
+  /// Native ads between Discovery cards. Off on every paid plan (the server
+  /// decides; the app also never shows ads unless [plan] is Free).
+  final DiscoveryAds ads;
 
   /// Compliments (a message sent with a like) per calendar month: Free 3, Plus 10, Premium 20.
   final int monthlyCompliments;
@@ -253,7 +258,61 @@ class Entitlements {
         complimentsUsed: complimentsUsed ?? this.complimentsUsed,
         complimentsResetAt: complimentsResetAt,
         accountActive: accountActive,
+        ads: ads,
       );
+}
+
+/// Discovery ad settings for this member (GET /me/entitlements → `ads`).
+/// Managed in the admin dashboard (Ads page); nothing about the member is
+/// sent to the ad network.
+class DiscoveryAds {
+  const DiscoveryAds({
+    required this.enabled,
+    this.firstAfter = 4,
+    this.interval = 6,
+    this.maxPerSession = 8,
+    this.preloadAhead = 2,
+    this.personalized = false,
+    this.maxAdContentRating = 'PG',
+    this.androidUnitId = '',
+    this.iosUnitId = '',
+  });
+
+  static const off = DiscoveryAds(enabled: false);
+
+  final bool enabled;
+
+  /// First ad after this many profiles (liked or passed) in a session.
+  final int firstAfter;
+
+  /// Then one ad every [interval] profiles.
+  final int interval;
+  final int maxPerSession;
+
+  /// Start loading the next ad this many profiles before it is due.
+  final int preloadAhead;
+
+  /// False → non-personalized ads only (npa=1).
+  final bool personalized;
+  final String maxAdContentRating;
+  final String androidUnitId;
+  final String iosUnitId;
+
+  @override
+  bool operator ==(Object other) =>
+      other is DiscoveryAds &&
+      other.enabled == enabled &&
+      other.firstAfter == firstAfter &&
+      other.interval == interval &&
+      other.maxPerSession == maxPerSession &&
+      other.preloadAhead == preloadAhead &&
+      other.personalized == personalized &&
+      other.maxAdContentRating == maxAdContentRating &&
+      other.androidUnitId == androidUnitId &&
+      other.iosUnitId == iosUnitId;
+
+  @override
+  int get hashCode => Object.hash(enabled, firstAfter, interval, maxPerSession, preloadAhead, personalized, maxAdContentRating, androidUnitId, iosUnitId);
 }
 
 class PlanInfo {

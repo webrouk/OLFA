@@ -1034,5 +1034,8 @@
   "msgSent": "أُرسلت",
   "msgDelivered": "وصلت",
   "msgRead": "مقروءة",
-  "deleteUnsent": "حذف (لم تُرسل)"
+  "deleteUnsent": "حذف (لم تُرسل)",
+  "adSponsored": "إعلان مُموَّل",
+  "adRemove": "إزالة الإعلانات",
+  "adContinue": "متابعة"
 }

@@ -135,6 +135,9 @@ export function fromPgError(e: unknown): AppError | null {
       return new AppError(ErrorCode.INSUFFICIENT_BALANCE);
     case 'P0050':
       return new AppError(ErrorCode.REVIEW_REQUIRED);
+    // discovery ads (migration 20261125160000): show_ads on a paid plan
+    case 'P0060':
+      return new AppError(ErrorCode.VALIDATION, 'paid plans never show ads');
     // escrow / scheduling / support (migration 20261124160000)
     case '23P01': // exclusion constraint: the counselor is already booked at that time
       return new AppError(ErrorCode.SLOT_TAKEN);

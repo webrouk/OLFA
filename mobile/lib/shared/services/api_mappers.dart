@@ -76,6 +76,25 @@ abstract final class ApiMappers {
       complimentsUsed: j['compliments'] is Map ? n(m('compliments'), 'used') : 0,
       complimentsResetAt: j['compliments'] is Map && m('compliments')['resetsAt'] is String ? DateTime.tryParse(m('compliments')['resetsAt'] as String)?.toLocal() : null,
       accountActive: j['accountStatus'] == null || j['accountStatus'] == 'ACTIVE' || j['accountStatus'] == 'RESTRICTED',
+      ads: discoveryAds(j['ads'], j['plan']),
+    );
+  }
+
+  /// `ads` in GET /me/entitlements. Anything unexpected → no ads; a paid plan → no ads.
+  static DiscoveryAds discoveryAds(Object? raw, Object? plan) {
+    if (plan != 'FREE' || raw is! Map || raw['enabled'] != true) return DiscoveryAds.off;
+    int n(String k, int d) => raw[k] is num ? (raw[k] as num).toInt() : d;
+    final units = raw['units'] is Map ? raw['units'] as Map : const {};
+    return DiscoveryAds(
+      enabled: true,
+      firstAfter: n('firstAfter', 4),
+      interval: n('interval', 6),
+      maxPerSession: n('maxPerSession', 8),
+      preloadAhead: n('preloadAhead', 2),
+      personalized: raw['personalized'] == true,
+      maxAdContentRating: raw['maxAdContentRating'] is String ? raw['maxAdContentRating'] as String : 'PG',
+      androidUnitId: units['android'] is String ? units['android'] as String : '',
+      iosUnitId: units['ios'] is String ? units['ios'] as String : '',
     );
   }
 

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { apiConfigured, GET, session, setSessionHandlers } from './api';
 import type { Lang } from './i18n';
 import { Login, NotConnected, TotpSetup } from './pages/auth';
+import { AdsPage } from './pages/ads';
 import { Counselors, Integrity } from './pages/counselors';
 import { FaqPage, Settings } from './pages/config';
 import { Disputes, Withdrawals } from './pages/money';
@@ -73,6 +74,9 @@ function App() {
       break;
     case 'faq':
       page = <FaqPage />;
+      break;
+    case 'ads':
+      page = <AdsPage />;
       break;
     case 'settings':
       page = <Settings />;

@@ -8,6 +8,8 @@ import '../../../core/theme/olfa_spacing.dart';
 import '../../../core/theme/olfa_typography.dart';
 import '../../../core/widgets/olfa_widgets.dart';
 import '../../../shared/components/profile_card.dart';
+import '../../ads/application/discovery_ads_controller.dart';
+import '../../ads/presentation/discovery_ad_card.dart';
 import '../../matching/presentation/match_dialog.dart';
 import '../../subscriptions/application/entitlements_controller.dart';
 import '../application/discover_controller.dart';
@@ -72,7 +74,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> with SingleTick
     _animating = true;
     final w = MediaQuery.sizeOf(context).width;
     await _animateTo(Offset(w * 1.3, _drag.dy + 30));
-    await ref.read(discoverControllerProvider.notifier).swipe(SwipeKind.like, compliment: text);
+    await _swipeAndCount(SwipeKind.like, compliment: text);
     if (mounted) setState(() => _drag = Offset.zero);
     _animating = false;
   }
@@ -92,9 +94,18 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> with SingleTick
     _animating = true;
     final w = MediaQuery.sizeOf(context).width;
     await _animateTo(Offset((kind == SwipeKind.like ? 1 : -1) * w * 1.3, _drag.dy + 30));
-    await ref.read(discoverControllerProvider.notifier).swipe(kind);
+    await _swipeAndCount(kind);
     if (mounted) setState(() => _drag = Offset.zero);
     _animating = false;
+  }
+
+  /// Swipes, and counts the profile towards the next ad slot only if the swipe went through.
+  Future<void> _swipeAndCount(SwipeKind kind, {String? compliment}) async {
+    final before = ref.read(discoverControllerProvider).valueOrNull?.current?.id;
+    await ref.read(discoverControllerProvider.notifier).swipe(kind, compliment: compliment);
+    if (!mounted) return;
+    final after = ref.read(discoverControllerProvider).valueOrNull?.current?.id;
+    if (before != null && after != before) ref.read(discoveryAdsProvider.notifier).onProfileDecided();
   }
 
   @override
@@ -103,6 +114,9 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> with SingleTick
     final t = context.type;
     final state = ref.watch(discoverControllerProvider);
     final ent = ref.watch(entitlementsProvider).valueOrNull;
+    // Free plan only: a native ad card takes the place of the next profile now and then.
+    final ads = ref.watch(discoveryAdsProvider);
+    final adOnScreen = ads.showing && ads.ad != null && state.valueOrNull?.current != null;
 
     ref.listen(discoverControllerProvider, (prev, next) {
       final s = next.valueOrNull;
@@ -174,6 +188,24 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> with SingleTick
                         action: PrimaryButton(label: l.adjustFilters, expand: false, onPressed: () => context.push(Routes.search)),
                       );
                     }
+                    if (adOnScreen) {
+                      // The ad card has no swipe: its touches belong to the ad only.
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: ExcludeSemantics(
+                                  child: Transform.scale(scale: 0.95, child: ProfileCard(key: ValueKey('next-${cur.id}'), profile: cur)),
+                                ),
+                              ),
+                            ),
+                            Positioned.fill(child: DiscoveryAdCard(key: ObjectKey(ads.ad), ad: ads.ad!)),
+                          ],
+                        ),
+                      );
+                    }
                     return LayoutBuilder(
                       builder: (context, c) {
                         final dx = _drag.dx;
@@ -226,7 +258,22 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> with SingleTick
                   },
                 ),
               ),
-              if (state.valueOrNull?.current != null)
+              if (adOnScreen)
+                Padding(
+                  padding: const EdgeInsets.only(top: 14, bottom: 6),
+                  child: SizedBox(
+                    height: 64,
+                    child: Center(
+                      child: PrimaryButton(
+                        label: l.adContinue,
+                        icon: Icons.arrow_forward_rounded,
+                        expand: false,
+                        onPressed: () => ref.read(discoveryAdsProvider.notifier).dismiss(),
+                      ),
+                    ),
+                  ),
+                )
+              else if (state.valueOrNull?.current != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 14, bottom: 6),
                   child: Row(
