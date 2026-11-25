@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart' show Geolocator;
 
 import '../../../core/errors/failure.dart';
 import '../../../core/localization/generated/app_localizations.dart';
+import '../../../core/routing/navigation.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theme/olfa_colors.dart';
 import '../../../core/theme/olfa_spacing.dart';
@@ -56,7 +57,7 @@ class _LocationScreenState extends ConsumerState<LocationScreen> {
     }
   }
 
-  void _next() => context.push(Routes.photos);
+  void _next() => context.pushOnce(Routes.photos);
 
   @override
   Widget build(BuildContext context) {

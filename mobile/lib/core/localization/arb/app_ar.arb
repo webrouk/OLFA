@@ -1044,5 +1044,18 @@
   "startingFrom": "يبدأ من",
   "services": "الخدمات",
   "noOfferingsYet": "لم تُحدَّد الأسعار بعد.",
-  "navBadgeCount": "{count, plural, =1{جديد واحد} =2{اثنان جديدان} few{{count} جديدة} many{{count} جديدًا} other{{count} جديد}}"
+  "navBadgeCount": "{count, plural, =1{جديد واحد} =2{اثنان جديدان} few{{count} جديدة} many{{count} جديدًا} other{{count} جديد}}",
+  "discardChangesTitle": "تجاهل التعديلات؟",
+  "discardChangesBody": "لم تُحفظ التعديلات التي أجريتها.",
+  "discard": "تجاهل",
+  "viewAsOthers": "شاهد ملفك كما يراه الآخرون",
+  "sectionAboutMe": "ملفي",
+  "sectionSubscription": "الاشتراك",
+  "sectionAccount": "الحساب",
+  "draftRestored": "احتفظنا بإجاباتك — أكمل من حيث توقفت.",
+  "filtersCount": "{count, plural, =1{فلتر واحد} =2{فلتران} few{{count} فلاتر} many{{count} فلترًا} other{{count} فلتر}}",
+  "infoSectionBasics": "الأساسيات",
+  "infoSectionBackground": "الخلفية",
+  "infoSectionIntentions": "عنك وعن الزواج",
+  "completeHighlighted": "يرجى إكمال الحقول المحددة."
 }

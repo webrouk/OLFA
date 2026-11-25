@@ -822,7 +822,7 @@ function admin(live){const d=ADEV[S.adev];const narrow=d.W<1000;
 /* ═══════════ CHROME + RENDER ═══════════ */
 const $=s=>document.querySelector(s);
 function chrome(){
- $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.10</small></span></div>
+ $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.11</small></span></div>
  <div class="seg"><button class="${S.mode==='app'?'on':''}" data-ui="mode" data-a="app">${t('vApp')}</button><button class="${S.mode==='admin'?'on':''}" data-ui="mode" data-a="admin">${t('vAdmin')}</button></div>
  ${S.mode==='app'?`<div class="seg"><button class="${S.view==='one'?'on':''}" data-ui="view" data-a="one">${t('vOne')}</button><button class="${S.view==='all'?'on':''}" data-ui="view" data-a="all">${t('vAll')}</button></div>`:''}
  <div class="seg"><button class="${S.lang==='ar'?'on':''}" data-ui="lang" data-a="ar">ع RTL</button><button class="${S.lang==='en'?'on':''}" data-ui="lang" data-a="en">EN LTR</button><button class="${S.lang==='fr'?'on':''}" data-ui="lang" data-a="fr">FR LTR</button></div>
@@ -2182,7 +2182,7 @@ L8({kFamily:['استشاري أسري','Family counselor','Conseiller familial']
  sv_PREMARITAL:['ما قبل الزواج','Pre-marriage','Avant le mariage'],sv_MARITAL:['زوجية','Marital','Conjugal'],sv_FAMILY:['أسرية','Family','Familial'],
  sv_PARENTING:['تربوية','Parenting','Parentalité'],sv_INDIVIDUAL:['فردية','Individual','Individuel'],sv_DIVORCE_RECOVERY:['ما بعد الانفصال','After separation','Après une séparation']});
 const st10=document.createElement('style');st10.textContent=`
-.nav .nic,.rail .nic{position:relative;display:inline-grid}.cbadge{position:absolute;top:-7px;inset-inline-end:-13px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--p);color:var(--w);border:1.5px solid var(--w);font:700 10.5px/15px Montserrat,sans-serif;text-align:center}
+.nav .nic,.rail .nic{position:relative;display:inline-grid;overflow:visible!important;max-width:none!important}.cbadge{position:absolute;top:-7px;inset-inline-end:-13px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--p);color:var(--w);border:1.5px solid var(--w);font:700 10.5px/15px Montserrat,sans-serif;text-align:center}
 .nav button{color:var(--k60)}.nav button.on{color:var(--p)}
 .ib .cbadge{top:-4px;inset-inline-end:-4px}
 .rail{position:absolute;top:0;bottom:0;inset-inline-start:0;width:96px;background:var(--w);border-inline-end:1px solid var(--g);display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:calc(var(--sat) + 16px) 10px 16px;z-index:20}
@@ -2195,6 +2195,33 @@ const st10=document.createElement('style');st10.textContent=`
 .facts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:4px 0 14px}.facts>div{background:var(--g);border-radius:18px;padding:12px 6px;display:flex;flex-direction:column;align-items:center;gap:2px}.facts span{color:var(--p)}.facts b{font:700 18px Montserrat,sans-serif}.facts small{color:var(--k60);font-size:12px}
 .rvcard{border:1px solid var(--g);border-radius:18px;padding:12px;margin-bottom:10px}
 .bookbar{display:flex!important;flex-direction:row!important;align-items:center;justify-content:space-between;gap:12px;text-align:start}.scr.railed>*{max-width:720px;margin-inline:auto}.bookbar small{display:block}`;document.head.appendChild(st10);
+
+/* ═══════════ v0.11 — partner preferences page, profile sections, match states ═══════════ */
+L8({prefsSaveT:['حفظ','Save','Enregistrer'],secMe:['ملفي','My profile','Mon profil'],secSub:['الاشتراك','Subscription','Abonnement'],secAcc:['الحساب','Account','Compte'],
+ seeAsOthers:['شاهد ملفك كما يراه الآخرون','See your profile as others do','Voir votre profil comme les autres'],stNew:['جديد','New','Nouveau'],stChat:['تحادثكما','Chatting','En discussion'],
+ discardQ:['تجاهل التعديلات؟','Discard your changes?','Abandonner les modifications ?']});
+/* My profile → Partner preferences: its own page that saves on its own (not the sign-up step) */
+SC.prefsEdit=()=>{let h=SC.prefs();h=h.replace(/<div class="pad" style="display:flex;align-items:center;gap:12px;margin:4px 0 20px"><div class="progress">[\s\S]*?<\/span><\/div>/,'');
+ h=h.replace('<h1></h1>',`<h1>${t('myPrefs')}</h1>`).replace(/<div class="h1">[^<]*<\/div>/,'');
+ return h.replace(/<button class="btn" data-go="location">[^<]*<\/button>/,`<button class="btn" data-act="prefsSave">${t('prefsSaveT')}</button>`)};
+ACT.prefsSave=()=>{toast(t("saved"));ACT.back()};
+const _me11=SC.me;
+SC.me=()=>{let h=_me11();h=h.replace(`row('match',t('myPrefs'),'',{go:'prefs'})`,'');
+ h=h.replace(/data-go="prefs"/g,'data-go="prefsEdit"');
+ h=h.replace('<div class="list" style="padding:16px"><div style="display:flex;justify-content:space-between;margin-bottom:10px">',`<div style="text-align:center;margin:-8px 0 14px"><button class="btn sm ghost" style="color:var(--p)" data-act="seeSelf">${I('eye',16)} ${t('seeAsOthers')}</button></div><div class="list" style="padding:16px"><div style="display:flex;justify-content:space-between;margin-bottom:10px">`);
+ h=h.replace('<div class="list" style="padding:16px;margin-top:12px;display:flex;align-items:center;gap:12px;',`<div class="sec">${t('secSub')}</div><div class="list" style="padding:16px;display:flex;align-items:center;gap:12px;`);
+ h=h.replace('<div class="list" style="margin-top:16px">',`<div class="sec">${t('secMe')}</div><div class="list">`);
+ return h};
+ACT.seeSelf=()=>{S.detail=opp()[0].id;go('details')};
+/* Matches: one state label per row (New / Chatting / Taking a break) */
+const _matches11=SC.matches;
+SC.matches=()=>{const h=_matches11();const parts=h.split('<div class="t1"');
+ // the label follows the row's real state: a chat exists (Open chat) or not yet (Start chat)
+ return parts.map((p,i)=>{if(!i)return p;const chatting=p.includes(`>${t('openChat')}<`);const close=p.indexOf('</div>');
+  return p.slice(0,close)+` <span class="tag ${chatting?'':'p'}" style="font-size:11px">${chatting?t('stChat'):t('stNew')}</span>`+p.slice(close)}).join('<div class="t1"')};
+/* Discover: active filter count on the filter button */
+const _disc11=SC.discover;
+SC.discover=()=>{let h=_disc11();const n=(S.fAdv?1:0)+((S.fH||S.fW)?1:0)+(S.fInts&&S.fInts.length?1:0);return n?h.replace('<button class="ib soft" data-go="search" aria-label="filters">',`<button class="ib soft" data-go="search" aria-label="filters" style="position:relative">${cbadge(n)}`):h};
 try{const q=new URLSearchParams(location.hash.slice(1));if(q.get('lang'))S.lang=q.get('lang');if(SC[q.get('s')])S.screen=q.get('s');if(q.get('mode'))S.mode=q.get('mode');if(q.get('dev')&&DEVICES[q.get('dev')])S.dev=q.get('dev');if(q.get('view'))S.view=q.get('view');if(q.get('adm'))S.adm=q.get('adm');if(q.get('adev'))S.adev=q.get('adev')}catch(e){}
 render();
 </script>

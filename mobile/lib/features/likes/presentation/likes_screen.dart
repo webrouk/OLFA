@@ -47,6 +47,8 @@ class _LikesScreenState extends ConsumerState<LikesScreen> {
         await repo.pass(p.id);
       }
       setState(() => _done.add(p.id));
+      // the Likes badge and count follow the server (the card is already hidden)
+      ref.invalidate(likesReceivedProvider);
       ref.read(entitlementsProvider.notifier).refresh();
     } on Failure catch (e) {
       if (mounted) showToast(context, failureMessage(context, e));
@@ -113,7 +115,18 @@ class _LikesScreenState extends ConsumerState<LikesScreen> {
                     const SizedBox(height: 14),
                     _Upsell(count: data.count),
                   ] else if (items.isNotEmpty)
-                    SectionLabel(l.likedYou, top: 16),
+                    SectionLabel(l.likedYou, top: 16)
+                  // a filter with no result says so (instead of an empty page)
+                  else if (_filter != _LikesFilter.all && !(_filter == _LikesFilter.compliments && compliments.isNotEmpty))
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 36),
+                      child: Column(children: [
+                        Icon(Icons.filter_alt_off_outlined, color: OlfaColors.textMuted, size: 32),
+                        const SizedBox(height: 8),
+                        Text(l.noResults, style: t.bodyMedium.copyWith(color: OlfaColors.textMuted)),
+                        TextButton(onPressed: () => setState(() => _filter = _LikesFilter.all), child: Text(l.all)),
+                      ]),
+                    ),
                 ]),
               ),
               SliverPadding(

@@ -11,6 +11,12 @@ abstract interface class ProfileRepository {
   Future<void> submitForReview(ProfileDraft draft);
   Future<VerificationInfo> verification();
   Future<void> updateProfile(ProfileDraft draft);
+
+  /// The saved partner preferences, applied onto [base] (only the pref* fields change).
+  Future<ProfileDraft> loadPreferences(ProfileDraft base);
+
+  /// Saves only the partner preferences (no review needed).
+  Future<void> savePreferences(ProfileDraft draft);
 }
 
 /// Photo upload: presigned upload straight to private storage, then the

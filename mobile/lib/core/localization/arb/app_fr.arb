@@ -1044,5 +1044,18 @@
   "startingFrom": "À partir de",
   "services": "Services",
   "noOfferingsYet": "Aucun tarif pour l’instant.",
-  "navBadgeCount": "{count, plural, =1{1 nouveau} other{{count} nouveaux}}"
+  "navBadgeCount": "{count, plural, =1{1 nouveau} other{{count} nouveaux}}",
+  "discardChangesTitle": "Abandonner les modifications ?",
+  "discardChangesBody": "Vos modifications n’ont pas été enregistrées.",
+  "discard": "Abandonner",
+  "viewAsOthers": "Voir votre profil comme les autres",
+  "sectionAboutMe": "Mon profil",
+  "sectionSubscription": "Abonnement",
+  "sectionAccount": "Compte",
+  "draftRestored": "Vos réponses ont été conservées — reprenez où vous en étiez.",
+  "filtersCount": "{count, plural, =1{1 filtre} other{{count} filtres}}",
+  "infoSectionBasics": "L’essentiel",
+  "infoSectionBackground": "Parcours",
+  "infoSectionIntentions": "Vous et le mariage",
+  "completeHighlighted": "Veuillez compléter les champs indiqués."
 }

@@ -33,3 +33,53 @@
 ## Wide screens
 
 - `AdaptivePage` keeps every page at most 720 px wide, centred, on tablets and in landscape. Phones are unchanged.
+
+## Round 2 (sign-up, profiles, search, likes and matches, messages, my profile, professionals)
+
+- **Sign-up never loses answers:**
+  - Answers are kept encrypted on the device (same storage as the login tokens) until the profile is submitted, then deleted. Signing out also deletes them.
+  - When the app restores answers, the "About you" form shows them with a short notice.
+  - "About you" is split into three labelled groups. "Continue" with missing fields scrolls to the first one and says so.
+  - Every step uses `pushOnce`, so a double tap opens a step only once.
+- **Partner preferences have their own page** (My profile → Partner preferences):
+  - It loads the saved preferences (`GET /v1/me/preferences`), saves on its own (no new review) and asks before discarding unsaved changes.
+  - Fields the page doesn't edit are sent back unchanged.
+  - Before this, the tile opened the sign-up step with default values and "Continue" led into the sign-up flow.
+- **Profile page:**
+  - It opens instantly from the tapped card. The sections not loaded yet show placeholders, not half-filled data.
+  - The bottom actions depend on where you came from:
+    - Discover: pass / like.
+    - Likes: pass / like back.
+    - Matches: open or start the chat (one shared function, `openMatchChat`).
+    - Your own profile ("see it as others do"): no actions, no report.
+- **Discover:**
+  - The next page of profiles loads when 4 cards are left, one request at a time.
+  - An empty queue while more profiles are loading shows a loading card, not "no more profiles".
+  - The filter button shows how many filters are active.
+- **Search & filters:**
+  - Height and weight (free on every plan) moved to the basic filters.
+  - "Show results" shows the number of active filters.
+- **Likes:**
+  - The badge and count refresh after liking back or passing.
+  - A filter with no results says so and offers "All".
+- **Matches:**
+  - Each row shows its state: New, Chatting or Taking a break.
+  - Tapping a row opens the chat, or the profile when there's no chat yet.
+  - The start-chat button now has a 44 px touch area.
+- **Messages:**
+  - The inbox, archive and unmatched lists build only the visible rows.
+  - Consultation and member chats are labelled when both exist.
+  - Archive and unmatched support pull-to-refresh.
+  - A chat's header shows at once from the inbox row.
+- **My profile:**
+  - Sections: My profile, Subscription, Consultations, Account.
+  - "See your profile as others do".
+  - Tapping the completeness card opens the editor.
+- **Professionals:**
+  - The Profile tab (`ProfessionalProfileScreen`) was imported by the router but the file didn't exist, so the app couldn't build. It now exists. It shows:
+    - the public counselor card and review status;
+    - prices, hours and reviews;
+    - wallet, payout methods and withdrawals;
+    - the professional policy and account settings.
+  - The desk and wallet lists now leave room for the floating bar.
+  - In My consultations, the actions wrap instead of overflowing, and the held / disputed / refunded fee state is shown.

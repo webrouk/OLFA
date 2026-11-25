@@ -1659,5 +1659,25 @@
         "type": "int"
       }
     }
-  }
+  },
+  "discardChangesTitle": "Discard your changes?",
+  "discardChangesBody": "Your changes haven’t been saved.",
+  "discard": "Discard",
+  "viewAsOthers": "See your profile as others do",
+  "sectionAboutMe": "My profile",
+  "sectionSubscription": "Subscription",
+  "sectionAccount": "Account",
+  "draftRestored": "We kept your answers — continue where you left off.",
+  "filtersCount": "{count, plural, =1{1 filter} other{{count} filters}}",
+  "@filtersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "infoSectionBasics": "The basics",
+  "infoSectionBackground": "Background",
+  "infoSectionIntentions": "About you and marriage",
+  "completeHighlighted": "Please complete the highlighted fields."
 }

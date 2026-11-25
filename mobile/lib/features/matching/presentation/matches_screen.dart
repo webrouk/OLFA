@@ -12,6 +12,7 @@ import '../../../shared/components/labels.dart';
 import '../../../shared/models/models.dart';
 import '../../subscriptions/application/entitlements_controller.dart';
 import '../data/matching_repository_impl.dart';
+import 'match_actions.dart';
 import '../../../shared/components/verification_ticks.dart';
 import '../../../core/routing/navigation.dart';
 
@@ -26,33 +27,10 @@ class _MatchesScreenState extends ConsumerState<MatchesScreen> {
   String? _starting;
 
   Future<void> _open(MatchItem m) async {
-    if (m.conversationId != null) {
-      context.pushOnce(Routes.chatWith(m.conversationId!));
-      return;
-    }
     if (_starting != null) return;
-    final l = AppLocalizations.of(context);
-    final ent = ref.read(entitlementsProvider).valueOrNull;
-    if (ent != null && ent.messagesLeft <= 0) {
-      showToast(context, l.quotaMessages);
-      return;
-    }
-    final ok = await showConfirmation(
-      context,
-      title: l.startConversationTitle(m.peer.name),
-      body: l.startConversationBody(ent?.messagesLeft ?? 0),
-      confirmLabel: l.startConversation,
-      icon: Icons.chat_bubble_outline_rounded,
-    );
-    if (!ok || !mounted) return;
     setState(() => _starting = m.id);
     try {
-      final id = await ref.read(matchingRepositoryProvider).startConversation(m.id);
-      await ref.read(entitlementsProvider.notifier).refresh();
-      ref.invalidate(matchesProvider);
-      if (mounted) context.pushOnce(Routes.chatWith(id));
-    } catch (e) {
-      if (mounted) showToast(context, failureMessage(context, e));
+      await openMatchChat(context, ref, m);
     } finally {
       if (mounted) setState(() => _starting = null);
     }
@@ -102,7 +80,7 @@ class _MatchesScreenState extends ConsumerState<MatchesScreen> {
                 if (_tab != 2 && fresh.isNotEmpty) ...[
                   SectionLabel(l.newMatches),
                   SizedBox(
-                    height: 190,
+                    height: 204, // photo + a 44 px action row
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: fresh.length,
@@ -117,7 +95,8 @@ class _MatchesScreenState extends ConsumerState<MatchesScreen> {
                   TileGroup(children: [
                     for (final m in shown)
                       InkWell(
-                        onTap: () => _open(m),
+                        // a chat opens; a match without a chat yet shows the profile first
+                        onTap: () => m.conversationId != null ? _open(m) : context.pushOnce(Routes.profile(m.peer.id), extra: m.peer),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           child: Row(children: [
@@ -128,11 +107,11 @@ class _MatchesScreenState extends ConsumerState<MatchesScreen> {
                                 Row(children: [
                                   Flexible(child: Text('${m.peer.name}, ${m.peer.age}', style: t.bodyMedium.copyWith(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
                                   ...[const SizedBox(width: 6), VerificationTicks(profile: m.peer, size: 16)],
+                                  const SizedBox(width: 6),
+                                  _MatchState(m: m),
                                 ]),
                                 Text(
-                                  m.paused
-                                      ? l.matchPaused
-                                      : [l.compatibility(m.peer.compatibility), if (m.peer.distanceKm != null) l.kmAway(m.peer.distanceKm!), l.matchedOn(shortTime(context, m.createdAt))].join(' · '),
+                                  [l.compatibility(m.peer.compatibility), if (m.peer.distanceKm != null) l.kmAway(m.peer.distanceKm!), l.matchedOn(shortTime(context, m.createdAt))].join(' · '),
                                   style: t.caption,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -182,15 +161,30 @@ class _NewMatchCard extends StatelessWidget {
                 ]),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                padding: const EdgeInsetsDirectional.fromSTEB(8, 0, 0, 0),
                 child: Row(children: [
+                  const SizedBox(width: 2),
                   Expanded(child: Text(m.peer.name, style: t.bodySmall.copyWith(fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis)),
-                  InkWell(
-                    onTap: busy ? null : onStart,
-                    child: Semantics(
-                      button: true,
-                      label: l.startChat,
-                      child: Container(width: 30, height: 30, decoration: const BoxDecoration(color: OlfaColors.primary, shape: BoxShape.circle), child: const Icon(Icons.chat_bubble_rounded, size: 15, color: OlfaColors.white)),
+                  // 44 px touch area around a 32 px button
+                  Semantics(
+                    button: true,
+                    label: l.startChat,
+                    child: InkResponse(
+                      onTap: busy ? null : onStart,
+                      radius: 22,
+                      child: SizedBox.square(
+                        dimension: 44,
+                        child: Center(
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: const BoxDecoration(color: OlfaColors.primary, shape: BoxShape.circle),
+                            child: busy
+                                ? const Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator(strokeWidth: 2, color: OlfaColors.white))
+                                : const Icon(Icons.chat_bubble_rounded, size: 15, color: OlfaColors.white),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ]),
@@ -200,5 +194,22 @@ class _NewMatchCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// New · Chatting · Paused — the same three states everywhere a match is listed.
+class _MatchState extends StatelessWidget {
+  const _MatchState({required this.m});
+  final MatchItem m;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final (label, style) = m.paused
+        ? (l.matchPaused, OlfaTagStyle.dark)
+        : m.conversationId == null
+            ? (l.newMatches, OlfaTagStyle.primary)
+            : (l.chatting, OlfaTagStyle.neutral);
+    return OlfaTag(label, style: style);
   }
 }

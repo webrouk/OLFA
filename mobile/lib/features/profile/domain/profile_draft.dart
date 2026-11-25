@@ -204,3 +204,92 @@ abstract final class ProfileValidators {
     return null;
   }
 }
+
+/// Sign-up progress kept on the device (encrypted, see [SecureStore]) so a
+/// member who leaves the app half-way — or whose phone closes it — finds every
+/// answer where they left it. Uploaded photos live on the server; only their
+/// ids are kept here. Cleared once the profile is submitted or on sign-out.
+abstract final class ProfileDraftCodec {
+  static const version = 1;
+
+  static Map<String, Object?> encode(ProfileDraft d) => {
+        'v': version,
+        'gender': d.gender?.name,
+        'name': d.name,
+        'birthDate': d.birthDate?.toIso8601String(),
+        'countryIso': d.countryIso,
+        'nationality': d.nationality,
+        'nationalityEdited': d.nationalityEdited,
+        'city': d.city,
+        'maritalStatus': d.maritalStatus?.name,
+        'education': d.education?.name,
+        'occupation': d.occupation,
+        'heightCm': d.heightCm,
+        'weightKg': d.weightKg,
+        'timeline': d.timeline?.name,
+        'bio': d.bio,
+        'interests': d.interests.toList(),
+        'prefAgeMin': d.prefAgeMin,
+        'prefAgeMax': d.prefAgeMax,
+        'prefSameCountry': d.prefSameCountry,
+        'prefMarital': d.prefMarital.map((m) => m.name).toList(),
+        'prefWantsChildren': d.prefWantsChildren,
+        'photoSlots': d.photoSlots,
+        'photoIds': d.photoIds,
+        'photoRightsConfirmed': d.photoRightsConfirmed,
+        'policyAccepted': d.policyAccepted,
+        'accountType': d.accountType?.name,
+        'religion': d.religion,
+        'sect': d.sect,
+        'religionConsent': d.religionConsent,
+        'prefReligions': d.prefReligions.toList(),
+        'prefSects': d.prefSects.toList(),
+      };
+
+  /// Unknown or damaged data → null (start fresh rather than crash).
+  static ProfileDraft? decode(Map<String, Object?> j) {
+    try {
+      if (j['v'] != version) return null;
+      T? en<T extends Enum>(List<T> values, Object? v) => v is String ? values.where((e) => e.name == v).firstOrNull : null;
+      List<T> list<T>(Object? v) => v is List ? v.whereType<T>().toList() : <T>[];
+      final slots = list<bool>(j['photoSlots']);
+      final ids = j['photoIds'] is List ? (j['photoIds'] as List).map((x) => x is String ? x : null).toList() : <String?>[];
+      return ProfileDraft(
+        gender: en(Gender.values, j['gender']),
+        name: j['name'] as String? ?? '',
+        birthDate: j['birthDate'] is String ? DateTime.tryParse(j['birthDate'] as String) : null,
+        countryIso: j['countryIso'] as String? ?? 'AE',
+        nationality: j['nationality'] as String?,
+        nationalityEdited: j['nationalityEdited'] == true,
+        city: j['city'] as String? ?? '',
+        maritalStatus: en(MaritalStatus.values, j['maritalStatus']),
+        education: en(Education.values, j['education']),
+        occupation: j['occupation'] as String? ?? '',
+        heightCm: (j['heightCm'] as num?)?.toInt(),
+        weightKg: (j['weightKg'] as num?)?.toInt(),
+        timeline: en(MarriageTimeline.values, j['timeline']),
+        bio: j['bio'] as String? ?? '',
+        interests: list<String>(j['interests']).toSet(),
+        prefAgeMin: (j['prefAgeMin'] as num?)?.toInt() ?? 24,
+        prefAgeMax: (j['prefAgeMax'] as num?)?.toInt() ?? 36,
+        prefSameCountry: j['prefSameCountry'] == true,
+        prefMarital: _nonEmpty(list<String>(j['prefMarital']).map((m) => en(MaritalStatus.values, m)).whereType<MaritalStatus>().toSet()),
+        prefWantsChildren: j['prefWantsChildren'] as bool?,
+        photoSlots: slots.length == 6 ? slots : const [false, false, false, false, false, false],
+        photoIds: ids.length == 6 ? ids : const [null, null, null, null, null, null],
+        photoRightsConfirmed: j['photoRightsConfirmed'] == true,
+        policyAccepted: j['policyAccepted'] == true,
+        accountType: en(AccountType.values, j['accountType']),
+        religion: j['religion'] as String?,
+        sect: j['sect'] as String?,
+        religionConsent: j['religionConsent'] == true,
+        prefReligions: list<String>(j['prefReligions']).toSet(),
+        prefSects: list<String>(j['prefSects']).toSet(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Set<MaritalStatus> _nonEmpty(Set<MaritalStatus> s) => s.isEmpty ? const {MaritalStatus.neverMarried} : s;
+}

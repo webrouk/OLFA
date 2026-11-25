@@ -87,13 +87,13 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
                 icon: Icons.inventory_2_outlined,
                 label: l.screenArchive,
                 count: counts?.count(ConversationSection.archive) ?? 0,
-                onTap: () => context.push(Routes.archive),
+                onTap: () => context.pushOnce(Routes.archive),
               ),
               _HeaderShortcut(
                 icon: Icons.link_off_rounded,
                 label: l.screenUnmatched,
                 count: counts?.count(ConversationSection.unmatched) ?? 0,
-                onTap: () => context.push(Routes.unmatched),
+                onTap: () => context.pushOnce(Routes.unmatched),
               ),
             ]),
           ),
@@ -107,7 +107,6 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
                 final locked = ix.lockedIn(ConversationSection.inbox);
                 final typed = _search.text.trim();
                 if (typed.length >= 2) return _SearchResults(query: _q.isEmpty ? typed : _q, typed: typed, index: ix);
-                final shown = [...consult, ...inbox];
                 if (consult.isEmpty && inbox.isEmpty && locked.isEmpty) {
                   return EmptyState(
                     icon: Icons.chat_bubble_outline_rounded,
@@ -116,14 +115,21 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
                     action: PrimaryButton(label: l.screenMatches, expand: false, onPressed: () => context.go(Routes.matches)),
                   );
                 }
+                // Lazy list: only the rows on screen are built, however long the inbox.
+                // Consultation chats and member chats are labelled when both exist.
+                final both = consult.isNotEmpty && inbox.isNotEmpty;
                 return RefreshIndicator(
                   color: OlfaColors.primary,
                   onRefresh: () => ref.refresh(conversationIndexProvider.future),
-                  child: ListView(
+                  child: CustomScrollView(slivers: [
+                    SliverToBoxAdapter(child: _PlanMeter(index: ix)),
+                    if (both) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: SectionLabel(l.screenConsultations, top: 8))),
+                    SliverList.builder(itemCount: consult.length, itemBuilder: (_, i) => ConversationTile(key: ValueKey(consult[i].id), conversation: consult[i])),
+                    if (both) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: SectionLabel(l.screenConversations, top: 12))),
+                    SliverList.builder(itemCount: inbox.length, itemBuilder: (_, i) => ConversationTile(key: ValueKey(inbox[i].id), conversation: inbox[i])),
+                    SliverPadding(
                     padding: EdgeInsets.only(bottom: OlfaSize.navBarClearance(context)),
-                    children: [
-                      _PlanMeter(index: ix),
-                      for (final c in shown) ConversationTile(conversation: c),
+                    sliver: SliverList.list(children: [
                       if (locked.isNotEmpty) ...[
                         Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: SectionLabel(l.lockedConversationsTitle)),
                         for (final _ in locked.take(4)) const LockedConversationTile(),
@@ -141,8 +147,9 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
                         padding: const EdgeInsets.fromLTRB(28, 16, 28, 20),
                         child: Text(l.retentionNote, textAlign: TextAlign.center, style: context.type.caption),
                       ),
-                    ],
-                  ),
+                    ]),
+                    ),
+                  ]),
                 );
               },
             ),
@@ -204,13 +211,17 @@ class _SectionScreen extends ConsumerWidget {
           final rows = ix.section(section);
           final locked = ix.lockedIn(section);
           if (rows.isEmpty && locked.isEmpty) return EmptyState(icon: icon, title: emptyTitle, body: emptyBody);
-          return ListView(
-            padding: const EdgeInsets.only(bottom: 24),
-            children: [
-              Padding(padding: const EdgeInsets.fromLTRB(20, 4, 20, 10), child: InfoBanner(icon: icon, text: note)),
-              for (final c in rows) ConversationTile(conversation: c),
-              for (final _ in locked) const LockedConversationTile(),
-            ],
+          return RefreshIndicator(
+            color: OlfaColors.primary,
+            onRefresh: () => ref.refresh(conversationIndexProvider.future),
+            child: CustomScrollView(slivers: [
+              SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(20, 4, 20, 10), child: InfoBanner(icon: icon, text: note))),
+              SliverList.builder(itemCount: rows.length, itemBuilder: (_, i) => ConversationTile(key: ValueKey(rows[i].id), conversation: rows[i])),
+              SliverPadding(
+                padding: EdgeInsets.only(bottom: 24 + MediaQuery.paddingOf(context).bottom),
+                sliver: SliverList.builder(itemCount: locked.length, itemBuilder: (_, __) => const LockedConversationTile()),
+              ),
+            ]),
           );
         },
       ),

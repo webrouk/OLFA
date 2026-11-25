@@ -153,6 +153,13 @@ export class ProfilesService {
     return this.me(userId);
   }
 
+  async preferences(userId: string) {
+    const p = await this.prisma.userPreference.findUnique({ where: { userId } });
+    return (
+      p ?? { userId, ageMin: 18, ageMax: 60, sameCountryOnly: false, countryCodes: [], cities: [], maritalStatuses: [], educationLevels: [], occupations: [], wantsChildren: null, religions: [], sects: [], updatedAt: null }
+    );
+  }
+
   async setPreferences(userId: string, dto: PreferencesDto) {
     if (dto.ageMin > dto.ageMax) throw new AppError(ErrorCode.VALIDATION, 'ageMin must be <= ageMax');
     const religions = dto.religions ?? [];
@@ -335,6 +342,12 @@ export class ProfilesController {
   @AllowPending() @RateLimit(30, 3600) @Patch('me/profile')
   update(@CurrentUser() u: AuthUser, @Body() dto: UpdateProfileDto) {
     return this.profiles.update(u.id, dto);
+  }
+
+  /** Saved partner preferences (defaults when none yet) — the app's "Partner preferences" page edits these. */
+  @AllowPending() @MembersOnly() @Get('me/preferences')
+  getPreferences(@CurrentUser() u: AuthUser) {
+    return this.profiles.preferences(u.id);
   }
 
   @AllowPending() @MembersOnly() @Put('me/preferences') @HttpCode(200)

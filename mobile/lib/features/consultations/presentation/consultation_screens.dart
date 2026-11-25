@@ -733,10 +733,17 @@ class MyConsultationsScreen extends ConsumerWidget {
                       Row(children: [const Icon(Icons.event_rounded, size: 16, color: OlfaColors.primary), const SizedBox(width: 6), Text(DateFormat.yMMMEd(langOf(context)).add_Hm().format(k.scheduledAt!), style: t.bodySmall)]),
                     ],
                     if (k.status == ConsultationStatus.paid) Padding(padding: const EdgeInsets.only(top: 8), child: Text(l.waitingCounselorConfirm, style: t.caption)),
+                    // Where the fee is — the same states the counselor and the dashboard see.
+                    if (k.escrow == 'HELD' && k.canRate) Padding(padding: const EdgeInsets.only(top: 8), child: Text(l.escrowReviewNote, style: t.caption.copyWith(color: OlfaColors.primary))),
+                    if (k.escrow == 'DISPUTED') Padding(padding: const EdgeInsets.only(top: 8), child: OlfaTag(l.escrowDisputedTag, style: OlfaTagStyle.dark, icon: Icons.gavel_rounded)),
+                    if (k.escrow == 'REFUNDED') Padding(padding: const EdgeInsets.only(top: 8), child: OlfaTag(l.escrowRefundedTag)),
                     const SizedBox(height: 10),
                     Row(children: [
-                      Text(money(context, k.priceMinor, k.currency), style: t.bodyMedium.copyWith(fontWeight: FontWeight.w700)),
-                      const Spacer(),
+                      Text(money(context, k.priceMinor, k.currency), textDirection: TextDirection.ltr, style: t.bodyMedium.copyWith(fontWeight: FontWeight.w700)),
+                      if (k.myRating != null) ...[const SizedBox(width: 8), StarRow(value: k.myRating!.toDouble(), size: 14)],
+                    ]),
+                    // Actions wrap onto a second line on narrow phones instead of overflowing.
+                    Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.end, crossAxisAlignment: WrapCrossAlignment.center, children: [
                       if (k.canCancel)
                         TextButton(
                           onPressed: () async {
@@ -753,16 +760,12 @@ class MyConsultationsScreen extends ConsumerWidget {
                         ),
                       if (k.conversationId != null && (k.status == ConsultationStatus.confirmed || k.status == ConsultationStatus.completed))
                         PrimaryButton(label: l.openChat, icon: Icons.chat_bubble_outline_rounded, expand: false, onPressed: () => context.pushOnce(Routes.chatWith(k.conversationId!))),
-                      if (k.canRate) ...[
-                        const SizedBox(width: 8),
-                        PrimaryButton(label: l.rateCounselor, icon: Icons.star_outline_rounded, expand: false, onPressed: () => showRateSheet(context, ref, k)),
-                      ],
-                      if (k.myRating != null) ...[const SizedBox(width: 8), StarRow(value: k.myRating!.toDouble(), size: 14)],
+                      if (k.canRate) PrimaryButton(label: l.rateCounselor, icon: Icons.star_outline_rounded, expand: false, onPressed: () => showRateSheet(context, ref, k)),
                     ]),
                   ]),
                 ),
               ),
-            SecondaryButton(label: l.bookConsultation, icon: Icons.add_rounded, onPressed: () => context.push(Routes.consultations)),
+            SecondaryButton(label: l.bookConsultation, icon: Icons.add_rounded, onPressed: () => context.pushOnce(Routes.consultations)),
           ]),
         ),
       ),
@@ -1047,7 +1050,8 @@ class _CounselorDeskScreenState extends ConsumerState<CounselorDeskScreen> {
             color: OlfaColors.primary,
             onRefresh: () => ref.refresh(counselorDeskProvider.future),
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
+              // leaves room for the floating tab bar (the desk is a tab)
+              padding: EdgeInsets.fromLTRB(20, 4, 20, OlfaSize.navBarClearance(context) + 8),
               children: [
                 // profile header
                 Container(

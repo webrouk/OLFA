@@ -13,7 +13,12 @@ class DiscoverState {
     this.inFlight = const {},
     this.lastFailure,
     this.lastMatch,
+    this.fetchingMore = false,
   });
+
+  /// More suggestions are on the way: an empty queue shows a loading card,
+  /// not "no more profiles".
+  final bool fetchingMore;
 
   final List<UserProfile> queue; // queue.first is the visible card
   final List<({UserProfile profile, SwipeKind kind})> history; // for undo
@@ -30,6 +35,7 @@ class DiscoverState {
     Set<String>? inFlight,
     Failure? Function()? lastFailure,
     MatchItem? Function()? lastMatch,
+    bool? fetchingMore,
   }) =>
       DiscoverState(
         queue: queue ?? this.queue,
@@ -37,6 +43,7 @@ class DiscoverState {
         inFlight: inFlight ?? this.inFlight,
         lastFailure: lastFailure != null ? lastFailure() : this.lastFailure,
         lastMatch: lastMatch != null ? lastMatch() : this.lastMatch,
+        fetchingMore: fetchingMore ?? this.fetchingMore,
       );
 }
 
@@ -125,15 +132,22 @@ class DiscoverController extends AsyncNotifier<DiscoverState> {
     if (s != null) state = AsyncData(s.copyWith(lastFailure: () => null, lastMatch: () => null));
   }
 
+  /// Next page while 4 cards are left (their photos are already downloading),
+  /// one request at a time; results for old filters are dropped.
   Future<void> _prefetchIfLow() async {
     final s = state.valueOrNull;
-    if (s == null || s.queue.length > 2) return;
+    if (s == null || s.queue.length > 4 || s.fetchingMore) return;
+    final filters = ref.read(filtersProvider);
+    state = AsyncData(s.copyWith(fetchingMore: true));
     try {
-      final more = await ref.read(discoveryRepositoryProvider).suggestions(ref.read(filtersProvider));
+      final more = await ref.read(discoveryRepositoryProvider).suggestions(filters);
       final cur = state.valueOrNull;
-      if (cur != null) state = AsyncData(cur.copyWith(queue: [...cur.queue, ..._dedupe(more)]));
+      if (cur != null && ref.read(filtersProvider) == filters) state = AsyncData(cur.copyWith(queue: [...cur.queue, ..._dedupe(more)], fetchingMore: false));
     } on Failure {
       // Silent: the empty state offers a retry.
+    } finally {
+      final cur = state.valueOrNull;
+      if (cur != null && cur.fetchingMore) state = AsyncData(cur.copyWith(fetchingMore: false));
     }
   }
 

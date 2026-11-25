@@ -180,7 +180,13 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> with SingleTick
                     ),
                     OlfaIconButton(icon: Icons.notifications_none_rounded, tooltip: l.screenNotifications, style: OlfaIconStyle.soft, onPressed: () => context.push(Routes.notifications)),
                     const SizedBox(width: 8),
-                    OlfaIconButton(icon: Icons.tune_rounded, tooltip: l.screenSearch, style: OlfaIconStyle.soft, onPressed: () => context.push(Routes.search)),
+                    Consumer(builder: (context, ref, _) {
+                      final n = ref.watch(filtersProvider.select((f) => f.activeCount));
+                      return Stack(clipBehavior: Clip.none, children: [
+                        OlfaIconButton(icon: Icons.tune_rounded, tooltip: n == 0 ? l.screenSearch : '${l.screenSearch} · ${l.filtersCount(n)}', style: OlfaIconStyle.soft, onPressed: () => context.pushOnce(Routes.search)),
+                        if (n > 0) PositionedDirectional(top: -4, end: -4, child: CountBadge(count: n)),
+                      ]);
+                    }),
                   ],
                 ),
               ),
@@ -196,6 +202,9 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> with SingleTick
                   error: (e, _) => ErrorState(error: e, onRetry: () => ref.invalidate(discoverControllerProvider)),
                   data: (s) {
                     final cur = s.current;
+                    if (cur == null && s.fetchingMore) {
+                      return const Padding(padding: EdgeInsets.fromLTRB(16, 8, 16, 0), child: OlfaSkeleton(height: double.infinity, radius: OlfaRadius.profileCard));
+                    }
                     if (cur == null) {
                       return EmptyState(
                         icon: Icons.explore_outlined,

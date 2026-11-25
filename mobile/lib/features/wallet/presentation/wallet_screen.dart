@@ -58,7 +58,7 @@ class WalletScreen extends ConsumerWidget {
           value: summary,
           onRetry: () => ref.invalidate(walletSummaryProvider),
           data: (s) => ListView(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 120),
+            padding: EdgeInsets.fromLTRB(20, 4, 20, OlfaSize.navBarClearance(context) + 8),
             children: [
               if (s.payoutsOnHold) ...[InfoBanner(text: l.walletOnHold, icon: Icons.pause_circle_outline_rounded, accent: true), const SizedBox(height: 14)],
               if (s.balances.isEmpty)

@@ -63,7 +63,7 @@ class _SearchFiltersScreenState extends ConsumerState<SearchFiltersScreen> {
           child: Text(l.reset),
         ),
       ],
-      action: PrimaryButton(label: l.showResults, onPressed: _apply),
+      action: PrimaryButton(label: _f.copyWith(city: _city.text).activeCount == 0 ? l.showResults : '${l.showResults} · ${l.filtersCount(_f.copyWith(city: _city.text).activeCount)}', onPressed: _apply),
       children: [
         SectionLabel(l.basicFilters, top: 8),
         Text(l.ageRange, style: context.type.inputLabel),
@@ -84,7 +84,7 @@ class _SearchFiltersScreenState extends ConsumerState<SearchFiltersScreen> {
           label: (s) => switch (s) {
             DiscoveryScope.nearby => l.scopeNearby,
             DiscoveryScope.myCountry => home == null ? l.scopeMyCountry : '${l.scopeMyCountry} · ${countryByIso(home).label(lang)}',
-            DiscoveryScope.otherCountry => outside ? l.scopeOtherCountry : '${l.scopeOtherCountry} 🔒',
+            DiscoveryScope.otherCountry => outside ? l.scopeOtherCountry : '${l.scopeOtherCountry} · Plus',
           },
           isSelected: (s) => _f.scope == s,
           onTap: (s) {
@@ -104,7 +104,7 @@ class _SearchFiltersScreenState extends ConsumerState<SearchFiltersScreen> {
         const SizedBox(height: 14),
         if (_f.scope == DiscoveryScope.otherCountry)
           CountryField(label: l.country, value: _f.countryIso, onChanged: (v) => setState(() => _f = _f.copyWith(countryIso: () => v))),
-        OlfaTextField(label: l.city, hint: l.allCities, controller: _city),
+        OlfaTextField(label: l.city, hint: l.allCities, controller: _city, onChanged: (_) => setState(() {})),
         Text(l.interests, style: context.type.inputLabel),
         const SizedBox(height: 4),
         Text(paid ? l.multiInterests : l.oneBasicInterest, style: context.type.caption),
@@ -122,6 +122,10 @@ class _SearchFiltersScreenState extends ConsumerState<SearchFiltersScreen> {
             }
           }),
         ),
+        // Height and weight are free on every plan, so they sit with the basic filters.
+        const SizedBox(height: 18),
+        RangeFilter(label: l.height, unit: l.cm, min: 140, max: 220, defaultRange: (155, 185), value: _f.height, onChanged: (v) => setState(() => _f = _f.copyWith(height: () => v))),
+        RangeFilter(label: l.weight, unit: l.kg, min: 40, max: 160, defaultRange: (50, 90), value: _f.weight, onChanged: (v) => setState(() => _f = _f.copyWith(weight: () => v))),
         SectionLabel(
           l.advancedFilters,
           trailing: paid ? OlfaTag(l.planLabel(ent!.plan), style: OlfaTagStyle.accent) : OlfaTag('Plus', style: OlfaTagStyle.dark, icon: Icons.lock_outline_rounded),
@@ -171,9 +175,6 @@ class _SearchFiltersScreenState extends ConsumerState<SearchFiltersScreen> {
           onLockedTap: _upsell,
           onChanged: (v) => setState(() => _f = _f.copyWith(nationality: () => v)),
         ),
-        // Height and weight are available on every plan.
-        RangeFilter(label: l.height, unit: l.cm, min: 140, max: 220, defaultRange: (155, 185), value: _f.height, onChanged: (v) => setState(() => _f = _f.copyWith(height: () => v))),
-        RangeFilter(label: l.weight, unit: l.kg, min: 40, max: 160, defaultRange: (50, 90), value: _f.weight, onChanged: (v) => setState(() => _f = _f.copyWith(weight: () => v))),
         Text(l.minCompatibility, style: context.type.inputLabel),
         const SizedBox(height: 8),
         ChoiceWrap<int?>(

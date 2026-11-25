@@ -389,6 +389,26 @@ class DiscoverFilters {
   final String profession; // paid · occupation key
   final int? minCompatibility; // paid
 
+  /// Filters that differ from the defaults (shown as a count on the Discover
+  /// filter button and on "Show results").
+  int get activeCount {
+    const d = DiscoverFilters();
+    return [
+      ageMin != d.ageMin || ageMax != d.ageMax,
+      scope != d.scope,
+      nationality != null,
+      city.trim().isNotEmpty,
+      interests.isNotEmpty,
+      maritalStatuses.isNotEmpty,
+      educations.isNotEmpty,
+      profession.isNotEmpty,
+      minCompatibility != null,
+      height != null,
+      weight != null,
+      religions.isNotEmpty || sects.isNotEmpty,
+    ].where((x) => x).length;
+  }
+
   bool get usesPaidFilters =>
       maritalStatuses.isNotEmpty ||
       nationality != null ||

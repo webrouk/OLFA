@@ -112,7 +112,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final t = context.type;
-    final conv = ref.watch(conversationProvider(widget.conversationId)).valueOrNull;
+    // The row the member tapped already has the name, photo and state: show them
+    // at once; the full conversation replaces it when it arrives.
+    final conv = ref.watch(conversationProvider(widget.conversationId)).valueOrNull ??
+        ref.watch(conversationIndexProvider.select((v) => v.valueOrNull?.visible.where((c) => c.id == widget.conversationId).firstOrNull));
     final chat = ref.watch(chatControllerProvider(widget.conversationId));
     final online = ref.watch(connectionProvider);
     final typing = chat.valueOrNull?.peerTyping ?? false;

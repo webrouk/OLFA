@@ -111,6 +111,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       _root(Routes.notifications, (_) => const NotificationsScreen()),
       _root(Routes.editProfile, (_) => const EditProfileScreen()),
       _root(Routes.plans, (_) => const PlansScreen()),
+      _root(Routes.partnerPreferences, (_) => const EditPartnerPreferencesScreen()),
       _root(Routes.payments, (_) => const PaymentHistoryScreen()),
       _root(Routes.privacy, (_) => const PrivacyScreen()),
       _root(Routes.help, (_) => const HelpScreen()),
