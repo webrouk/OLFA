@@ -41,6 +41,11 @@ class OlfaTypography {
   TextStyle get button => _t(_s(16, 15), FontWeight.w600, h: 1.2);
   TextStyle get inputLabel => _t(13, FontWeight.w500, h: 1.3);
 
+  /// Numbers (counts, prices, ratings, timers) are always set in Montserrat,
+  /// in every language, so figures line up the same way across the app.
+  TextStyle number(double size, {FontWeight weight = FontWeight.w700, Color color = OlfaColors.black}) =>
+      TextStyle(fontFamily: 'Montserrat', fontSize: size, fontWeight: weight, height: 1.25, color: color);
+
   TextTheme toTextTheme() => TextTheme(
         displayLarge: display,
         headlineLarge: h1,

@@ -1037,5 +1037,12 @@
   "deleteUnsent": "Supprimer (non envoyé)",
   "adSponsored": "Sponsorisé",
   "adRemove": "Supprimer les pubs",
-  "adContinue": "Continuer"
+  "adContinue": "Continuer",
+  "filters": "Filtres",
+  "counselorsFound": "{count, plural, =0{Aucun conseiller} =1{1 conseiller} other{{count} conseillers}}",
+  "clearFilters": "Effacer les filtres",
+  "startingFrom": "À partir de",
+  "services": "Services",
+  "noOfferingsYet": "Aucun tarif pour l’instant.",
+  "navBadgeCount": "{count, plural, =1{1 nouveau} other{{count} nouveaux}}"
 }

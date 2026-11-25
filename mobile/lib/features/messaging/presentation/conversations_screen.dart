@@ -18,6 +18,7 @@ import '../../settings/presentation/report_sheet.dart';
 import '../application/chat_controller.dart';
 import '../data/messaging_repository_impl.dart';
 import '../../../shared/components/verification_ticks.dart';
+import '../../../core/routing/navigation.dart';
 
 /// 18 — Messages: search, Archive and Unmatched shortcuts, the plan's
 /// visible-conversation meter, consultation chats, expiry chips and the
@@ -236,12 +237,7 @@ class _HeaderShortcut extends StatelessWidget {
           PositionedDirectional(
             top: -3,
             end: -3,
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 20),
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-              decoration: BoxDecoration(color: OlfaColors.primary, borderRadius: OlfaRadius.all(10), border: Border.all(color: OlfaColors.white, width: 2)),
-              child: Text('$count', textAlign: TextAlign.center, style: const TextStyle(color: OlfaColors.white, fontSize: 10.5, fontWeight: FontWeight.w700, fontFamily: 'Montserrat')),
-            ),
+            child: CountBadge(count: count),
           ),
       ]),
     );
@@ -309,7 +305,7 @@ class ConversationTile extends ConsumerWidget {
           },
     };
     return InkWell(
-      onTap: () => context.push(Routes.chatWith(c.id)),
+      onTap: () => context.pushOnce(Routes.chatWith(c.id)),
       onLongPress: c.isConsultation ? null : () => showConversationMenu(context, ref, c),
       child: Opacity(
         opacity: c.isUnmatched ? 0.78 : 1,
@@ -531,7 +527,7 @@ class _SearchResults extends ConsumerWidget {
           Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: SectionLabel(l.searchMessages)),
           for (final m in messages)
             InkWell(
-              onTap: () => context.push(Routes.chatWith(m.conversationId)),
+              onTap: () => context.pushOnce(Routes.chatWith(m.conversationId)),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [

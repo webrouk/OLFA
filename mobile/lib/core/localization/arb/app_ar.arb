@@ -1037,5 +1037,12 @@
   "deleteUnsent": "حذف (لم تُرسل)",
   "adSponsored": "إعلان مُموَّل",
   "adRemove": "إزالة الإعلانات",
-  "adContinue": "متابعة"
+  "adContinue": "متابعة",
+  "filters": "الفلاتر",
+  "counselorsFound": "{count, plural, =0{لا يوجد استشاريون} =1{استشاري واحد} =2{استشاريان} few{{count} استشاريين} many{{count} استشاريًا} other{{count} استشاري}}",
+  "clearFilters": "مسح الفلاتر",
+  "startingFrom": "يبدأ من",
+  "services": "الخدمات",
+  "noOfferingsYet": "لم تُحدَّد الأسعار بعد.",
+  "navBadgeCount": "{count, plural, =1{جديد واحد} =2{اثنان جديدان} few{{count} جديدة} many{{count} جديدًا} other{{count} جديد}}"
 }

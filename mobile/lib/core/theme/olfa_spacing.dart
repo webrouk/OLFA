@@ -33,6 +33,33 @@ abstract final class OlfaSize {
   static const double minTap = 44;
 
   /// Space that scrollable content must leave for the floating nav bar.
-  static double navBarClearance(BuildContext context) =>
-      navBarHeight + navBarMargin + 12 + MediaQuery.paddingOf(context).bottom;
+  /// Inside a tab shell it comes from [NavChrome] (0 when the side rail is used
+  /// or the keyboard hides the bar); on pages pushed above the shell there is
+  /// no bar, so only the safe area is left.
+  static double navBarClearance(BuildContext context) {
+    final chrome = context.dependOnInheritedWidgetOfExactType<NavChrome>();
+    final safe = MediaQuery.paddingOf(context).bottom;
+    if (chrome == null) return safe;
+    return chrome.bottomBar ? navBarHeight + navBarMargin + 12 + safe : safe;
+  }
+}
+
+/// Window-size breakpoints (Material 3 size classes).
+abstract final class OlfaBreakpoints {
+  /// From here the tabs move to a side rail (tablets, landscape, desktop).
+  static const double rail = 840;
+
+  /// Pages never grow wider than this; wider windows centre them.
+  static const double readable = 720;
+}
+
+/// Tells the pages of a tab shell how the navigation is laid out.
+class NavChrome extends InheritedWidget {
+  const NavChrome({super.key, required this.bottomBar, required super.child});
+
+  /// True when the floating bottom bar is shown (phones, keyboard closed).
+  final bool bottomBar;
+
+  @override
+  bool updateShouldNotify(NavChrome old) => old.bottomBar != bottomBar;
 }

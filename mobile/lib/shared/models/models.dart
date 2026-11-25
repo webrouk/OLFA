@@ -740,11 +740,14 @@ class CounselorOffering {
 }
 
 class CounselorReview {
-  const CounselorReview({required this.rating, required this.createdAt, this.comment, this.by});
+  const CounselorReview({required this.rating, required this.createdAt, this.comment, this.by, this.reply});
   final int rating;
   final String? comment;
   final String? by; // first name only
   final DateTime createdAt;
+
+  /// The counselor's public reply (shown under the review, as on the counselor's desk).
+  final String? reply;
 }
 
 class Counselor {

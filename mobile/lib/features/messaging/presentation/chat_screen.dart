@@ -18,6 +18,7 @@ import 'conversations_screen.dart' show OfflineBar, showConversationMenu;
 import '../../../shared/components/verification_ticks.dart';
 import 'chat_widgets.dart';
 import 'package:flutter/services.dart';
+import '../../../core/routing/navigation.dart';
 
 /// 19 — Private chat: realtime, paginated, optimistic, keyboard-aware.
 class ChatScreen extends ConsumerStatefulWidget {
@@ -125,7 +126,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         title: conv == null
             ? const OlfaSkeleton(width: 120, height: 14)
             : InkWell(
-                onTap: conv.peer == null ? null : () => context.push(Routes.profile(conv.peer!.id)),
+                onTap: conv.peer == null ? null : () => context.pushOnce(Routes.profile(conv.peer!.id), extra: conv.peer),
                 child: Row(children: [
                   if (conv.peer != null)
                     OlfaAvatar(size: 40, url: conv.peer!.mainPhoto?.thumbUrl, online: conv.peer!.online && conv.canWrite)

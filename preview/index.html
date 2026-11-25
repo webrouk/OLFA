@@ -822,7 +822,7 @@ function admin(live){const d=ADEV[S.adev];const narrow=d.W<1000;
 /* ═══════════ CHROME + RENDER ═══════════ */
 const $=s=>document.querySelector(s);
 function chrome(){
- $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.9</small></span></div>
+ $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.10</small></span></div>
  <div class="seg"><button class="${S.mode==='app'?'on':''}" data-ui="mode" data-a="app">${t('vApp')}</button><button class="${S.mode==='admin'?'on':''}" data-ui="mode" data-a="admin">${t('vAdmin')}</button></div>
  ${S.mode==='app'?`<div class="seg"><button class="${S.view==='one'?'on':''}" data-ui="view" data-a="one">${t('vOne')}</button><button class="${S.view==='all'?'on':''}" data-ui="view" data-a="all">${t('vAll')}</button></div>`:''}
  <div class="seg"><button class="${S.lang==='ar'?'on':''}" data-ui="lang" data-a="ar">ع RTL</button><button class="${S.lang==='en'?'on':''}" data-ui="lang" data-a="en">EN LTR</button><button class="${S.lang==='fr'?'on':''}" data-ui="lang" data-a="fr">FR LTR</button></div>
@@ -2125,6 +2125,76 @@ AS.ads=()=>{const a=S.ads,num=(k,lab,lo,hi)=>`<div class="fld" style="flex:1"><l
  <div class="pnl"><h3>${t('a_ads')}</h3><div style="display:flex;gap:10px">${num('first','adsFirst',1,50)}${num('every','adsEvery',3,50)}${num('max','adsMax',0,50)}</div><button class="btn sm" data-act="adsSave">${t('save')}</button></div></div>`};
 ACT.adsT=k=>{S.ads[k]=!S.ads[k];S.adShow=false;render()};
 ACT.adsSave=()=>{document.querySelectorAll('[data-adsn]').forEach(i=>{const k=i.dataset.adsn,lim={first:[1,50],every:[3,50],max:[0,50]}[k];S.ads[k]=Math.min(lim[1],Math.max(lim[0],Math.trunc(+i.value)||lim[0]))});S.adDecided=0;S.adUsed=0;S.adShow=false;render();flash(t('saved'))};
+
+/* ═══════════ v0.10 — navigation, consistency, counselor pages ═══════════ */
+L8({filtersT:['الفلاتر','Filters','Filtres'],clearF:['مسح الفلاتر','Clear filters','Effacer les filtres'],showRes:['عرض النتائج','Show results','Afficher les résultats'],resetF2:['إعادة الضبط','Reset','Réinitialiser'],
+ cFound:['{n} استشاري','{n} counselors','{n} conseillers'],startFrom:['يبدأ من','Starting from','À partir de'],rating:['التقييم','Rating','Note'],noRev:['لا تقييمات بعد','No reviews yet','Pas encore d’avis'],
+ svcsT:['الخدمات','Services','Services'],navNew:['{n} جديد','{n} new','{n} nouveaux'],noCns:['لا يوجد استشاريون بهذه الفلاتر','No counselors match these filters','Aucun conseiller pour ces filtres'],
+});
+/* bottom bar: real counts instead of fixed dots; re-tapping the open tab scrolls to the top */
+const NAVCOUNT=()=>isPro()?{cdesk:S.desk.filter(d=>d.st==='paid').length,pchats:convs().filter(c=>c.unread>0&&c.kind==='consult').length}
+ :{likes:opp().filter(p=>p.likesYou).length,convs:convs().filter(c=>(c.unread||0)>0&&c.folder!=='archive').length};
+const cbadge=n=>`<b class="cbadge ltr">${n>99?'99+':n}</b>`;
+const NAVITEMS=()=>isPro()?[['cdesk','counsel','navDesk'],['wallet','card','navWallet'],['pchats','chat','nMessages'],['prome','user','nProfile']]
+ :[['discover','discover','nDiscover'],['likes','heart','nLikes'],['matches','match','nMatches'],['convs','chat','nMessages'],['me','user','nProfile']];
+navbar=function(on,rail){const n=NAVCOUNT();
+ return `<nav class="${rail?'rail':'nav'}" aria-label="main">${rail?`<div class="rail-logo">${LOGO(36)}</div>`:''}${NAVITEMS().map(([k,ic,l])=>`<button class="${on===k?'on':''}" data-tab="${k}" aria-current="${on===k}" aria-label="${t(l)}${n[k]?' — '+tf('navNew',{n:n[k]}):''}"><span class="nic">${I(k===on&&ic==='heart'?'heartf':ic,23,on===k?2.1:1.8)}${n[k]?cbadge(n[k]):''}</span><span>${t(l)}</span></button>`).join('')}</nav>`};
+document.addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b&&b.classList.contains('on')){const sc=$('#scr');if(sc)sc.scrollTo({top:0,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}},true);
+/* tablets in landscape (≥ 840 px): the same tabs as a side rail */
+DEVICES.tabL={n:'iPad mini landscape · 1133×744',W:1133,H:744,sat:24,sab:20,rad:28,os:'ios',deco:'none'};
+const _device10=device;device=function(id,live){let h=_device10(id,live);const d=DEVICES[S.dev];if(d.W<840)return h;
+ const i=h.indexOf('<nav class="nav"');if(i<0)return h;const j=h.indexOf('</nav>',i)+6;const on=(h.slice(i,j).match(/data-tab="(\w+)" aria-current="true"/)||[])[1];
+ return (h.slice(0,i)+h.slice(j)).replace('class="scr navd"','class="scr railed"').replace('<div class="scr','<!--rail-->'+navbar(on,true)+'<div class="scr')};
+/* counselor directory: type as quick chips, the rest in one sheet, removable filter chips, same card facts as the dashboard */
+const inits=n=>{const p=n.replace(/^(د\.|أ\.|Dr\.)\s*/,'').trim().split(/\s+/);return (p[0][0]+(p.length>1?p[p.length-1][0]:'')).toUpperCase()};
+const cav=(c,s=56)=>`<span class="cav" style="width:${s}px;height:${s}px;font-size:${Math.round(s*.34)}px">${inits(AR()?c.ar:c.en)}</span>`;
+const cmin=c=>{const d=Object.keys(c.offers).map(Number).sort((a,b)=>c.offers[a]-c.offers[b])[0];return {d,p:c.offers[d]}};
+const ccard10=c=>{const m=cmin(c),more=c.svcs.length-3;return `<div class="ccard c10" data-act="openCounselor" data-a="${c.id}" role="button" tabindex="0"><div class="top">${cav(c)}<div style="flex:1;min-width:0"><div class="h3" style="display:flex;gap:6px;align-items:center">${AR()?c.ar:c.en} ${vb(16)}</div><div class="cap">${kindL(c.k)} · <span class="ltr">${c.yrs}</span> ${t('years')}</div><div class="rating">${c.cnt?`${stars(c.rating,13)} <span class="cap ltr" style="margin-inline-start:4px">${c.rating} (${c.cnt})</span>`:`<span class="cap">${t('noRev')}</span>`}</div></div>${Ix('fwd',20)}</div>
+ <p class="bs" style="margin:0">${AR()?c.hAr:c.hEn}</p>
+ <div style="display:flex;gap:6px;flex-wrap:wrap">${c.svcs.slice(0,3).map(s=>`<span class="tag">${t('sv_'+s)}</span>`).join('')}${more>0?`<span class="tag">+${more}</span>`:''}${c.langs.map(l=>`<span class="tag p">${t('l_'+l)}</span>`).join('')}</div>
+ <div class="cfoot"><span class="bs">${t('from')} <b>${money(m.p)}</b> / <span class="ltr">${m.d}</span> ${t('min')}</span><span class="clink">${t('bookNow')}</span></div></div>`};
+const consult10=()=>{const f=S.cf;const L=COUNSELORS.filter(c=>(!f.kind||c.k===f.kind)&&(!f.svc||c.svcs.includes(f.svc))&&(!f.lang||c.langs.includes(f.lang))&&(!f.dur||c.offers[f.dur]));
+ const extra=[f.svc,f.lang,f.dur].filter(Boolean).length;const x=(lab,a)=>`<button class="fchip" data-act="${a}" data-a="">${lab} ${I('close',14)}</button>`;
+ return `<div>${bar(t('s_consult'),{right:`<button class="ib" data-go="myconsult" aria-label="${t('myCons')}">${I('cal')}</button>`})}<div class="pad">
+ <div class="banner p" style="margin-bottom:12px">${I('counsel',18)}<span>${t('cIntro')}</span></div>
+ <div class="cbar">${chipRow([[null,t('all')],['family',t('kFamily')],['psych',t('kPsych')]],f.kind,'cfKind')}<button class="ib soft" data-act="cfOpen" aria-label="${t('filtersT')}" style="position:relative;flex:none">${I('filter',20)}${extra?cbadge(extra):''}</button></div>
+ ${extra?`<div class="fchips">${f.svc?x(t('sv_'+f.svc),'cfSvc'):''}${f.lang?x(t('l_'+f.lang),'cfLang'):''}${f.dur?x(f.dur+' '+t('min'),'cfDur'):''}</div>`:''}
+ <div class="cap" style="margin:6px 0 10px">${tf('cFound',{n:L.length})}</div>
+ <div style="display:grid;gap:12px">${L.map(ccard10).join('')||`<div class="empty"><div class="eic">${I('counsel',34)}</div><p class="bm">${t('noCns')}</p><button class="btn sm out" data-act="cfClear">${t('clearF')}</button></div>`}</div>
+ <div class="ccard" style="margin:18px 0 26px;background:var(--k);color:var(--w);border-color:var(--k)"><div class="h3">${t('areYouPro')}</div><button class="btn wh" data-go="capply">${t('joinPro')}</button></div></div></div>`};
+SC.consult=()=>{let h=consult10();const b=pendingReview();if(!b)return h;const i=h.indexOf('<div class="pad"');return i<0?h:h.slice(0,i)+`<div class="pad" style="padding-bottom:0"><div class="banner p" style="margin:4px 0 0">${I('star',18)}<span style="flex:1">${t('rvGate')}</span><button class="btn sm" data-act="rateBk" data-a="${b.id}">${t('rateNow')}</button></div></div>`+h.slice(i)};
+ACT.cfOpen=()=>{S.sheet='cfilters';render()};ACT.cfClear=()=>{S.cf={kind:null,svc:null,lang:null,dur:null};render()};ACT.cfReset=()=>{S.cf={...S.cf,svc:null,lang:null,dur:null};render()};ACT.cfDone=()=>{S.sheet=null;render()};
+SHEETS.cfilters=()=>{const f=S.cf;return `<div class="h3" style="margin-bottom:12px">${t('filtersT')}</div>
+ <label class="lbl">${t('svcType')}</label><div class="fld">${chipRow([[null,t('all')],...['PREMARITAL','MARITAL','FAMILY','PARENTING','INDIVIDUAL','DIVORCE_RECOVERY'].map(s=>[s,t('sv_'+s)])],f.svc,'cfSvc')}</div>
+ <label class="lbl">${t('svcLang')}</label><div class="fld">${chipRow([[null,t('all')],['ar',t('l_ar')],['en',t('l_en')],['fr',t('l_fr')],['ur',t('l_ur')]],f.lang,'cfLang')}</div>
+ <label class="lbl">${t('duration')}</label><div class="fld">${chipRow([[null,t('all')],['30','30'],['45','45'],['60','60'],['90','90']],f.dur,'cfDur')}</div>
+ <div class="g2" style="gap:10px;margin-top:6px"><button class="btn out" data-act="cfReset">${t('resetF2')}</button><button class="btn" data-act="cfDone">${t('showRes')}</button></div>`};
+/* counselor profile: facts strip (same numbers as the dashboard), reviews as cards, price + book always visible */
+const _counselor10=SC.counselor;
+SC.counselor=()=>{const c=cnsl(S.cnsl),m=cmin(c);let h=_counselor10();
+ h=h.replace(av(null,96),cav(c,88));
+ h=h.replace(/<div class="kv">[\s\S]*?<\/div><\/div>\n/,`<div class="facts"><div><span>${I('starf',18)}</span><b class="ltr">${c.cnt?c.rating:'—'}</b><small>${t('rating')}</small></div><div><span>${I('star',18)}</span><b class="ltr">${c.cnt}</b><small>${t('reviews')}</small></div><div><span>${I('hour',18)}</span><b class="ltr">${c.yrs}</b><small>${t('years')}</small></div></div>
+ <div class="kv"><div><small>${t('kind')}</small><b>${kindL(c.k)}</b></div><div><small>${t('licensed')}</small><b class="ltr">${c.lic}</b></div><div><small>${t('languages')}</small><b>${c.langs.map(l=>t('l_'+l)).join(AR()?'، ':', ')}</b></div></div>\n`);
+ h=h.replace(/<div style="padding:10px 0;border-bottom:1px solid var\(--g\)">/g,'<div class="rvcard">');
+ return h.replace(/<div class="foot sticky-foot"><button class="btn" data-act="startBook">[^<]*<\/button><\/div>/,`<div class="foot sticky-foot bookbar"><div><small class="cap">${t('startFrom')}</small><b class="h3">${money(m.p)}</b></div><button class="btn" style="width:auto;padding:0 22px" data-act="startBook">${I('cal',18)} ${t('bookNow')}</button></div>`)};
+/* same labels as the app (ARB) and the admin dashboard */
+L8({kFamily:['استشاري أسري','Family counselor','Conseiller familial'],kPsych:['أخصائي نفسي','Psychologist','Psychologue'],
+ sv_PREMARITAL:['ما قبل الزواج','Pre-marriage','Avant le mariage'],sv_MARITAL:['زوجية','Marital','Conjugal'],sv_FAMILY:['أسرية','Family','Familial'],
+ sv_PARENTING:['تربوية','Parenting','Parentalité'],sv_INDIVIDUAL:['فردية','Individual','Individuel'],sv_DIVORCE_RECOVERY:['ما بعد الانفصال','After separation','Après une séparation']});
+const st10=document.createElement('style');st10.textContent=`
+.nav .nic,.rail .nic{position:relative;display:inline-grid}.cbadge{position:absolute;top:-7px;inset-inline-end:-13px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--p);color:var(--w);border:1.5px solid var(--w);font:700 10.5px/15px Montserrat,sans-serif;text-align:center}
+.nav button{color:var(--k60)}.nav button.on{color:var(--p)}
+.ib .cbadge{top:-4px;inset-inline-end:-4px}
+.rail{position:absolute;top:0;bottom:0;inset-inline-start:0;width:96px;background:var(--w);border-inline-end:1px solid var(--g);display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:calc(var(--sat) + 16px) 10px 16px;z-index:20}
+.rail-logo{display:flex;justify-content:center;margin-bottom:12px}.rail button{height:62px;border:0;background:none;border-radius:17px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--k60);font-size:11px;font-weight:500}
+.rail button.on{background:var(--p8);color:var(--p);font-weight:700}.scr.railed{inset-inline-start:96px}
+.cbar{display:flex;gap:10px;align-items:center;position:sticky;top:0;background:var(--w);z-index:3;padding:8px 0}.cbar .chips{flex:1;flex-wrap:nowrap;overflow-x:auto}
+.fchips{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 6px}.fchip{display:inline-flex;align-items:center;gap:4px;border:0;border-radius:19px;background:var(--p8);color:var(--p);font:600 13px Tajawal,Montserrat,sans-serif;padding:6px 10px}
+.cav{border-radius:50%;background:var(--p8);color:var(--p);display:grid;place-items:center;font-weight:800;flex:none;font-family:Tajawal,Montserrat,sans-serif}
+.c10 .cfoot{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--g);padding-top:10px}.c10 .clink{color:var(--p);font-weight:700;font-size:14px}
+.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:4px 0 14px}.facts>div{background:var(--g);border-radius:18px;padding:12px 6px;display:flex;flex-direction:column;align-items:center;gap:2px}.facts span{color:var(--p)}.facts b{font:700 18px Montserrat,sans-serif}.facts small{color:var(--k60);font-size:12px}
+.rvcard{border:1px solid var(--g);border-radius:18px;padding:12px;margin-bottom:10px}
+.bookbar{display:flex!important;flex-direction:row!important;align-items:center;justify-content:space-between;gap:12px;text-align:start}.scr.railed>*{max-width:720px;margin-inline:auto}.bookbar small{display:block}`;document.head.appendChild(st10);
 try{const q=new URLSearchParams(location.hash.slice(1));if(q.get('lang'))S.lang=q.get('lang');if(SC[q.get('s')])S.screen=q.get('s');if(q.get('mode'))S.mode=q.get('mode');if(q.get('dev')&&DEVICES[q.get('dev')])S.dev=q.get('dev');if(q.get('view'))S.view=q.get('view');if(q.get('adm'))S.adm=q.get('adm');if(q.get('adev'))S.adev=q.get('adev')}catch(e){}
 render();
 </script>

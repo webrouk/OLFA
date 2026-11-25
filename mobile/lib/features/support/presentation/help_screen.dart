@@ -10,6 +10,7 @@ import '../../../core/widgets/olfa_widgets.dart';
 import '../../../shared/components/labels.dart';
 import '../../../shared/models/models.dart';
 import '../data/support_repository.dart';
+import '../../../core/routing/navigation.dart';
 
 Map<String, String> ticketCategories(AppLocalizations l) =>
     {'account': l.catAccount, 'verification': l.catVerification, 'payment': l.catPayment, 'technical': l.catTechnical, 'other': l.catOther};
@@ -73,7 +74,7 @@ class _HelpScreenState extends ConsumerState<HelpScreen> {
                             subtitle: '${ticketStatusLabel(l, tk.status)} · ${shortTime(context, tk.lastMessageAt)}',
                             trailing: tk.unread > 0 ? OlfaTag('${tk.unread}', style: OlfaTagStyle.primary) : null,
                             onTap: () async {
-                              await context.push(Routes.ticket(tk.id));
+                              await context.pushOnce(Routes.ticket(tk.id));
                               ref.invalidate(ticketsProvider);
                             },
                           ),

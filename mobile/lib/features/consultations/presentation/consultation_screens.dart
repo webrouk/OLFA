@@ -20,121 +20,313 @@ import '../domain/consultations_repository.dart';
 import 'consult_labels.dart';
 import '../../profile/application/profile_controllers.dart';
 import '../../../shared/utils/text_fold.dart';
+import '../../../core/routing/navigation.dart';
 
-/// C1 — Family & marital consultations: directory filtered by counselor
-/// type, service, language and duration.
+/// C1 — Family & marital consultations: a directory with the counselor type
+/// as quick tabs and the other filters (service, language, duration) in one
+/// sheet. Results are cached per filter combination, so going back is instant.
 class ConsultationsScreen extends ConsumerWidget {
   const ConsultationsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = AppLocalizations.of(context);
+    final t = context.type;
     final q = ref.watch(counselorQueryProvider);
     final ctrl = ref.read(counselorQueryProvider.notifier);
+    final extra = [q.service != null, q.language != null, q.durationMinutes != null].where((x) => x).length;
+    final list = ref.watch(counselorsProvider);
     return Scaffold(
       appBar: AppBar(
         title: Text(l.screenConsultations),
         actions: [OlfaIconButton(icon: Icons.event_note_outlined, tooltip: l.screenMyConsultations, onPressed: () => context.push(Routes.myConsultations)), const SizedBox(width: 6)],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
-        children: [
-          InfoBanner(text: l.consultIntro, icon: Icons.support_agent_rounded, accent: true),
-          const SizedBox(height: 16),
-          ChoiceWrap<CounselorKind?>(
-            options: const [null, CounselorKind.familyCounselor, CounselorKind.psychologist],
-            label: (k) => k == null ? l.all : kindLabel(l, k),
-            isSelected: (k) => q.kind == k,
-            onTap: (k) => ctrl.set(q.copyWith(kind: () => k)),
+      body: RefreshIndicator(
+        color: OlfaColors.primary,
+        onRefresh: () => ref.refresh(counselorsByQueryProvider(q).future),
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+              sliver: SliverToBoxAdapter(child: InfoBanner(text: l.consultIntro, icon: Icons.support_agent_rounded, accent: true)),
+            ),
+            // Counselor type: quick tabs, always visible while scrolling.
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _FixedHeader(
+                height: 64,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                  child: Row(children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: ChoiceWrap<CounselorKind?>(
+                          options: const [null, CounselorKind.familyCounselor, CounselorKind.psychologist],
+                          label: (k) => k == null ? l.all : kindLabel(l, k),
+                          isSelected: (k) => q.kind == k,
+                          onTap: (k) => ctrl.set(q.copyWith(kind: () => k)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Stack(clipBehavior: Clip.none, children: [
+                      OlfaIconButton(icon: Icons.tune_rounded, tooltip: l.filters, style: OlfaIconStyle.soft, onPressed: () => _showFilters(context, ref)),
+                      if (extra > 0) PositionedDirectional(top: -4, end: -4, child: CountBadge(count: extra)),
+                    ]),
+                  ]),
+                ),
+              ),
+            ),
+            if (extra > 0)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                sliver: SliverToBoxAdapter(
+                  child: Wrap(spacing: 8, runSpacing: 8, children: [
+                    if (q.service != null) _ActiveFilter(serviceLabel(l, q.service!), () => ctrl.set(q.copyWith(service: () => null))),
+                    if (q.language != null) _ActiveFilter(languageName(context, q.language!), () => ctrl.set(q.copyWith(language: () => null))),
+                    if (q.durationMinutes != null) _ActiveFilter(l.minutesShort(q.durationMinutes!), () => ctrl.set(q.copyWith(durationMinutes: () => null))),
+                  ]),
+                ),
+              ),
+            ...switch (list) {
+              AsyncValue(:final valueOrNull?) when valueOrNull.isEmpty => [
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: EmptyState(
+                      icon: Icons.search_off_rounded,
+                      title: l.noCounselors,
+                      body: l.professionalsRegisterNote,
+                      action: (extra > 0 || q.kind != null) ? SecondaryButton(label: l.clearFilters, expand: false, onPressed: () => ctrl.set(const CounselorQuery())) : null,
+                    ),
+                  ),
+                ],
+              AsyncValue(valueOrNull: final value?) => [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: Row(children: [
+                        Expanded(child: Text(l.counselorsFound(value.length), style: t.caption)),
+                        if (list.isLoading) const SizedBox.square(dimension: 14, child: CircularProgressIndicator(strokeWidth: 2, color: OlfaColors.primary)),
+                      ]),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    sliver: SliverList.separated(
+                      itemCount: value.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (_, i) => CounselorCard(c: value[i]),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
+                    sliver: SliverToBoxAdapter(child: Text(l.professionalsRegisterNote, style: t.caption, textAlign: TextAlign.center)),
+                  ),
+                ],
+              AsyncValue(:final error?) => [
+                  SliverFillRemaining(hasScrollBody: false, child: ErrorState(error: error, onRetry: () => ref.invalidate(counselorsByQueryProvider(q)))),
+                ],
+              _ => [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    sliver: SliverList.separated(itemCount: 3, separatorBuilder: (_, __) => const SizedBox(height: 12), itemBuilder: (_, __) => const _CounselorCardSkeleton()),
+                  ),
+                ],
+            },
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showFilters(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
+    var draft = ref.read(counselorQueryProvider);
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheet) => StatefulBuilder(
+        builder: (sheet, set) => SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(sheet).height * 0.85),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                Text(l.filters, style: sheet.type.h3),
+                const SizedBox(height: 16),
+                Text(l.serviceType, style: sheet.type.inputLabel),
+                const SizedBox(height: 8),
+                ChoiceWrap<ConsultationService?>(
+                  options: [null, ...ConsultationService.values],
+                  label: (s) => s == null ? l.all : serviceLabel(l, s),
+                  isSelected: (s) => draft.service == s,
+                  onTap: (s) => set(() => draft = draft.copyWith(service: () => s)),
+                ),
+                const SizedBox(height: 16),
+                Text(l.serviceLanguage, style: sheet.type.inputLabel),
+                const SizedBox(height: 8),
+                ChoiceWrap<String?>(
+                  options: const [null, 'ar', 'en', 'fr', 'tr', 'ur'],
+                  label: (c) => c == null ? l.all : languageName(sheet, c),
+                  isSelected: (c) => draft.language == c,
+                  onTap: (c) => set(() => draft = draft.copyWith(language: () => c)),
+                ),
+                const SizedBox(height: 16),
+                Text(l.sessionDuration, style: sheet.type.inputLabel),
+                const SizedBox(height: 8),
+                ChoiceWrap<int?>(
+                  options: const [null, ...kDurations],
+                  label: (d) => d == null ? l.all : l.minutesShort(d),
+                  isSelected: (d) => draft.durationMinutes == d,
+                  onTap: (d) => set(() => draft = draft.copyWith(durationMinutes: () => d)),
+                ),
+                const SizedBox(height: 22),
+                Row(children: [
+                  Expanded(
+                    child: SecondaryButton(
+                      label: l.reset,
+                      onPressed: () => set(() => draft = CounselorQuery(kind: draft.kind)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: PrimaryButton(
+                      label: l.showResults,
+                      onPressed: () {
+                        ref.read(counselorQueryProvider.notifier).set(draft);
+                        Navigator.of(sheet).pop();
+                      },
+                    ),
+                  ),
+                ]),
+              ]),
+            ),
           ),
-          const SizedBox(height: 16),
-          Text(l.serviceType, style: context.type.inputLabel),
-          const SizedBox(height: 8),
-          ChoiceWrap<ConsultationService?>(
-            options: [null, ...ConsultationService.values],
-            label: (s) => s == null ? l.all : serviceLabel(l, s),
-            isSelected: (s) => q.service == s,
-            onTap: (s) => ctrl.set(q.copyWith(service: () => s)),
-          ),
-          const SizedBox(height: 16),
-          Text(l.serviceLanguage, style: context.type.inputLabel),
-          const SizedBox(height: 8),
-          ChoiceWrap<String?>(
-            options: const [null, 'ar', 'en', 'fr', 'tr', 'ur'],
-            label: (c) => c == null ? l.all : languageName(context, c),
-            isSelected: (c) => q.language == c,
-            onTap: (c) => ctrl.set(q.copyWith(language: () => c)),
-          ),
-          const SizedBox(height: 16),
-          Text(l.sessionDuration, style: context.type.inputLabel),
-          const SizedBox(height: 8),
-          ChoiceWrap<int?>(
-            options: const [null, ...kDurations],
-            label: (d) => d == null ? l.all : l.minutesShort(d),
-            isSelected: (d) => q.durationMinutes == d,
-            onTap: (d) => ctrl.set(q.copyWith(durationMinutes: () => d)),
-          ),
-          const SizedBox(height: 18),
-          AsyncView<List<Counselor>>(
-            value: ref.watch(counselorsProvider),
-            onRetry: () => ref.invalidate(counselorsProvider),
-            loading: const Padding(padding: EdgeInsets.all(30), child: Center(child: CircularProgressIndicator(color: OlfaColors.primary))),
-            data: (list) => list.isEmpty
-                ? Padding(padding: const EdgeInsets.all(24), child: Text(l.noCounselors, textAlign: TextAlign.center, style: context.type.bodyMedium.copyWith(color: OlfaColors.textMuted)))
-                : Column(children: [for (final c in list) Padding(padding: const EdgeInsets.only(bottom: 12), child: _CounselorCard(c: c))]),
-          ),
-          const SizedBox(height: 8),
-          // Professionals register with their own professional account (separate from marriage profiles).
-          Text(l.professionalsRegisterNote, style: context.type.caption, textAlign: TextAlign.center),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _CounselorCard extends StatelessWidget {
-  const _CounselorCard({required this.c});
+class _FixedHeader extends SliverPersistentHeaderDelegate {
+  _FixedHeader({required this.height, required this.child});
+  final double height;
+  final Widget child;
+  @override
+  double get minExtent => height;
+  @override
+  double get maxExtent => height;
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) =>
+      ColoredBox(color: OlfaColors.white, child: Align(alignment: AlignmentDirectional.centerStart, child: child));
+  @override
+  bool shouldRebuild(_FixedHeader old) => old.child != child || old.height != height;
+}
+
+class _ActiveFilter extends StatelessWidget {
+  const _ActiveFilter(this.label, this.onRemove);
+  final String label;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return InputChip(
+      label: Text(label),
+      onDeleted: onRemove,
+      deleteButtonTooltipMessage: l.clear,
+      deleteIcon: const Icon(Icons.close_rounded, size: 16),
+      backgroundColor: OlfaColors.primaryTint(),
+      side: BorderSide.none,
+      labelStyle: context.type.bodySmall.copyWith(color: OlfaColors.primary, fontWeight: FontWeight.w600),
+      shape: RoundedRectangleBorder(borderRadius: OlfaRadius.all(OlfaRadius.chip)),
+    );
+  }
+}
+
+class _CounselorCardSkeleton extends StatelessWidget {
+  const _CounselorCardSkeleton();
+  @override
+  Widget build(BuildContext context) => OlfaCard(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const OlfaSkeleton(width: 56, height: 56, circle: true),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [OlfaSkeleton(width: 140, height: 14), SizedBox(height: 8), OlfaSkeleton(width: 200), SizedBox(height: 8), OlfaSkeleton(width: 90)])),
+          ]),
+          const SizedBox(height: 14),
+          const OlfaSkeleton(width: 220),
+        ]),
+      );
+}
+
+/// Counselor in the directory — the same facts, order and labels as the
+/// admin dashboard's counselor card (type, rating, languages, services, price).
+class CounselorCard extends StatelessWidget {
+  const CounselorCard({super.key, required this.c});
   final Counselor c;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final t = context.type;
-    final from = c.offerings.isEmpty ? null : c.offerings.reduce((a, b) => a.priceMinor <= b.priceMinor ? a : b);
-    return InkWell(
-      borderRadius: OlfaRadius.all(OlfaRadius.card),
-      onTap: () => context.push(Routes.counselorDetails(c.id)),
-      child: OlfaCard(
-        padding: const EdgeInsets.all(14),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const CounselorAvatar(),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [Flexible(child: Text(c.name, style: t.h3, overflow: TextOverflow.ellipsis)), const SizedBox(width: 6), VerifiedBadge(size: 16, semanticLabel: l.licenseVerified)]),
-                Text('${c.headline} · ${l.yearsCount(c.yearsExperience)}', style: t.caption, maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 2),
-                Row(children: [StarRow(value: c.ratingAvg, size: 13), const SizedBox(width: 6), Text('${c.ratingAvg.toStringAsFixed(1)} (${c.ratingCount})', style: t.caption)]),
+    final from = cheapestOffering(c);
+    return Semantics(
+      button: true,
+      label: '${c.name}, ${kindLabel(l, c.kind)}',
+      child: Material(
+        color: OlfaColors.white,
+        shape: RoundedRectangleBorder(borderRadius: OlfaRadius.all(OlfaRadius.card), side: const BorderSide(color: OlfaColors.gray)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => context.pushOnce(Routes.counselorDetails(c.id)),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                CounselorAvatar(name: c.name),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [Flexible(child: Text(c.name, style: t.h3, overflow: TextOverflow.ellipsis)), const SizedBox(width: 6), VerifiedBadge(size: 16, semanticLabel: l.licenseVerified)]),
+                    Text('${kindLabel(l, c.kind)} · ${l.yearsCount(c.yearsExperience)}', style: t.caption, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 3),
+                    RatingLine(avg: c.ratingAvg, count: c.ratingCount),
+                  ]),
+                ),
+                Icon(Directionality.of(context) == TextDirection.rtl ? Icons.chevron_left_rounded : Icons.chevron_right_rounded, color: OlfaColors.textMuted),
               ]),
-            ),
-          ]),
-          const SizedBox(height: 10),
-          Wrap(spacing: 6, runSpacing: 6, children: [
-            for (final s in c.services.take(3)) OlfaTag(serviceLabel(l, s)),
-            for (final lg in c.languages) OlfaTag(languageName(context, lg), style: OlfaTagStyle.accent),
-          ]),
-          if (from != null) ...[
-            const SizedBox(height: 10),
-            Text(l.priceFrom(money(context, from.priceMinor, from.currency), from.durationMinutes), style: t.bodySmall.copyWith(fontWeight: FontWeight.w600)),
-          ],
-        ]),
+              if (c.headline.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(c.headline, style: t.bodySmall, maxLines: 2, overflow: TextOverflow.ellipsis),
+              ],
+              const SizedBox(height: 10),
+              Wrap(spacing: 6, runSpacing: 6, children: [
+                for (final s in c.services.take(3)) OlfaTag(serviceLabel(l, s)),
+                if (c.services.length > 3) OlfaTag('+${c.services.length - 3}'),
+                for (final lg in c.languages) OlfaTag(languageName(context, lg), style: OlfaTagStyle.accent),
+              ]),
+              if (from != null) ...[
+                const SizedBox(height: 12),
+                const Divider(height: 1, color: OlfaColors.gray),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(child: Text(l.priceFrom(money(context, from.priceMinor, from.currency), from.durationMinutes), style: t.bodySmall.copyWith(fontWeight: FontWeight.w700))),
+                  Text(l.bookConsultation, style: t.bodySmall.copyWith(color: OlfaColors.primary, fontWeight: FontWeight.w700)),
+                ]),
+              ],
+            ]),
+          ),
+        ),
       ),
     );
   }
 }
 
-/// C2 — Counselor profile: credentials, services, prices and reviews.
+/// C2 — Counselor profile: a summary strip (rating, reviews, years, type),
+/// then about, prices and reviews, with "Book" always reachable at the bottom.
 class CounselorDetailsScreen extends ConsumerWidget {
   const CounselorDetailsScreen({super.key, required this.counselorId});
   final String counselorId;
@@ -148,60 +340,156 @@ class CounselorDetailsScreen extends ConsumerWidget {
       body: AsyncView<Counselor>(
         value: ref.watch(counselorProvider(counselorId)),
         onRetry: () => ref.invalidate(counselorProvider(counselorId)),
-        data: (c) => Column(children: [
-          Expanded(
-            child: ListView(padding: const EdgeInsets.fromLTRB(20, 8, 20, 20), children: [
-              Center(child: Column(children: [
-                const CounselorAvatar(size: 96),
-                const SizedBox(height: 10),
-                Row(mainAxisSize: MainAxisSize.min, children: [Flexible(child: Text(c.name, style: t.h2, textAlign: TextAlign.center)), const SizedBox(width: 8), VerifiedBadge(size: 20, semanticLabel: l.licenseVerified)]),
-                Text(c.headline, style: t.caption),
-                const SizedBox(height: 4),
-                Row(mainAxisSize: MainAxisSize.min, children: [StarRow(value: c.ratingAvg, size: 16), const SizedBox(width: 6), Text('${c.ratingAvg.toStringAsFixed(1)} · ${l.reviewsCount(c.ratingCount)}', style: t.bodySmall)]),
-              ])),
-              const SizedBox(height: 16),
-              TileGroup(children: [
-                OlfaListTile(icon: Icons.badge_outlined, title: kindLabel(l, c.kind), subtitle: l.counselorType, showChevron: false),
-                OlfaListTile(icon: Icons.verified_outlined, title: c.licenseAuthority, subtitle: '${l.licensedBy} · ${countryByIso(c.licenseCountry).label(langOf(context))}', showChevron: false),
-                OlfaListTile(icon: Icons.work_history_outlined, title: l.yearsCount(c.yearsExperience), subtitle: l.experience, showChevron: false),
-                OlfaListTile(icon: Icons.translate_rounded, title: c.languages.map((x) => languageName(context, x)).join(listSeparator(langOf(context))), subtitle: l.serviceLanguage, showChevron: false),
-              ]),
-              SectionLabel(l.about),
-              Text(c.bio, style: t.bodyMedium),
-              SectionLabel(l.pricing),
-              TileGroup(children: [
-                for (final o in c.offerings)
-                  OlfaListTile(
-                    icon: Icons.schedule_rounded,
-                    title: '${serviceLabel(l, o.service)} · ${l.minutesShort(o.durationMinutes)}',
-                    subtitle: languageName(context, o.language),
-                    showChevron: false,
-                    trailing: Text(money(context, o.priceMinor, o.currency), style: t.bodyMedium.copyWith(fontWeight: FontWeight.w700)),
+        loading: const _CounselorDetailsSkeleton(),
+        data: (c) {
+          final from = cheapestOffering(c);
+          return Column(children: [
+            Expanded(
+              child: RefreshIndicator(
+                color: OlfaColors.primary,
+                onRefresh: () => ref.refresh(counselorProvider(counselorId).future),
+                child: ListView(padding: const EdgeInsets.fromLTRB(20, 8, 20, 20), children: [
+                  Center(
+                    child: Column(children: [
+                      CounselorAvatar(size: 88, name: c.name),
+                      const SizedBox(height: 10),
+                      Row(mainAxisSize: MainAxisSize.min, children: [Flexible(child: Text(c.name, style: t.h2, textAlign: TextAlign.center)), const SizedBox(width: 8), VerifiedBadge(size: 20, semanticLabel: l.licenseVerified)]),
+                      const SizedBox(height: 2),
+                      Text(kindLabel(l, c.kind), style: t.bodySmall.copyWith(color: OlfaColors.primary, fontWeight: FontWeight.w700)),
+                      if (c.headline.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(c.headline, style: t.caption, textAlign: TextAlign.center)),
+                    ]),
                   ),
-              ]),
-              SectionLabel(l.reviews),
-              if (c.reviews.isEmpty) Text(l.noReviewsYet, style: t.bodySmall.copyWith(color: OlfaColors.textMuted)),
-              for (final r in c.reviews)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [StarRow(value: r.rating.toDouble(), size: 13), const SizedBox(width: 8), Text(r.by ?? '', style: t.caption.copyWith(fontWeight: FontWeight.w600)), const Spacer(), Text(shortTime(context, r.createdAt), style: t.caption)]),
-                    if (r.comment != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(r.comment!, style: t.bodySmall)),
+                  const SizedBox(height: 16),
+                  // Same three numbers as the admin dashboard's counselor card.
+                  Row(children: [
+                    Expanded(child: _Fact(value: c.ratingCount == 0 ? '—' : c.ratingAvg.toStringAsFixed(1), label: l.rating, icon: Icons.star_rounded)),
+                    const SizedBox(width: 10),
+                    Expanded(child: _Fact(value: '${c.ratingCount}', label: l.reviews, icon: Icons.reviews_outlined)),
+                    const SizedBox(width: 10),
+                    Expanded(child: _Fact(value: '${c.yearsExperience}', label: l.experience, icon: Icons.work_history_outlined)),
+                  ]),
+                  const SizedBox(height: 16),
+                  TileGroup(children: [
+                    OlfaListTile(icon: Icons.verified_outlined, title: c.licenseAuthority, subtitle: '${l.licensedBy} · ${countryByIso(c.licenseCountry).label(langOf(context))}', showChevron: false),
+                    OlfaListTile(icon: Icons.translate_rounded, title: c.languages.map((x) => languageName(context, x)).join(listSeparator(langOf(context))), subtitle: l.serviceLanguage, showChevron: false),
+                  ]),
+                  SectionLabel(l.about),
+                  Text(c.bio, style: t.bodyMedium),
+                  SectionLabel(l.services),
+                  Wrap(spacing: 6, runSpacing: 6, children: [for (final s in c.services) OlfaTag(serviceLabel(l, s))]),
+                  SectionLabel(l.pricing),
+                  if (c.offerings.isEmpty) Text(l.noOfferingsYet, style: t.bodySmall.copyWith(color: OlfaColors.textMuted)),
+                  if (c.offerings.isNotEmpty)
+                    TileGroup(children: [
+                      for (final o in c.offerings)
+                        OlfaListTile(
+                          icon: Icons.schedule_rounded,
+                          title: '${serviceLabel(l, o.service)} · ${l.minutesShort(o.durationMinutes)}',
+                          subtitle: languageName(context, o.language),
+                          showChevron: false,
+                          trailing: Text(money(context, o.priceMinor, o.currency), textDirection: TextDirection.ltr, style: t.bodyMedium.copyWith(fontWeight: FontWeight.w700)),
+                        ),
+                    ]),
+                  SectionLabel(l.reviews),
+                  if (c.reviews.isEmpty) Text(l.noReviewsYet, style: t.bodySmall.copyWith(color: OlfaColors.textMuted)),
+                  for (final r in c.reviews)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: OlfaCard(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Row(children: [StarRow(value: r.rating.toDouble(), size: 13), const SizedBox(width: 8), Expanded(child: Text(r.by ?? '', style: t.caption.copyWith(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)), Text(shortTime(context, r.createdAt), style: t.caption)]),
+                          if (r.comment != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(r.comment!, style: t.bodySmall)),
+                          if (r.reply != null)
+                            Container(
+                              margin: const EdgeInsets.only(top: 8),
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(color: OlfaColors.gray, borderRadius: OlfaRadius.all(12)),
+                              child: Text(r.reply!, style: t.bodySmall),
+                            ),
+                        ]),
+                      ),
+                    ),
+                ]),
+              ),
+            ),
+            // Book bar: price on one side, the action on the other — always visible.
+            Container(
+              decoration: const BoxDecoration(color: OlfaColors.white, border: Border(top: BorderSide(color: OlfaColors.gray))),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+                  child: Row(children: [
+                    if (from != null) ...[
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                          Text(l.startingFrom, style: t.caption),
+                          Text(money(context, from.priceMinor, from.currency), textDirection: TextDirection.ltr, style: t.h3),
+                        ]),
+                      ),
+                      PrimaryButton(
+                        label: l.bookConsultation,
+                        icon: Icons.event_available_rounded,
+                        expand: false,
+                        onPressed: () => context.pushOnce(Routes.bookCounselor(c.id)),
+                      ),
+                    ] else
+                      Expanded(child: PrimaryButton(label: l.bookConsultation, icon: Icons.event_available_rounded, onPressed: null)),
                   ]),
                 ),
-            ]),
-          ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-              child: PrimaryButton(label: l.bookConsultation, icon: Icons.event_available_rounded, onPressed: c.offerings.isEmpty ? null : () => context.push(Routes.bookCounselor(c.id))),
+              ),
             ),
-          ),
-        ]),
+          ]);
+        },
       ),
     );
   }
+}
+
+class _Fact extends StatelessWidget {
+  const _Fact({required this.value, required this.label, required this.icon});
+  final String value;
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        label: '$label: $value',
+        excludeSemantics: true,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          decoration: BoxDecoration(color: OlfaColors.gray, borderRadius: OlfaRadius.all(OlfaRadius.card)),
+          child: Column(children: [
+            Icon(icon, size: 18, color: OlfaColors.primary),
+            const SizedBox(height: 4),
+            Text(value, textDirection: TextDirection.ltr, style: context.type.number(18)),
+            Text(label, style: context.type.caption, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+          ]),
+        ),
+      );
+}
+
+class _CounselorDetailsSkeleton extends StatelessWidget {
+  const _CounselorDetailsSkeleton();
+  @override
+  Widget build(BuildContext context) => ListView(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+        children: const [
+          Center(child: OlfaSkeleton(width: 88, height: 88, circle: true)),
+          SizedBox(height: 12),
+          Center(child: OlfaSkeleton(width: 160, height: 18)),
+          SizedBox(height: 8),
+          Center(child: OlfaSkeleton(width: 110)),
+          SizedBox(height: 18),
+          OlfaSkeleton(height: 84, radius: 18),
+          SizedBox(height: 16),
+          OlfaSkeleton(height: 120, radius: 18),
+          SizedBox(height: 16),
+          OlfaSkeleton(height: 60),
+        ],
+      );
 }
 
 /// C3 — Booking: service type, service language and duration (each a real
@@ -315,7 +603,7 @@ class _BookConsultationScreenState extends ConsumerState<BookConsultationScreen>
                 OlfaCard(
                   padding: const EdgeInsets.all(12),
                   child: Row(children: [
-                    const CounselorAvatar(size: 44),
+                    CounselorAvatar(size: 44, name: c.name),
                     const SizedBox(width: 12),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(c.name, style: t.bodyMedium.copyWith(fontWeight: FontWeight.w600)), Text(kindLabel(l, c.kind), style: t.caption)])),
                   ]),
@@ -430,7 +718,7 @@ class MyConsultationsScreen extends ConsumerWidget {
                   padding: const EdgeInsets.all(14),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Row(children: [
-                      const CounselorAvatar(size: 42),
+                      CounselorAvatar(size: 42, name: k.counselorName),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -464,7 +752,7 @@ class MyConsultationsScreen extends ConsumerWidget {
                           child: Text(l.cancelBooking),
                         ),
                       if (k.conversationId != null && (k.status == ConsultationStatus.confirmed || k.status == ConsultationStatus.completed))
-                        PrimaryButton(label: l.openChat, icon: Icons.chat_bubble_outline_rounded, expand: false, onPressed: () => context.push(Routes.chatWith(k.conversationId!))),
+                        PrimaryButton(label: l.openChat, icon: Icons.chat_bubble_outline_rounded, expand: false, onPressed: () => context.pushOnce(Routes.chatWith(k.conversationId!))),
                       if (k.canRate) ...[
                         const SizedBox(width: 8),
                         PrimaryButton(label: l.rateCounselor, icon: Icons.star_outline_rounded, expand: false, onPressed: () => showRateSheet(context, ref, k)),
@@ -483,7 +771,7 @@ class MyConsultationsScreen extends ConsumerWidget {
 }
 
 /// The questionnaire is a full screen (mandatory before booking again).
-void showRateSheet(BuildContext context, WidgetRef ref, Consultation k) => context.push(Routes.reviewConsultation(k.id), extra: k.counselorName);
+void showRateSheet(BuildContext context, WidgetRef ref, Consultation k) => context.pushOnce(Routes.reviewConsultation(k.id), extra: k.counselorName);
 
 /// C5 — Become a counselor: psychologist or family counselor, licence,
 /// languages and services. Reviewed by moderators before it is listed.
@@ -720,7 +1008,7 @@ class _CounselorDeskScreenState extends ConsumerState<CounselorDeskScreen> {
       if (choice == 'ok') {
         String? conv;
         await _act(() async => conv = await ref.read(consultationsRepositoryProvider).confirm(k.id, k.preferredTime!));
-        if (conv != null && mounted) context.push(Routes.chatWith(conv!));
+        if (conv != null && mounted) context.pushOnce(Routes.chatWith(conv!));
         return;
       }
     }
@@ -731,7 +1019,7 @@ class _CounselorDeskScreenState extends ConsumerState<CounselorDeskScreen> {
     if (tm == null || !mounted) return;
     String? conv;
     await _act(() async => conv = await ref.read(consultationsRepositoryProvider).confirm(k.id, DateTime(d.year, d.month, d.day, tm.hour, tm.minute)));
-    if (conv != null && mounted) context.push(Routes.chatWith(conv!));
+    if (conv != null && mounted) context.pushOnce(Routes.chatWith(conv!));
   }
 
   @override
@@ -1051,10 +1339,10 @@ class _DeskCard extends StatelessWidget {
               Expanded(child: SecondaryButton(label: l.markCompleted, onPressed: onComplete)),
               const SizedBox(width: 10),
               if (k.conversationId != null)
-                Expanded(child: PrimaryButton(label: l.openChat, icon: Icons.chat_bubble_outline_rounded, onPressed: () => context.push(Routes.chatWith(k.conversationId!)))),
+                Expanded(child: PrimaryButton(label: l.openChat, icon: Icons.chat_bubble_outline_rounded, onPressed: () => context.pushOnce(Routes.chatWith(k.conversationId!)))),
             ])
           else if (k.conversationId != null)
-            Align(alignment: AlignmentDirectional.centerEnd, child: TextButton(onPressed: () => context.push(Routes.chatWith(k.conversationId!)), child: Text(l.openChat))),
+            Align(alignment: AlignmentDirectional.centerEnd, child: TextButton(onPressed: () => context.pushOnce(Routes.chatWith(k.conversationId!)), child: Text(l.openChat))),
         ]),
       ),
     );

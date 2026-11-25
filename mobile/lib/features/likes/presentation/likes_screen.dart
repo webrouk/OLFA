@@ -16,6 +16,7 @@ import '../../discovery/data/discovery_repository_impl.dart';
 import '../../matching/data/matching_repository_impl.dart';
 import '../../matching/presentation/match_dialog.dart';
 import '../../subscriptions/application/entitlements_controller.dart';
+import '../../../core/routing/navigation.dart';
 
 enum _LikesFilter { all, compliments, nearby, verified }
 
@@ -172,7 +173,7 @@ class _ComplimentCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         InkWell(
-          onTap: () => context.push(Routes.profile(p.id)),
+          onTap: () => context.pushOnce(Routes.profile(p.id), extra: p),
           child: Row(children: [
             OlfaAvatar(size: 52, url: p.mainPhoto?.thumbUrl, online: p.online),
             const SizedBox(width: 12),
@@ -226,7 +227,7 @@ class _LikeTile extends StatelessWidget {
         child: Column(children: [
           Expanded(
             child: InkWell(
-              onTap: () => context.push(Routes.profile(p.id)),
+              onTap: () => context.pushOnce(Routes.profile(p.id), extra: p),
               child: Stack(fit: StackFit.expand, children: [
                 OlfaImage(url: p.mainPhoto?.cardUrl ?? p.mainPhoto?.thumbUrl, blur: p.photosBlurred),
                 if (p.distanceKm != null) PositionedDirectional(top: 8, start: 8, child: OlfaTag(l.kmAway(p.distanceKm!), style: OlfaTagStyle.onImage, icon: Icons.near_me_outlined)),

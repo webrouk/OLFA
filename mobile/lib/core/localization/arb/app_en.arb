@@ -1638,5 +1638,26 @@
   "deleteUnsent": "Delete (not sent)",
   "adSponsored": "Sponsored",
   "adRemove": "Remove ads",
-  "adContinue": "Continue"
+  "adContinue": "Continue",
+  "filters": "Filters",
+  "counselorsFound": "{count, plural, =0{No counselors} =1{1 counselor} other{{count} counselors}}",
+  "@counselorsFound": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clearFilters": "Clear filters",
+  "startingFrom": "Starting from",
+  "services": "Services",
+  "noOfferingsYet": "No prices set yet.",
+  "navBadgeCount": "{count, plural, =1{1 new} other{{count} new}}",
+  "@navBadgeCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

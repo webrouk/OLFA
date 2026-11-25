@@ -17,25 +17,34 @@ import '../../../shared/components/reference_pickers.dart';
 import '../../../shared/components/verification_ticks.dart';
 
 /// 13 — Profile details with a paginated, lazily loaded photo gallery.
+///
+/// Opens instantly: the card the member tapped ([initial], already on screen
+/// with its photos cached) is shown at once and replaced in place by the full
+/// profile when it arrives — no spinner, no second page.
 class ProfileDetailsScreen extends ConsumerWidget {
-  const ProfileDetailsScreen({super.key, required this.userId});
+  const ProfileDetailsScreen({super.key, required this.userId, this.initial});
   final String userId;
+  final UserProfile? initial;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final value = ref.watch(profileByIdProvider(userId));
+    final seed = initial != null && initial!.id == userId ? initial : null;
+    final shown = value.valueOrNull ?? (value.hasError ? null : seed);
     return Scaffold(
-      body: AsyncView<UserProfile>(
-        value: value,
-        onRetry: () => ref.invalidate(profileByIdProvider(userId)),
-        data: (p) => _Details(profile: p),
-      ),
+      body: shown != null
+          ? _Details(key: ValueKey(userId), profile: shown)
+          : AsyncView<UserProfile>(
+              value: value,
+              onRetry: () => ref.invalidate(profileByIdProvider(userId)),
+              data: (p) => _Details(key: ValueKey(userId), profile: p),
+            ),
     );
   }
 }
 
 class _Details extends ConsumerStatefulWidget {
-  const _Details({required this.profile});
+  const _Details({super.key, required this.profile});
   final UserProfile profile;
   @override
   ConsumerState<_Details> createState() => _DetailsState();
@@ -84,7 +93,8 @@ class _DetailsState extends ConsumerState<_Details> {
                         controller: _pager,
                         itemCount: photos.isEmpty ? 1 : photos.length,
                         onPageChanged: (i) => setState(() => _page = i),
-                        itemBuilder: (_, i) => OlfaImage(url: photos.isEmpty ? null : photos[i].fullUrl),
+                        // The card-size photo (already cached from Discovery) shows until the full one loads.
+                        itemBuilder: (_, i) => OlfaImage(url: photos.isEmpty ? null : photos[i].fullUrl, placeholderUrl: photos.isEmpty ? null : photos[i].cardUrl),
                       ),
                       PositionedDirectional(
                         top: top + 6,

@@ -279,11 +279,7 @@ class _ChatComposerState extends ConsumerState<ChatComposer> {
             end: -4,
             child: Semantics(
               label: l.voiceLeft(quota!.remaining!),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(color: OlfaColors.black, borderRadius: OlfaRadius.all(9), border: Border.all(color: OlfaColors.white, width: 1.5)),
-                child: Text('${quota.remaining}', style: const TextStyle(color: OlfaColors.white, fontSize: 10, fontWeight: FontWeight.w700, fontFamily: 'Montserrat')),
-              ),
+              child: CountBadge(count: quota.remaining!, inverted: true),
             ),
           ),
         // slide up to lock

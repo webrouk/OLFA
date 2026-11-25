@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,6 +17,7 @@ import '../application/discover_controller.dart';
 import '../domain/swipe_use_cases.dart';
 import '../../../core/theme/olfa_colors.dart';
 import '../../../shared/models/models.dart';
+import '../../../core/routing/navigation.dart';
 
 /// 12 — Discover / Home
 class DiscoverScreen extends ConsumerStatefulWidget {
@@ -63,7 +65,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> with SingleTick
 
   void _open(UserProfile p) {
     if (_blockedWhilePending()) return;
-    context.push(Routes.profile(p.id));
+    context.pushOnce(Routes.profile(p.id), extra: p);
   }
 
   Future<void> _compliment(UserProfile p) async {
@@ -99,6 +101,19 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> with SingleTick
     _animating = false;
   }
 
+  final _prefetched = <String>{};
+
+  /// Downloads the next cards' photos while the member looks at this one, so
+  /// the next card appears with its photo, not a placeholder.
+  void _prefetch(List<UserProfile> queue) {
+    for (final p in queue.skip(1).take(3)) {
+      final url = p.mainPhoto?.cardUrl;
+      if (url == null || !_prefetched.add(url)) continue;
+      precacheImage(CachedNetworkImageProvider(url), context).ignore();
+    }
+    if (_prefetched.length > 200) _prefetched.clear();
+  }
+
   /// Swipes, and counts the profile towards the next ad slot only if the swipe went through.
   Future<void> _swipeAndCount(SwipeKind kind, {String? compliment}) async {
     final before = ref.read(discoverControllerProvider).valueOrNull?.current?.id;
@@ -121,6 +136,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> with SingleTick
     ref.listen(discoverControllerProvider, (prev, next) {
       final s = next.valueOrNull;
       if (s == null) return;
+      _prefetch(s.queue);
       if (s.lastFailure != null) {
         showToast(context, failureMessage(context, s.lastFailure!));
         ref.read(discoverControllerProvider.notifier).clearEvents();
@@ -328,11 +344,7 @@ class _ComplimentButton extends StatelessWidget {
         PositionedDirectional(
           top: -4,
           end: -4,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(color: left! > 0 ? OlfaColors.primary : OlfaColors.black, borderRadius: BorderRadius.circular(10), border: Border.all(color: OlfaColors.white, width: 2)),
-            child: Text('$left', style: const TextStyle(color: OlfaColors.white, fontSize: 10.5, fontWeight: FontWeight.w700, fontFamily: 'Montserrat')),
-          ),
+          child: CountBadge(count: left!, inverted: left! == 0),
         ),
     ]);
   }

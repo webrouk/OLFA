@@ -609,13 +609,36 @@ export class ConsultationsService {
 
   // ── admin ────────────────────────────────────────────────────────
 
-  adminQueue(q: AdminQueueQuery) {
-    return this.prisma.counselorProfile.findMany({
+  /**
+   * Counselors for the admin dashboard: the same public facts the app shows
+   * (type, rating, languages, services, prices) plus review data — hours,
+   * whether bookings are open, and session totals — so both sides match.
+   */
+  async adminQueue(q: AdminQueueQuery) {
+    const rows = await this.prisma.counselorProfile.findMany({
       where: { status: (q.status as never) ?? 'PENDING' },
       orderBy: { createdAt: 'asc' },
       take: 100,
-      select: { ...publicCounselor, status: true, licenseNumber: true, credentialKeys: true, createdAt: true, rejectReason: true },
+      select: {
+        ...publicCounselor,
+        status: true, licenseNumber: true, credentialKeys: true, createdAt: true, rejectReason: true,
+        schedule: { select: { timezone: true, accepting: true } },
+        _count: { select: { availability: true } },
+      },
     });
+    const ids = rows.map((r) => r.userId);
+    const [byStatus, disputes] = ids.length
+      ? await Promise.all([
+          this.prisma.consultation.groupBy({ by: ['counselorId', 'status'], where: { counselorId: { in: ids } }, _count: { _all: true } }),
+          this.prisma.consultation.groupBy({ by: ['counselorId'], where: { counselorId: { in: ids }, escrowStatus: 'DISPUTED' }, _count: { _all: true } }),
+        ])
+      : [[], []];
+    const n = (id: string, st: string) => byStatus.find((x) => x.counselorId === id && x.status === st)?._count._all ?? 0;
+    return rows.map(({ _count, schedule, ...r }) => ({
+      ...r,
+      schedule: { timezone: schedule?.timezone ?? null, accepting: schedule?.accepting ?? false, published: _count.availability > 0 },
+      sessions: { completed: n(r.userId, 'COMPLETED'), upcoming: n(r.userId, 'CONFIRMED') + n(r.userId, 'PAID'), disputed: disputes.find((x) => x.counselorId === r.userId)?._count._all ?? 0 },
+    }));
   }
 
   async adminCredential(userId: string, index: number) {

@@ -193,12 +193,20 @@ class AsyncView<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return value.when(
+    // While new data loads (refresh, or a filter changed), the current data
+    // stays on screen with a thin progress line — no flash back to a skeleton.
+    final child = value.when(
       skipLoadingOnRefresh: true,
+      skipLoadingOnReload: true,
       data: data,
       loading: () => loading ?? const LoadingSkeleton(),
       error: (e, _) => ErrorState(error: e, onRetry: onRetry),
     );
+    if (!(value.isLoading && value.hasValue)) return child;
+    return Stack(fit: StackFit.passthrough, children: [
+      child,
+      const Positioned(top: 0, left: 0, right: 0, child: LinearProgressIndicator(minHeight: 2, color: OlfaColors.primary, backgroundColor: Colors.transparent)),
+    ]);
   }
 }
 

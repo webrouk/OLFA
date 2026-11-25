@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/state/cache_for.dart';
 import '../../../shared/models/models.dart';
 import '../data/consultations_repository_impl.dart';
 import '../domain/consultations_repository.dart';
@@ -12,11 +13,20 @@ class CounselorQueryController extends Notifier<CounselorQuery> {
 
 final counselorQueryProvider = NotifierProvider<CounselorQueryController, CounselorQuery>(CounselorQueryController.new);
 
+/// One cached result per filter combination: going back to a filter is instant.
+final counselorsByQueryProvider = FutureProvider.autoDispose.family<List<Counselor>, CounselorQuery>((ref, q) {
+  ref.cacheFor(CacheTtl.list);
+  return ref.watch(consultationsRepositoryProvider).counselors(q);
+});
+
 final counselorsProvider = FutureProvider.autoDispose<List<Counselor>>(
-  (ref) => ref.watch(consultationsRepositoryProvider).counselors(ref.watch(counselorQueryProvider)),
+  (ref) => ref.watch(counselorsByQueryProvider(ref.watch(counselorQueryProvider)).future),
 );
 
-final counselorProvider = FutureProvider.autoDispose.family<Counselor, String>((ref, id) => ref.watch(consultationsRepositoryProvider).counselor(id));
+final counselorProvider = FutureProvider.autoDispose.family<Counselor, String>((ref, id) {
+  ref.cacheFor(CacheTtl.detail);
+  return ref.watch(consultationsRepositoryProvider).counselor(id);
+});
 
 final myConsultationsProvider = FutureProvider.autoDispose<List<Consultation>>((ref) => ref.watch(consultationsRepositoryProvider).mine());
 

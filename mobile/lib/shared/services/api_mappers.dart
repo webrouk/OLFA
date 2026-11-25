@@ -218,7 +218,7 @@ abstract final class ApiMappers {
         ratingCount: (j['ratingCount'] as num?)?.toInt() ?? 0,
         reviews: (j['reviews'] as List? ?? const [])
             .map((x) => Map<String, dynamic>.from(x as Map))
-            .map((r) => CounselorReview(rating: (r['rating'] as num).toInt(), comment: r['comment'] as String?, by: r['by'] as String?, createdAt: _date(r['createdAt']) ?? DateTime.now()))
+            .map((r) => CounselorReview(rating: (r['rating'] as num).toInt(), comment: r['comment'] as String?, by: r['by'] as String?, reply: r['reply'] as String?, createdAt: _date(r['createdAt']) ?? DateTime.now()))
             .toList(),
         status: j['status'] == null ? null : fromApiEnum(CounselorStatus.values, j['status'], CounselorStatus.pending),
         rejectReason: j['rejectReason'] as String?,

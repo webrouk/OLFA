@@ -45,7 +45,7 @@ export function useFmt() {
     money: (minor?: number | string | null, cur?: string | null) => {
       if (minor == null || !cur) return '—';
       const digits = ['KWD', 'BHD', 'OMR', 'JOD', 'TND', 'IQD', 'LYD'].includes(cur) ? 3 : ['JPY', 'KRW'].includes(cur) ? 0 : 2;
-      return new Intl.NumberFormat(loc, { style: 'currency', currency: cur, minimumFractionDigits: digits }).format(Number(minor) / 10 ** digits);
+      return new Intl.NumberFormat(loc, { style: 'currency', currency: cur, currencyDisplay: 'code', minimumFractionDigits: digits }).format(Number(minor) / 10 ** digits);
     },
   };
 }

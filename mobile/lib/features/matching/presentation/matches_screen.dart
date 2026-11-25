@@ -13,6 +13,7 @@ import '../../../shared/models/models.dart';
 import '../../subscriptions/application/entitlements_controller.dart';
 import '../data/matching_repository_impl.dart';
 import '../../../shared/components/verification_ticks.dart';
+import '../../../core/routing/navigation.dart';
 
 /// 16 — Matches. Starting a new conversation spends one daily credit.
 class MatchesScreen extends ConsumerStatefulWidget {
@@ -26,7 +27,7 @@ class _MatchesScreenState extends ConsumerState<MatchesScreen> {
 
   Future<void> _open(MatchItem m) async {
     if (m.conversationId != null) {
-      context.push(Routes.chatWith(m.conversationId!));
+      context.pushOnce(Routes.chatWith(m.conversationId!));
       return;
     }
     if (_starting != null) return;
@@ -49,7 +50,7 @@ class _MatchesScreenState extends ConsumerState<MatchesScreen> {
       final id = await ref.read(matchingRepositoryProvider).startConversation(m.id);
       await ref.read(entitlementsProvider.notifier).refresh();
       ref.invalidate(matchesProvider);
-      if (mounted) context.push(Routes.chatWith(id));
+      if (mounted) context.pushOnce(Routes.chatWith(id));
     } catch (e) {
       if (mounted) showToast(context, failureMessage(context, e));
     } finally {
@@ -120,7 +121,7 @@ class _MatchesScreenState extends ConsumerState<MatchesScreen> {
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           child: Row(children: [
-                            InkWell(onTap: () => context.push(Routes.profile(m.peer.id)), child: OlfaAvatar(size: 52, url: m.peer.mainPhoto?.thumbUrl, online: m.peer.online)),
+                            InkWell(onTap: () => context.pushOnce(Routes.profile(m.peer.id), extra: m.peer), child: OlfaAvatar(size: 52, url: m.peer.mainPhoto?.thumbUrl, online: m.peer.online)),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -172,7 +173,7 @@ class _NewMatchCard extends StatelessWidget {
         child: Material(
           color: OlfaColors.white,
           child: InkWell(
-            onTap: () => context.push(Routes.profile(m.peer.id)),
+            onTap: () => context.pushOnce(Routes.profile(m.peer.id), extra: m.peer),
             child: Column(children: [
               Expanded(
                 child: Stack(fit: StackFit.expand, children: [

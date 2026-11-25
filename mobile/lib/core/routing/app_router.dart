@@ -34,14 +34,25 @@ import '../../features/account/closed_account_screen.dart';
 import '../../features/consultations/presentation/counselor_schedule_screen.dart';
 import '../security/account_restriction.dart';
 import '../../features/verification/presentation/selfie_screen.dart';
+import '../theme/olfa_spacing.dart';
 import '../widgets/floating_nav_bar.dart';
+import '../widgets/layout.dart';
+import '../widgets/olfa_logo.dart';
+import 'nav_badges.dart';
+import 'navigation.dart';
 import '../../shared/models/models.dart';
+import '../localization/generated/app_localizations.dart';
 import 'routes.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
+/// A full-screen page above the tabs (readable width on tablets).
 GoRoute _root(String path, Widget Function(GoRouterState s) build) =>
-    GoRoute(parentNavigatorKey: rootNavigatorKey, path: path, builder: (_, s) => build(s));
+    GoRoute(parentNavigatorKey: rootNavigatorKey, path: path, builder: (_, s) => AdaptivePage(child: build(s)));
+
+/// The first page of a tab: kept alive by the shell, with its own scroll-to-top.
+GoRoute _tab(int index, String path, Widget page) =>
+    GoRoute(path: path, builder: (_, __) => TabRoot(tab: index, child: AdaptivePage(child: page)));
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -82,7 +93,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       _root(Routes.selfieRetake, (_) => const SelfieScreen(retake: true)),
       _root(Routes.verification, (_) => const VerificationScreen()),
       // Full-screen pages pushed above the tab shell
-      _root(Routes.profileDetails, (s) => ProfileDetailsScreen(userId: s.pathParameters['id']!)),
+      _root(Routes.profileDetails, (s) => ProfileDetailsScreen(userId: s.pathParameters['id']!, initial: s.extra is UserProfile ? s.extra as UserProfile : null)),
       _root(Routes.search, (_) => const SearchFiltersScreen()),
       _root(Routes.archive, (_) => const ArchiveScreen()),
       _root(Routes.unmatched, (_) => const UnmatchedScreen()),
@@ -119,21 +130,21 @@ final routerProvider = Provider<GoRouter>((ref) {
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => MainShell(shell: shell),
         branches: [
-          StatefulShellBranch(routes: [GoRoute(path: Routes.discover, builder: (_, __) => const DiscoverScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: Routes.likes, builder: (_, __) => const LikesScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: Routes.matches, builder: (_, __) => const MatchesScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: Routes.conversations, builder: (_, __) => const ConversationsScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: Routes.myProfile, builder: (_, __) => const MyProfileScreen())]),
+          StatefulShellBranch(routes: [_tab(0, Routes.discover, const DiscoverScreen())]),
+          StatefulShellBranch(routes: [_tab(1, Routes.likes, const LikesScreen())]),
+          StatefulShellBranch(routes: [_tab(2, Routes.matches, const MatchesScreen())]),
+          StatefulShellBranch(routes: [_tab(3, Routes.conversations, const ConversationsScreen())]),
+          StatefulShellBranch(routes: [_tab(4, Routes.myProfile, const MyProfileScreen())]),
         ],
       ),
       // Professional workspace: desk, wallet, messages (consultation chats), profile
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => ProfessionalShell(shell: shell),
         branches: [
-          StatefulShellBranch(routes: [GoRoute(path: Routes.counselorDesk, builder: (_, __) => const CounselorDeskScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: Routes.wallet, builder: (_, __) => const WalletScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: Routes.proMessages, builder: (_, __) => const ConversationsScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: Routes.proProfile, builder: (_, __) => const ProfessionalProfileScreen())]),
+          StatefulShellBranch(routes: [_tab(0, Routes.counselorDesk, const CounselorDeskScreen())]),
+          StatefulShellBranch(routes: [_tab(1, Routes.wallet, const WalletScreen())]),
+          StatefulShellBranch(routes: [_tab(2, Routes.proMessages, const ConversationsScreen())]),
+          StatefulShellBranch(routes: [_tab(3, Routes.proProfile, const ProfessionalProfileScreen())]),
         ],
       ),
     ],
@@ -167,17 +178,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      extendBody: true,
-      body: shell,
-      bottomNavigationBar: FloatingNavBar(
-        index: shell.currentIndex,
-        badges: const {1, 3},
-        onTap: (i) => shell.goBranch(i, initialLocation: i == shell.currentIndex),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => AppShell(shell: shell, professional: false);
 }
 
 /// Tab shell for psychologists and family counselors.
@@ -186,16 +187,51 @@ class ProfessionalShell extends StatelessWidget {
   final StatefulNavigationShell shell;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => AppShell(shell: shell, professional: true);
+}
+
+/// One shell for both account types, so the navigation looks and behaves the
+/// same everywhere:
+///  - phones: the floating bottom bar (hidden while the keyboard is open, so it
+///    never covers a text field);
+///  - tablets / landscape (≥ 840 px): the same tabs as a side rail;
+///  - every tab keeps its own page stack and scroll position (IndexedStack);
+///  - tapping the open tab returns it to its first page and scrolls to the top;
+///  - badges show real counts (likes, new matches, unread chats, desk requests).
+class AppShell extends ConsumerWidget {
+  const AppShell({super.key, required this.shell, required this.professional});
+  final StatefulNavigationShell shell;
+  final bool professional;
+
+  void _onTap(WidgetRef ref, int i) {
+    if (i == shell.currentIndex) {
+      final prev = ref.read(tabReselectProvider);
+      ref.read(tabReselectProvider.notifier).state = (tab: i, tick: (prev?.tick ?? 0) + 1);
+      shell.goBranch(i, initialLocation: true);
+    } else {
+      shell.goBranch(i);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
+    final items = professional ? OlfaNavItems.professional(l) : OlfaNavItems.member(l);
+    final badges = ref.watch(professional ? professionalNavBadgesProvider : memberNavBadgesProvider);
+    final wide = MediaQuery.sizeOf(context).width >= OlfaBreakpoints.rail;
+    if (wide) {
+      return Scaffold(
+        body: Row(children: [
+          OlfaSideNav(items: items, index: shell.currentIndex, badges: badges, onTap: (i) => _onTap(ref, i), header: const OlfaLogo(size: 40)),
+          Expanded(child: NavChrome(bottomBar: false, child: shell)),
+        ]),
+      );
+    }
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom > 0;
     return Scaffold(
       extendBody: true,
-      body: shell,
-      bottomNavigationBar: FloatingNavBar(
-        professional: true,
-        index: shell.currentIndex,
-        badges: const {0},
-        onTap: (i) => shell.goBranch(i, initialLocation: i == shell.currentIndex),
-      ),
+      body: NavChrome(bottomBar: !keyboard, child: shell),
+      bottomNavigationBar: keyboard ? null : FloatingNavBar(items: items, index: shell.currentIndex, badges: badges, onTap: (i) => _onTap(ref, i)),
     );
   }
 }
