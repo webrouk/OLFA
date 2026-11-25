@@ -110,7 +110,7 @@ echo;
 echo "chat media, phone flag, search, height/weight"
 C3=00000000-0000-0000-0000-3000000000e1; PE=00000000-0000-0000-0000-1000000000e1
 $PSQL -d "$DB" <<SQL >/dev/null
-INSERT INTO users (id, phone_e164, phone_country, status) VALUES ('$PE','+971509990001','AE','ACTIVE');
+INSERT INTO users (id, phone_e164, phone_country, status) VALUES ('$PE','+971509998877','AE','ACTIVE');
 INSERT INTO matches (id, user_a_id, user_b_id) VALUES ('00000000-0000-0000-0000-2000000000e1', '$ME', '$PE');
 INSERT INTO conversations (id, match_id, started_by) VALUES ('$C3','00000000-0000-0000-0000-2000000000e1','$ME');
 INSERT INTO conversation_members (conversation_id, user_id) VALUES ('$C3','$ME'), ('$C3','$PE');
@@ -142,4 +142,26 @@ q "UPDATE conversation_members SET last_read_at=now() WHERE conversation_id='$C3
 check "…and clears after reading" "$(q "$UNREAD")" "0"
 expect_error "height must be realistic" 23514 "INSERT INTO user_profiles (user_id, display_name, birth_date, gender, country_code, city, marital_status, education, occupation, marriage_timeline, bio, height_cm) VALUES ('$ME','n','1990-01-01','MALE','AE','c','NEVER_MARRIED','BACHELOR','doctor','WITHIN_1_YEAR','b',300)"
 check "voice-note plans: Free 10 · Plus 30 · Premium unlimited" "$(q "SELECT string_agg(p.code || '=' || fe.value, ',' ORDER BY CASE p.code::text WHEN 'FREE' THEN 0 WHEN 'PLUS' THEN 1 ELSE 2 END) FROM feature_entitlements fe JOIN subscription_plans p ON p.id=fe.plan_id WHERE fe.feature_key='voice_notes_per_conversation'")" "FREE=10,PLUS=30,PREMIUM=-1"
+echo "message ordering"
+CS=00000000-0000-0000-0000-3000000000f1; PS=00000000-0000-0000-0000-1000000000f1; MS=00000000-0000-0000-0000-2000000000f1
+$PSQL -d "$DB" <<SQL >/dev/null
+INSERT INTO users (id, phone_e164, phone_country, status) VALUES ('$PS','+971507770042','AE','ACTIVE');
+INSERT INTO matches (id, user_a_id, user_b_id) VALUES ('$MS','$ME','$PS');
+INSERT INTO conversations (id, match_id, started_by) VALUES ('$CS','$MS','$ME');
+INSERT INTO conversation_members (conversation_id, user_id) VALUES ('$CS','$ME'), ('$CS','$PS');
+SQL
+BASE=$(q "SELECT last_seq FROM conversations WHERE id='$CS'")
+# two people sending at the same time, 40 messages each, in parallel sessions
+for who in $ME $PS; do
+  ( for i in $(seq 1 40); do $PSQL -d "$DB" -c "INSERT INTO messages (conversation_id, sender_id, client_message_id, body) VALUES ('$CS','$who',gen_random_uuid(),'m$i')" >/dev/null; done ) &
+done; wait
+check "concurrent sends get unique, gap-free positions" "$(q "SELECT count(*) || ':' || count(DISTINCT seq) || ':' || (max(seq)-min(seq)+1) FROM messages WHERE conversation_id='$CS' AND seq > $BASE")" "80:80:80"
+check "each sender's messages keep their own order" "$(q "SELECT bool_and(ok) FROM (SELECT (substring(body from 2)::int) = row_number() OVER (PARTITION BY sender_id ORDER BY seq) AS ok FROM messages WHERE conversation_id='$CS' AND seq > $BASE) x")" "t"
+check "time follows the order (no two messages share a time)" "$(q "SELECT bool_and(ok) FROM (SELECT created_at > lag(created_at) OVER (ORDER BY seq) OR lag(created_at) OVER (ORDER BY seq) IS NULL AS ok FROM messages WHERE conversation_id='$CS') x")" "t"
+check "the conversation points at its latest message" "$(q "SELECT (c.last_seq = max(m.seq) AND c.last_message_at = max(m.created_at))::text FROM conversations c JOIN messages m ON m.conversation_id = c.id WHERE c.id='$CS' GROUP BY c.last_seq, c.last_message_at")" "true"
+check "latest activity first: this conversation is now at the top" "$(q "SELECT id FROM conversations ORDER BY last_message_at DESC NULLS LAST LIMIT 1")" "$CS"
+expect_error "a message's position never changes" P0040 "UPDATE messages SET seq = seq + 1000 WHERE conversation_id='$CS' AND seq = $BASE + 1"
+q "UPDATE conversation_members SET last_read_seq = 50 WHERE conversation_id='$CS' AND user_id='$ME'" >/dev/null
+q "UPDATE conversation_members SET last_read_seq = 10 WHERE conversation_id='$CS' AND user_id='$ME'" >/dev/null
+check "read position only moves forward (and implies delivered)" "$(q "SELECT last_read_seq || ':' || last_delivered_seq FROM conversation_members WHERE conversation_id='$CS' AND user_id='$ME'")" "50:50"
 echo "conversation tests: $pass passed, $fail failed"; [ "$fail" -eq 0 ]

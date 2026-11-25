@@ -1028,5 +1028,11 @@
   "voiceTooShort": "استمر في الضغط لفترة أطول لتسجيل رسالة صوتية.",
   "deleteRecording": "حذف التسجيل",
   "listenBeforeSending": "استمع قبل الإرسال",
-  "stopAndListen": "إيقاف والاستماع"
+  "stopAndListen": "إيقاف والاستماع",
+  "msgQueued": "بانتظار الاتصال",
+  "msgQueuedNote": "محفوظة على هاتفك — تُرسل تلقائياً عند عودة الاتصال",
+  "msgSent": "أُرسلت",
+  "msgDelivered": "وصلت",
+  "msgRead": "مقروءة",
+  "deleteUnsent": "حذف (لم تُرسل)"
 }

@@ -111,6 +111,7 @@ abstract final class ApiMappers {
       status: !mine ? MessageStatus.delivered : (read ? MessageStatus.read : (delivered ? MessageStatus.delivered : MessageStatus.sent)),
       kind: switch (j['type']) { 'IMAGE' => MessageKind.image, 'VOICE' => MessageKind.voice, _ => MessageKind.text },
       containsPhone: j['containsPhone'] == true,
+      seq: (j['seq'] as num?)?.toInt(),
       attachments: (j['attachments'] as List? ?? const [])
           .map((x) => Map<String, dynamic>.from(x as Map))
           .map((a) => ChatAttachment(

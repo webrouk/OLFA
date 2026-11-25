@@ -420,7 +420,8 @@ class MatchItem {
   final bool isNew;
 }
 
-enum MessageStatus { sending, sent, delivered, read, failed }
+/// queued = saved on the phone while offline; it is sent by itself when the connection returns.
+enum MessageStatus { queued, sending, sent, delivered, read, failed }
 
 enum MessageKind { text, image, voice }
 
@@ -450,9 +451,14 @@ class ChatMessage {
     this.kind = MessageKind.text,
     this.attachments = const [],
     this.containsPhone = false,
+    this.seq,
   });
   final String id;
   final String clientId; // idempotency key
+
+  /// Position in the conversation, assigned by the server (1, 2, 3 …). Null until the
+  /// server accepted the message. The thread is ordered by it.
+  final int? seq;
   final String conversationId;
   final bool fromMe;
   final String body; // text, or the caption of photos
@@ -464,7 +470,9 @@ class ChatMessage {
   /// Set by the server when the text looks like a phone number — both people see a safety note.
   final bool containsPhone;
 
-  ChatMessage copyWith({String? id, MessageStatus? status, List<ChatAttachment>? attachments}) => ChatMessage(
+  bool get isPending => status == MessageStatus.queued || status == MessageStatus.sending || status == MessageStatus.failed;
+
+  ChatMessage copyWith({String? id, MessageStatus? status, List<ChatAttachment>? attachments, int? seq}) => ChatMessage(
         id: id ?? this.id,
         clientId: clientId,
         conversationId: conversationId,
@@ -475,7 +483,20 @@ class ChatMessage {
         kind: kind,
         attachments: attachments ?? this.attachments,
         containsPhone: containsPhone,
+        seq: seq ?? this.seq,
       );
+}
+
+/// One page of a thread, oldest → newest, plus the other person's positions.
+class MessagePage {
+  const MessagePage({required this.items, required this.hasMore, this.lastSeq, this.peerDeliveredSeq, this.peerReadSeq});
+  final List<ChatMessage> items;
+  final bool hasMore;
+  final int? lastSeq;
+  final int? peerDeliveredSeq;
+
+  /// Null when read receipts are off for this pair.
+  final int? peerReadSeq;
 }
 
 /// What the composer hands to the repository: text, up to 3 photos, or one voice note.
@@ -581,6 +602,38 @@ class Conversation {
   bool get canRequestRematch => isUnmatched && rematch == null;
   bool get canAnswerRematch => isUnmatched && rematch?.status == RematchStatus.pending && rematch?.byMe == false;
   bool get canWrite => !isUnmatched;
+
+  /// A new message arrived or was sent: preview, time and unread change (the list re-sorts).
+  Conversation withMessage({required String preview, required MessageKind kind, required bool fromMe, required DateTime at, required bool countUnread}) => Conversation(
+        id: id,
+        peer: peer,
+        counselor: counselor,
+        section: section,
+        lastMessage: preview,
+        lastMessageKind: kind,
+        lastFromMe: fromMe,
+        lastAt: at,
+        unread: fromMe ? unread : unread + (countUnread ? 1 : 0),
+        expiresAt: expiresAt,
+        expiringSoon: false,
+        rematch: rematch,
+        unmatchedByMe: unmatchedByMe,
+      );
+
+  Conversation withUnread(int n) => Conversation(
+        id: id, peer: peer, counselor: counselor, section: section, lastMessage: lastMessage, lastMessageKind: lastMessageKind,
+        lastFromMe: lastFromMe, lastAt: lastAt, unread: n, expiresAt: expiresAt, expiringSoon: expiringSoon, rematch: rematch, unmatchedByMe: unmatchedByMe,
+      );
+}
+
+/// Latest activity first; conversations without messages go last (stable by id).
+int byLatestActivity(Conversation a, Conversation b) {
+  final x = a.lastAt, y = b.lastAt;
+  if (x == null && y == null) return a.id.compareTo(b.id);
+  if (x == null) return 1;
+  if (y == null) return -1;
+  final c = y.compareTo(x);
+  return c != 0 ? c : a.id.compareTo(b.id);
 }
 
 /// A row past the plan's visible-conversation limit: the server sends no
@@ -893,7 +946,17 @@ class BlockedUser {
 
 /// Realtime chat event (WebSocket in production).
 class ChatEvent {
-  const ChatEvent._(this.conversationId, {this.message, this.typing, this.readClientId, this.movedTo, this.readByMe = false});
+  const ChatEvent._(this.conversationId, {this.message, this.typing, this.readClientId, this.movedTo, this.readByMe = false, this.readUpTo, this.deliveredUpTo, this.reconnected = false});
+
+  /// The other person read / received my messages up to this position.
+  factory ChatEvent.readUpToSeq(String convId, int seq) => ChatEvent._(convId, readUpTo: seq);
+  factory ChatEvent.deliveredUpToSeq(String convId, int seq) => ChatEvent._(convId, deliveredUpTo: seq);
+
+  /// The realtime connection came back: open threads and the list catch up.
+  factory ChatEvent.reconnectedEvent() => const ChatEvent._('*', reconnected: true);
+  final int? readUpTo;
+  final int? deliveredUpTo;
+  final bool reconnected;
   factory ChatEvent.newMessage(ChatMessage m) => ChatEvent._(m.conversationId, message: m);
   factory ChatEvent.typingChanged(String convId, bool on) => ChatEvent._(convId, typing: on);
   /// The other person read my messages (only when both keep read receipts on).

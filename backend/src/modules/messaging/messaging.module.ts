@@ -24,6 +24,10 @@ import { NotificationsService } from '../notifications/notifications.module';
 import { EntitlementsService, QuotaService } from '../quotas/quotas.module';
 import { privacyOf, readReceiptsVisible } from '../../domain/privacy';
 
+class DeliveredDto {
+  @ApiProperty() @IsInt() @Min(1) upToSeq: number;
+}
+
 export class SendMessageDto {
   @ApiProperty({ description: 'Client-generated UUID (idempotency key)' }) @IsUUID() clientMessageId: string;
   /** Text, or the caption of photos (may be empty when attachments are sent). */
@@ -57,6 +61,11 @@ class RematchResponseDto {
 }
 
 class PageQuery {
+  /** Older page: messages before this position (scrolling up). */
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() @Min(1) beforeSeq?: number;
+  /** Catch-up after a reconnect or a gap: messages after this position, oldest first. */
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() @Min(0) afterSeq?: number;
+  /** @deprecated time cursor kept for older apps; use beforeSeq. */
   @ApiPropertyOptional() @IsOptional() @IsDateString() before?: string;
   @ApiPropertyOptional({ default: 30 }) @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 30;
 }
@@ -158,7 +167,8 @@ export class MessagingService {
         match: { select: { userAId: true, endedAt: true, endedBy: true, userA: { include: profileInclude }, userB: { include: profileInclude } } },
         consultation: { select: { id: true, status: true, scheduledAt: true, clientId: true, counselor: { select: { userId: true, displayName: true, kind: true } } } },
         members: { where: { userId }, select: { lastReadAt: true } },
-        messages: { where: { deletedAt: null }, orderBy: { createdAt: 'desc' }, take: 1, select: { body: true, type: true, senderId: true, createdAt: true } },
+        lastSeq: true,
+        messages: { where: { deletedAt: null }, orderBy: { seq: 'desc' }, take: 1, select: { body: true, type: true, senderId: true, createdAt: true } },
       },
     });
     const byId = new Map(convs.map((c) => [c.id, c]));
@@ -181,7 +191,7 @@ export class MessagingService {
         const rematch = c.rematch ? { status: c.rematch.status, byMe: c.rematch.requestedBy === userId } : null;
         if (c.kind === 'CONSULTATION') {
           const k = c.consultation!;
-          return { ...base, kind: c.kind, unread, lastMessage: last(c), lastMessageAt: c.lastMessageAt, consultation: { id: k.id, status: k.status, scheduledAt: k.scheduledAt, counselor: k.clientId === userId ? k.counselor : null } };
+          return { ...base, kind: c.kind, unread, lastMessage: last(c), lastMessageAt: c.lastMessageAt, lastSeq: Number(c.lastSeq), consultation: { id: k.id, status: k.status, scheduledAt: k.scheduledAt, counselor: k.clientId === userId ? k.counselor : null } };
         }
         const m = c.match!;
         const peer = m.userAId === userId ? m.userB : m.userA;
@@ -192,6 +202,7 @@ export class MessagingService {
           unread,
           lastMessage: last(c),
           lastMessageAt: c.lastMessageAt,
+          lastSeq: Number(c.lastSeq),
           unmatchedAt: r.section === 'UNMATCHED' ? m.endedAt : null,
           unmatchedByMe: r.section === 'UNMATCHED' ? m.endedBy === userId : null,
           rematch,
@@ -250,33 +261,69 @@ export class MessagingService {
       if (e instanceof AppError && e.code === ErrorCode.BLOCKED) throw new AppError(ErrorCode.NOT_FOUND);
       throw e;
     });
+    // Ordered by the server-assigned position: newest page first; afterSeq = catch-up (oldest first).
+    const after = q.afterSeq !== undefined;
+    const where: Prisma.MessageWhereInput = {
+      conversationId,
+      deletedAt: null,
+      ...(after ? { seq: { gt: BigInt(q.afterSeq!) } } : q.beforeSeq ? { seq: { lt: BigInt(q.beforeSeq) } } : q.before ? { createdAt: { lt: new Date(q.before) } } : {}),
+    };
+    const limit = after ? Math.max(q.limit, 100) : q.limit;
     const items = await this.prisma.message.findMany({
-      where: { conversationId, deletedAt: null, ...(q.before ? { createdAt: { lt: new Date(q.before) } } : {}) },
-      orderBy: { createdAt: 'desc' },
-      take: q.limit + 1,
+      where,
+      orderBy: { seq: after ? 'asc' : 'desc' },
+      take: limit + 1,
       select: {
-        id: true, clientMessageId: true, senderId: true, body: true, type: true, createdAt: true, containsPhone: true,
+        id: true, seq: true, clientMessageId: true, senderId: true, body: true, type: true, createdAt: true, containsPhone: true,
         receipts: { select: { userId: true, deliveredAt: true, readAt: true } },
         attachments: { orderBy: { position: 'asc' }, select: attachmentSelect },
       },
     });
-    const hasMore = items.length > q.limit;
+    const hasMore = items.length > limit;
     // Read receipts are reciprocal: hide "read" on my messages unless both of us keep them on.
     const prefs = await this.prisma.userPrivacySettings.findMany({ where: { userId: { in: [userId, peerId] } } });
     const mine = privacyOf(prefs.find((p) => p.userId === userId));
     const theirs = privacyOf(prefs.find((p) => p.userId === peerId));
     const showRead = readReceiptsVisible(mine, theirs);
+    const [conv, peer] = await Promise.all([
+      this.prisma.conversation.findUniqueOrThrow({ where: { id: conversationId }, select: { lastSeq: true } }),
+      this.prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId: peerId } }, select: { lastReadSeq: true, lastDeliveredSeq: true } }),
+    ]);
+    const page = items.slice(0, limit);
+    const ordered = after ? page : page.reverse(); // always oldest → newest
     const out = await Promise.all(
-      items
-        .slice(0, q.limit)
-        .reverse()
-        .map(async (m) => ({
-          ...m,
-          attachments: await this.signAttachments(m.attachments),
-          receipts: showRead ? m.receipts : m.receipts.map((r) => ({ ...r, readAt: null })),
-        })),
+      ordered.map(async (m) => ({
+        ...m,
+        seq: Number(m.seq),
+        attachments: await this.signAttachments(m.attachments),
+        receipts: showRead ? m.receipts : m.receipts.map((r) => ({ ...r, readAt: null })),
+      })),
     );
-    return { items: out, hasMore, readReceipts: showRead };
+    return {
+      items: out,
+      hasMore,
+      readReceipts: showRead,
+      lastSeq: Number(conv.lastSeq),
+      // positions of the other person: "delivered / read up to N" for my messages
+      peerDeliveredSeq: Number(peer?.lastDeliveredSeq ?? 0),
+      peerReadSeq: showRead ? Number(peer?.lastReadSeq ?? 0) : null,
+    };
+  }
+
+  /** The app received messages up to [upToSeq] (socket or page): "delivered" for the sender. */
+  async markDelivered(userId: string, conversationId: string, upToSeq: number) {
+    await this.assertCanChat(userId, conversationId);
+    const conv = await this.prisma.conversation.findUniqueOrThrow({ where: { id: conversationId }, select: { lastSeq: true, members: { select: { userId: true, lastDeliveredSeq: true } } } });
+    const upTo = BigInt(Math.min(upToSeq, Number(conv.lastSeq)));
+    const me = conv.members.find((m) => m.userId === userId);
+    if (!me || me.lastDeliveredSeq >= upTo) return { upToSeq: Number(me?.lastDeliveredSeq ?? 0) };
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.conversationMember.update({ where: { conversationId_userId: { conversationId, userId } }, data: { lastDeliveredSeq: upTo } }),
+      this.prisma.messageReceipt.updateMany({ where: { userId, deliveredAt: null, message: { conversationId, seq: { lte: upTo } } }, data: { deliveredAt: now } }),
+    ]);
+    this.events.emit('delivered', { conversationId, userIds: conv.members.map((m) => m.userId), userId, upToSeq: Number(upTo) });
+    return { upToSeq: Number(upTo) };
   }
 
   /**
@@ -290,7 +337,7 @@ export class MessagingService {
     const existing = await this.prisma.message.findUnique({
       where: { conversationId_senderId_clientMessageId: { conversationId, senderId: userId, clientMessageId: dto.clientMessageId } },
     });
-    if (existing) return existing;
+    if (existing) return this.messageOut(existing.id);
 
     const body = (dto.body ?? '').trim();
     const attachmentIds = dto.attachmentIds ?? [];
@@ -325,14 +372,15 @@ export class MessagingService {
           await tx.messageAttachment.update({ where: { id: a.id }, data: { messageId: m.id, position: i } });
         }
         await tx.messageReceipt.create({ data: { messageId: m.id, userId: peerId } });
-        await tx.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: m.createdAt } });
+        // position + conversation.lastMessageAt/lastSeq are set by the database (olfa_message_sequence)
         return m;
       });
     } catch (e) {
       const err = fromPgError(e);
       if (err?.code === ErrorCode.CONFLICT) {
         // concurrent retry with the same clientMessageId
-        return this.prisma.message.findUniqueOrThrow({ where: { conversationId_senderId_clientMessageId: { conversationId, senderId: userId, clientMessageId: dto.clientMessageId } } });
+        const again = await this.prisma.message.findUniqueOrThrow({ where: { conversationId_senderId_clientMessageId: { conversationId, senderId: userId, clientMessageId: dto.clientMessageId } }, select: { id: true } });
+        return this.messageOut(again.id);
       }
       throw err ?? e;
     }
@@ -341,9 +389,9 @@ export class MessagingService {
     for (const a of atts.filter((x) => x.kind === 'IMAGE')) await this.mediaQueue.add('chat-image', { attachmentId: a.id }, { attempts: 3, backoff: { type: 'exponential', delay: 2000 } });
     const full = await this.prisma.message.findUniqueOrThrow({
       where: { id: msg.id },
-      select: { id: true, clientMessageId: true, senderId: true, body: true, type: true, createdAt: true, containsPhone: true, attachments: { orderBy: { position: 'asc' }, select: attachmentSelect } },
+      select: { id: true, seq: true, clientMessageId: true, senderId: true, body: true, type: true, createdAt: true, containsPhone: true, attachments: { orderBy: { position: 'asc' }, select: attachmentSelect } },
     });
-    const out = { ...full, attachments: await this.signAttachments(full.attachments) };
+    const out = { ...full, seq: Number(full.seq), attachments: await this.signAttachments(full.attachments) };
     // Counselor sharing off-platform contact details in a consultation chat → integrity signal.
     if (kind === 'CONSULTATION' && consultationId && body) {
       await this.integrity.fromCounselorMessage(userId, consultationId, body).catch(() => undefined);
@@ -351,6 +399,15 @@ export class MessagingService {
     this.events.emit('message', { conversationId, userIds: [userId, peerId], message: out });
     await this.notifications.push(peerId, type === 'VOICE' ? 'push.new_voice' : type === 'IMAGE' ? 'push.new_photo' : 'push.new_message', { conversationId });
     return out;
+  }
+
+  /** A message as the app receives it (same shape for a first send and an idempotent retry). */
+  private async messageOut(id: string) {
+    const m = await this.prisma.message.findUniqueOrThrow({
+      where: { id },
+      select: { id: true, seq: true, clientMessageId: true, senderId: true, body: true, type: true, createdAt: true, containsPhone: true, attachments: { orderBy: { position: 'asc' }, select: attachmentSelect } },
+    });
+    return { ...m, seq: Number(m.seq), attachments: await this.signAttachments(m.attachments) };
   }
 
   /** Voice notes per conversation: Free 10 · Plus 30 · Premium unlimited (consultation chats unlimited). */
@@ -447,8 +504,10 @@ export class MessagingService {
   async markRead(userId: string, conversationId: string) {
     await this.assertCanChat(userId, conversationId);
     const now = new Date();
+    const { lastSeq } = await this.prisma.conversation.findUniqueOrThrow({ where: { id: conversationId }, select: { lastSeq: true } });
     await this.prisma.$transaction([
-      this.prisma.conversationMember.update({ where: { conversationId_userId: { conversationId, userId } }, data: { lastReadAt: now } }),
+      // reading = also delivered (the DB keeps both positions moving forward only)
+      this.prisma.conversationMember.update({ where: { conversationId_userId: { conversationId, userId } }, data: { lastReadAt: now, lastReadSeq: lastSeq, lastDeliveredSeq: lastSeq } }),
       this.prisma.messageReceipt.updateMany({ where: { userId, readAt: null, message: { conversationId } }, data: { readAt: now, deliveredAt: now } }),
     ]);
     const c = await this.prisma.conversation.findUniqueOrThrow({ where: { id: conversationId }, select: { members: { select: { userId: true } } } });
@@ -458,7 +517,9 @@ export class MessagingService {
     const others = ids.filter((id) => id !== userId);
     // The other person learns "read" only when both keep read receipts on; the reader's own devices always sync.
     const notify = others.filter((id) => readReceiptsVisible(privacyOf(prefs.find((p) => p.userId === id)), reader));
-    this.events.emit('read', { conversationId, userIds: [userId, ...notify], readerId: userId, at: now });
+    this.events.emit('read', { conversationId, userIds: [userId, ...notify], readerId: userId, at: now, upToSeq: Number(lastSeq) });
+    // the sender always learns "delivered" (not a privacy setting)
+    this.events.emit('delivered', { conversationId, userIds: ids, userId, upToSeq: Number(lastSeq) });
   }
 }
 
@@ -482,8 +543,11 @@ export class ChatGateway implements OnGatewayConnection {
     events.on('message', (e: { userIds: string[]; message: unknown; conversationId: string }) =>
       e.userIds.forEach((u) => this.server?.to(`user:${u}`).emit('message:new', { conversationId: e.conversationId, message: e.message })),
     );
-    events.on('read', (e: { userIds: string[]; conversationId: string; readerId: string; at: Date }) =>
-      e.userIds.forEach((u) => this.server?.to(`user:${u}`).emit('message:read', { conversationId: e.conversationId, readerId: e.readerId, at: e.at })),
+    events.on('read', (e: { userIds: string[]; conversationId: string; readerId: string; at: Date; upToSeq: number }) =>
+      e.userIds.forEach((u) => this.server?.to(`user:${u}`).emit('message:read', { conversationId: e.conversationId, readerId: e.readerId, at: e.at, upToSeq: e.upToSeq })),
+    );
+    events.on('delivered', (e: { userIds: string[]; conversationId: string; userId: string; upToSeq: number }) =>
+      e.userIds.forEach((u) => this.server?.to(`user:${u}`).emit('message:delivered', { conversationId: e.conversationId, userId: e.userId, upToSeq: e.upToSeq })),
     );
     // support replies appear live in the open Help thread
     events.on('support', (e: { userId: string; ticketId: string; message: unknown }) =>
@@ -542,6 +606,13 @@ export class ChatGateway implements OnGatewayConnection {
     } catch {
       /* ignore: typing is best-effort */
     }
+  }
+
+  /** The app acknowledges messages it received over the socket. */
+  @SubscribeMessage('delivered')
+  async delivered(@ConnectedSocket() socket: Socket, @MessageBody() payload: { conversationId: string; upToSeq: number }) {
+    if (typeof payload?.conversationId !== 'string' || !Number.isInteger(payload?.upToSeq) || payload.upToSeq < 1) return;
+    await this.messaging.markDelivered(this.user(socket).id, payload.conversationId, payload.upToSeq).catch(() => undefined);
   }
 
   @SubscribeMessage('read')
@@ -612,6 +683,11 @@ export class MessagingController {
   @RateLimit(120, 60) @Post(':id/messages')
   send(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SendMessageDto) {
     return this.messaging.send(u.id, id, dto);
+  }
+
+  @Post(':id/delivered') @HttpCode(200)
+  delivered(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: DeliveredDto) {
+    return this.messaging.markDelivered(u.id, id, dto.upToSeq);
   }
 
   @Post(':id/read') @HttpCode(204)

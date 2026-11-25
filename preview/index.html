@@ -822,7 +822,7 @@ function admin(live){const d=ADEV[S.adev];const narrow=d.W<1000;
 /* ═══════════ CHROME + RENDER ═══════════ */
 const $=s=>document.querySelector(s);
 function chrome(){
- $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.8</small></span></div>
+ $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.8.1</small></span></div>
  <div class="seg"><button class="${S.mode==='app'?'on':''}" data-ui="mode" data-a="app">${t('vApp')}</button><button class="${S.mode==='admin'?'on':''}" data-ui="mode" data-a="admin">${t('vAdmin')}</button></div>
  ${S.mode==='app'?`<div class="seg"><button class="${S.view==='one'?'on':''}" data-ui="view" data-a="one">${t('vOne')}</button><button class="${S.view==='all'?'on':''}" data-ui="view" data-a="all">${t('vAll')}</button></div>`:''}
  <div class="seg"><button class="${S.lang==='ar'?'on':''}" data-ui="lang" data-a="ar">ع RTL</button><button class="${S.lang==='en'?'on':''}" data-ui="lang" data-a="en">EN LTR</button><button class="${S.lang==='fr'?'on':''}" data-ui="lang" data-a="fr">FR LTR</button></div>
@@ -2062,6 +2062,28 @@ Object.assign(ACT,{recStop:()=>{clearInterval(recT);S.recRev=Math.max(1,S.recS);
 const _pv8=SC.privacy;
 SC.privacy=()=>{const h=_pv8();const b=`<div class="banner p" style="margin:6px 0 4px">${I('shield',18)}<span><b>${t('protT')}</b> — ${t('protD')}</span></div>`;const i=h.indexOf('<div class="sec"');return i<0?h:h.slice(0,i)+b+h.slice(i)};
 
+/* ═══════════ v0.8.1 — chat: server order, live list order, offline queue ═══════════ */
+L8({netOff:['عرض تجريبي: محاكاة انقطاع الاتصال','Preview: simulate no connection','Aperçu : simuler une coupure'],netOn:['عرض تجريبي: إعادة الاتصال','Preview: reconnect','Aperçu : reconnecter'],
+ offBar:['لا يوجد اتصال — تُحفظ رسائلك على الهاتف وتُرسل تلقائياً بالترتيب عند عودة الاتصال.','No connection — your messages are saved on the phone and sent by themselves, in order, when you’re back online.','Pas de connexion — vos messages sont gardés sur le téléphone et envoyés automatiquement, dans l’ordre, au retour du réseau.'],
+ simIn:['عرض تجريبي: رسالة واردة في محادثة أخرى','Preview: incoming message in another chat','Aperçu : message entrant dans une autre conversation'],
+ sentOk:['تم إرسال الرسائل المحفوظة','Saved messages sent','Messages en attente envoyés']});
+let SEQ8=100;S.net=true;
+document.head.insertAdjacentHTML('beforeend','<style>.mt .qd~svg,.mt .qd~span{display:none}</style>');
+/* the list is always latest message first: touchConv (v0.6) moves the row to the top on every message */
+/* sending: each message gets its server position; offline messages wait on the phone */
+const _push8=pushMine;
+pushMine=function(v,phone){const tm=nowTm();
+ if(!S.net){S.chat.push({s:'me',x:v,xe:v,tm:`${tm} <span class="qd" title="queued">${I('clock',12)}</span>`,tm0:tm,q:true,phone});touchConv(S.cid||convs()[0].id,v,true,false);render();return}
+ _push8(v,phone);const m=S.chat.filter(x=>x.s==='me').pop();if(m)m.seq=++SEQ8};
+const flushQ=()=>{const q=S.chat.filter(m=>m.q);q.forEach((m,i)=>setTimeout(()=>{m.q=false;m.tm=m.tm0;m.seq=++SEQ8;if(i===q.length-1)toast(t('sentOk'));if(S.screen==='chat')render()},400*(i+1)))};
+Object.assign(ACT,{netToggle:()=>{S.net=!S.net;if(S.net)flushQ();render()},
+ simIncoming:()=>{const L=ordered().filter(x=>x.folder==='inbox');const c=L[L.length-1]||L[0];if(!c)return;touchConv(c.id,P3('هل يناسبك الحديث مساءً؟','Is the evening good for a chat?','Le soir vous convient-il pour discuter ?'),false,true);render()}});
+const _ch81=SC.chat;
+SC.chat=()=>{let h=_ch81();const off=!S.net?`<div class="banner p" style="margin:0 12px 6px;font-size:12.5px">${I('info',16)}<span>${t('offBar')}</span></div>`:'';
+ const tgl=`<div style="text-align:center;margin:2px 0"><button class="btn sm ghost" style="color:var(--p);font-size:12px;height:auto;padding:4px 8px" data-act="netToggle">${t(S.net?'netOff':'netOn')}</button></div>`;
+ const i=h.indexOf('<div class="msgs" id="msgs"');return i<0?h:h.slice(0,i)+off+tgl+h.slice(i)};
+const _cvs81=SC.convs;
+SC.convs=()=>{const h=_cvs81();const k='<div class="quota">';return h.includes(k)?h.replace(k,`<div style="text-align:center;margin:-4px 0 6px"><button class="btn sm ghost" style="color:var(--p);font-size:12px;height:auto;padding:4px 8px" data-act="simIncoming">${t('simIn')}</button></div>`+k):h};
 try{const q=new URLSearchParams(location.hash.slice(1));if(q.get('lang'))S.lang=q.get('lang');if(SC[q.get('s')])S.screen=q.get('s');if(q.get('mode'))S.mode=q.get('mode');if(q.get('dev')&&DEVICES[q.get('dev')])S.dev=q.get('dev');if(q.get('view'))S.view=q.get('view');if(q.get('adm'))S.adm=q.get('adm');if(q.get('adev'))S.adev=q.get('adev')}catch(e){}
 render();
 </script>

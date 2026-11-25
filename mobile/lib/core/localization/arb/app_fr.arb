@@ -1028,5 +1028,11 @@
   "voiceTooShort": "Maintenez un peu plus longtemps pour enregistrer.",
   "deleteRecording": "Supprimer l’enregistrement",
   "listenBeforeSending": "Écouter avant d’envoyer",
-  "stopAndListen": "Arrêter et écouter"
+  "stopAndListen": "Arrêter et écouter",
+  "msgQueued": "En attente du réseau",
+  "msgQueuedNote": "Enregistré sur votre téléphone — envoi automatique au retour du réseau",
+  "msgSent": "Envoyé",
+  "msgDelivered": "Distribué",
+  "msgRead": "Lu",
+  "deleteUnsent": "Supprimer (non envoyé)"
 }

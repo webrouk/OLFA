@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/errors/failure.dart';
 import '../../../shared/models/models.dart';
 import '../data/messaging_repository_impl.dart';
+import '../data/outbox.dart';
+import '../domain/thread_order.dart';
 import '../domain/messaging_repository.dart';
 
 class ChatState {
@@ -35,63 +37,146 @@ String newClientId() {
 
 /// One open conversation. Auto-disposed when the chat screen closes, so every
 /// open re-reads the server, marks the thread read and stops "typing…".
+///
+/// Ordering: the thread is kept sorted by the server position of each message
+/// (`seq`), with messages still on the phone after them ([mergeThread]); the same
+/// message never shows twice. Sync: a jump in positions (a missed event) or a
+/// reconnect fetches exactly what is missing (`afterSeq`). Sending goes through the
+/// persistent [Outbox], so offline messages wait on the phone and go out by themselves.
 class ChatController extends AutoDisposeFamilyAsyncNotifier<ChatState, String> {
   StreamSubscription<dynamic>? _sub;
+  StreamSubscription<OutboxResult>? _outSub;
   Timer? _readDebounce;
   Timer? _peerTypingOff;
+  bool _catchingUp = false;
+  int? _peerRead;
+  int? _peerDelivered;
 
   /// Captured in [build]: `ref` can't be used from dispose callbacks.
   late MessagingRepository _repo;
+  late Outbox _outbox;
+
+  void _set(List<ChatMessage> messages, {bool? hasMore, bool? loadingMore, bool? peerTyping}) {
+    final cur = state.valueOrNull;
+    if (cur == null) return;
+    state = AsyncData(cur.copyWith(
+      messages: applyPeerPositions(messages, deliveredUpTo: _peerDelivered, readUpTo: _peerRead),
+      hasMore: hasMore,
+      loadingMore: loadingMore,
+      peerTyping: peerTyping,
+    ));
+  }
 
   @override
   Future<ChatState> build(String conversationId) async {
     final repo = _repo = ref.watch(messagingRepositoryProvider);
-    _sub = repo.events().where((e) => e.conversationId == conversationId).listen((e) {
-      final s = state.valueOrNull;
-      if (s == null) return;
-      if (e.typing != null) {
-        _peerTypingOff?.cancel();
-        // If the "stopped typing" event is lost, the indicator still clears.
-        if (e.typing!) _peerTypingOff = Timer(const Duration(seconds: 8), () => _setPeerTyping(false));
-        _setPeerTyping(e.typing!);
-      }
-      if (e.readClientId != null) {
-        final cur = state.valueOrNull!;
-        state = AsyncData(cur.copyWith(
-          messages: [
-            for (final m in cur.messages)
-              (m.fromMe && m.status != MessageStatus.failed && m.status != MessageStatus.sending && (e.readClientId == '*' || m.clientId == e.readClientId))
-                  ? m.copyWith(status: MessageStatus.read)
-                  : m,
-          ],
-        ));
-      }
-      final msg = e.message;
-      if (msg != null) {
-        final cur = state.valueOrNull!;
-        final i = cur.messages.indexWhere((m) => m.clientId == msg.clientId);
-        if (i < 0) {
-          _peerTypingOff?.cancel();
-          state = AsyncData(cur.copyWith(messages: [...cur.messages, msg], peerTyping: msg.fromMe ? cur.peerTyping : false));
-        } else if (cur.messages[i].status == MessageStatus.sending && msg.fromMe) {
-          // my own message echoed back before the send call returned
-          final list = [...cur.messages];
-          list[i] = msg.attachments.isEmpty || msg.attachments.first.url != null ? msg : msg.copyWith(attachments: list[i].attachments);
-          state = AsyncData(cur.copyWith(messages: list));
-        }
-        // A message arriving while the chat is open is read straight away.
-        if (!msg.fromMe) _scheduleRead();
-      }
-    });
+    final outbox = _outbox = ref.watch(outboxProvider);
+    _sub = repo.events().where((e) => e.conversationId == conversationId || e.reconnected).listen(_onEvent);
+    _outSub = outbox.results.where((r) => r.entry.conversationId == conversationId).listen(_onOutbox);
+    // this thread is on screen: its new messages are read, not "unread" in the list
+    final open = ref.read(openConversationProvider.notifier);
+    Future.microtask(() => open.state = conversationId);
     ref.onDispose(() {
       _sub?.cancel();
+      _outSub?.cancel();
       _readDebounce?.cancel();
       _peerTypingOff?.cancel();
       _stopTyping();
+      Future.microtask(() {
+        if (open.mounted && open.state == conversationId) open.state = null;
+      });
     });
     final page = await repo.page(conversationId);
+    _peerDelivered = page.peerDeliveredSeq;
+    _peerRead = page.peerReadSeq;
     unawaited(repo.markRead(conversationId)); // opening the thread reads it
-    return ChatState(messages: page.items, hasMore: page.hasMore);
+    await outbox.ready;
+    final waiting = [
+      for (final e in outbox.pendingFor(conversationId)) e.toBubble(status: e.failedCode != null ? MessageStatus.failed : MessageStatus.queued),
+    ];
+    return ChatState(
+      messages: applyPeerPositions(mergeThread(page.items, waiting), deliveredUpTo: _peerDelivered, readUpTo: _peerRead),
+      hasMore: page.hasMore,
+    );
+  }
+
+  void _onEvent(ChatEvent e) {
+    final s = state.valueOrNull;
+    if (s == null) return;
+    if (e.reconnected) {
+      unawaited(_catchUp());
+      return;
+    }
+    if (e.typing != null) {
+      _peerTypingOff?.cancel();
+      // If the "stopped typing" event is lost, the indicator still clears.
+      if (e.typing!) _peerTypingOff = Timer(const Duration(seconds: 8), () => _setPeerTyping(false));
+      _setPeerTyping(e.typing!);
+    }
+    if (e.readUpTo != null || e.deliveredUpTo != null) {
+      if (e.readUpTo != null) _peerRead = e.readUpTo! > (_peerRead ?? 0) ? e.readUpTo : _peerRead;
+      if (e.deliveredUpTo != null) _peerDelivered = e.deliveredUpTo! > (_peerDelivered ?? 0) ? e.deliveredUpTo : _peerDelivered;
+      _set(s.messages);
+    }
+    if (e.readClientId != null) {
+      // older servers: "read" without a position = everything I sent so far
+      _set([
+        for (final m in s.messages)
+          (m.fromMe && !m.isPending && (e.readClientId == '*' || m.clientId == e.readClientId)) ? m.copyWith(status: MessageStatus.read) : m,
+      ]);
+    }
+    final msg = e.message;
+    if (msg != null) {
+      final last = lastSeqOf(s.messages);
+      // a jump means an event was missed: fetch exactly what is missing first
+      if (msg.seq != null && last > 0 && msg.seq! > last + 1) {
+        unawaited(_catchUp());
+      }
+      _peerTypingOff?.cancel();
+      _set(mergeThread(s.messages, [msg]), peerTyping: msg.fromMe ? s.peerTyping : false);
+      // A message arriving while the chat is open is read straight away.
+      if (!msg.fromMe) _scheduleRead();
+    }
+  }
+
+  void _onOutbox(OutboxResult r) {
+    final s = state.valueOrNull;
+    if (s == null) return;
+    if (r.saved != null) {
+      _set(mergeThread(s.messages, [r.saved!]));
+      if (r.saved!.kind == MessageKind.voice) ref.invalidate(voiceQuotaProvider(arg));
+    } else if (r.removed) {
+      _set(s.messages.where((m) => m.clientId != r.entry.clientId).toList());
+    } else if (r.queued) {
+      _set([for (final m in s.messages) m.clientId == r.entry.clientId && m.isPending ? m.copyWith(status: MessageStatus.queued) : m]);
+    } else if (r.failure != null) {
+      _set([for (final m in s.messages) m.clientId == r.entry.clientId ? m.copyWith(status: MessageStatus.failed) : m]);
+    }
+  }
+
+  /// Fetches everything after the last known position (after a reconnect or a gap).
+  Future<void> _catchUp() async {
+    if (_catchingUp) return;
+    _catchingUp = true;
+    try {
+      var after = lastSeqOf(state.valueOrNull?.messages ?? const []);
+      while (true) {
+        final p = await _repo.page(arg, afterSeq: after);
+        if (p.peerDeliveredSeq != null) _peerDelivered = p.peerDeliveredSeq;
+        if (p.peerReadSeq != null) _peerRead = p.peerReadSeq;
+        final cur = state.valueOrNull;
+        if (cur == null) return;
+        _set(mergeThread(cur.messages, p.items));
+        final next = lastSeqOf(p.items);
+        if (!p.hasMore || next <= after) break;
+        after = next;
+      }
+      if ((state.valueOrNull?.messages ?? const []).any((m) => !m.fromMe)) _scheduleRead();
+    } on Failure {
+      // offline again: the next reconnect retries
+    } finally {
+      _catchingUp = false;
+    }
   }
 
   void _setPeerTyping(bool on) {
@@ -104,21 +189,29 @@ class ChatController extends AutoDisposeFamilyAsyncNotifier<ChatState, String> {
     _readDebounce = Timer(const Duration(milliseconds: 600), () => _repo.markRead(arg));
   }
 
+  /// Older messages when scrolling up (pages of 30, never the whole history).
   Future<void> loadOlder() async {
     final s = state.valueOrNull;
     if (s == null || !s.hasMore || s.loadingMore || s.messages.isEmpty) return;
     state = AsyncData(s.copyWith(loadingMore: true));
     try {
-      final page = await ref.read(messagingRepositoryProvider).page(arg, before: s.messages.first.sentAt);
+      final first = s.messages.firstWhere((m) => m.seq != null, orElse: () => s.messages.first);
+      final page = await _repo.page(arg, beforeSeq: first.seq, before: first.seq == null ? first.sentAt : null);
       final cur = state.valueOrNull!;
-      state = AsyncData(cur.copyWith(messages: [...page.items, ...cur.messages], hasMore: page.hasMore, loadingMore: false));
+      _set(mergeThread(page.items, cur.messages), hasMore: page.hasMore, loadingMore: false);
     } on Failure {
       state = AsyncData(state.valueOrNull!.copyWith(loadingMore: false));
     }
   }
 
-  /// Media of failed messages, kept so "retry" can resend the same files.
-  final _pendingMedia = <String, OutgoingMedia>{};
+  /// Keeps memory flat in long threads: once the person is back at the newest
+  /// messages, only the latest [keep] stay loaded (older pages load again on scroll).
+  void trimToRecent({int keep = 150, int above = 300}) {
+    final s = state.valueOrNull;
+    if (s == null || s.loadingMore || s.messages.length <= above) return;
+    state = AsyncData(s.copyWith(messages: s.messages.sublist(s.messages.length - keep), hasMore: true));
+  }
+
   Timer? _typingOff;
   bool _typing = false;
 
@@ -141,61 +234,46 @@ class ChatController extends AutoDisposeFamilyAsyncNotifier<ChatState, String> {
     _typing = false;
   }
 
-  /// Optimistic send with an idempotency key; failed messages can be retried.
-  /// Returns the failure (e.g. voice-note quota) so the screen can explain it.
+  /// Optimistic send through the persistent outbox (idempotency key = clientId).
+  /// Offline → the bubble shows "waiting for network" and goes out by itself.
+  /// Returns the failure (e.g. voice-note quota) so the screen can explain it;
+  /// a [NetworkFailure] only means "queued".
   Future<Failure?> send(String body, {String? retryClientId, OutgoingMedia? media}) async {
+    if (retryClientId != null) {
+      final s = state.valueOrNull;
+      if (s != null) _set([for (final m in s.messages) m.clientId == retryClientId ? m.copyWith(status: MessageStatus.sending) : m]);
+      await _outbox.retry(retryClientId);
+      return null;
+    }
     final text = body.trim();
     final s = state.valueOrNull;
-    final m = media ?? (retryClientId == null ? null : _pendingMedia[retryClientId]);
-    if (s == null || (text.isEmpty && m == null)) return null;
+    if (s == null || (text.isEmpty && media == null)) return null;
     _stopTyping();
-    final clientId = retryClientId ?? newClientId();
-    final pending = ChatMessage(
-      id: 'local-$clientId',
-      clientId: clientId,
+    final entry = OutboxEntry(
+      clientId: newClientId(),
       conversationId: arg,
-      fromMe: true,
       body: text,
-      sentAt: DateTime.now(),
-      status: MessageStatus.sending,
-      kind: m == null ? MessageKind.text : (m.isVoice ? MessageKind.voice : MessageKind.image),
-      attachments: m == null
-          ? const []
-          : m.isVoice
-              ? [ChatAttachment(kind: MessageKind.voice, localPath: m.voice!.path, durationMs: m.voice!.durationMs, waveform: m.voice!.waveform)]
-              : [for (final f in m.files) ChatAttachment(kind: MessageKind.image, localPath: f.path, width: f.width, height: f.height)],
+      createdAt: DateTime.now(),
+      photos: media == null || media.isVoice ? const [] : [for (final f in media.files) (path: f.path, width: f.width, height: f.height)],
+      voice: media?.voice == null ? null : (path: media!.voice!.path, durationMs: media.voice!.durationMs, waveform: media.voice!.waveform),
     );
-    final without = s.messages.where((x) => x.clientId != clientId).toList();
-    state = AsyncData(s.copyWith(messages: [...without, pending]));
-    // Leaving the chat mid-send must not drop the result (or its retry state).
+    _set(mergeThread(s.messages, [entry.toBubble(status: ref.read(connectionProvider) ? MessageStatus.sending : MessageStatus.queued)]));
+    // Leaving the chat mid-send must not drop the result: the outbox keeps it either way.
     final keep = ref.keepAlive();
     try {
-      final saved = await ref.read(messagingRepositoryProvider).send(arg, clientId, text, media: m);
-      _pendingMedia.remove(clientId);
-      // keep the local file preview until the signed URL is used
-      _replace(clientId, saved.attachments.isEmpty || saved.attachments.first.url != null ? saved : saved.copyWith(attachments: pending.attachments));
-      if (m?.isVoice ?? false) ref.invalidate(voiceQuotaProvider(arg));
+      await _outbox.send(entry);
       return null;
+    } on NetworkFailure catch (e) {
+      return e; // queued: sent automatically when the connection returns
     } on Failure catch (e) {
-      if (m != null) _pendingMedia[clientId] = m;
-      // A quota refusal is not retryable: drop the bubble and let the screen explain.
-      if (e is QuotaExceededFailure) {
-        final cur = state.valueOrNull;
-        if (cur != null) state = AsyncData(cur.copyWith(messages: cur.messages.where((x) => x.clientId != clientId).toList()));
-      } else {
-        _replace(clientId, pending.copyWith(status: MessageStatus.failed));
-      }
       return e;
     } finally {
       keep.close();
     }
   }
 
-  void _replace(String clientId, ChatMessage m) {
-    final cur = state.valueOrNull;
-    if (cur == null) return;
-    state = AsyncData(cur.copyWith(messages: [for (final x in cur.messages) x.clientId == clientId ? m : x]));
-  }
+  /// Removes a message that is still on the phone (failed or waiting).
+  Future<void> discard(String clientId) => _outbox.discard(clientId);
 }
 
 final chatControllerProvider = AsyncNotifierProvider.autoDispose.family<ChatController, ChatState, String>(ChatController.new);

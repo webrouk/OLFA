@@ -1629,5 +1629,11 @@
   "voiceTooShort": "Hold a little longer to record a voice message.",
   "deleteRecording": "Delete recording",
   "listenBeforeSending": "Listen before sending",
-  "stopAndListen": "Stop and listen"
+  "stopAndListen": "Stop and listen",
+  "msgQueued": "Waiting for network",
+  "msgQueuedNote": "Saved on your phone — it sends by itself when you're back online",
+  "msgSent": "Sent",
+  "msgDelivered": "Delivered",
+  "msgRead": "Read",
+  "deleteUnsent": "Delete (not sent)"
 }

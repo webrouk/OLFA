@@ -38,6 +38,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       // reverse: true → offset 0 is the newest message.
       final far = _scroll.offset > 400;
       if (far != _showJump) setState(() => _showJump = far);
+      // back at the newest messages: drop pages scrolled through long ago (memory stays flat)
+      if (_scroll.offset < 80) ref.read(chatControllerProvider(widget.conversationId).notifier).trimToRecent();
       if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 200) {
         ref.read(chatControllerProvider(widget.conversationId).notifier).loadOlder();
       }
@@ -74,6 +76,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   Clipboard.setData(ClipboardData(text: m.body));
                   Navigator.of(sheet).pop();
                   showToast(context, l.copied);
+                },
+              ),
+            // still on this phone (waiting / failed): it can be removed before it is sent
+            if (m.fromMe && (m.status == MessageStatus.queued || m.status == MessageStatus.failed))
+              OlfaListTile(
+                icon: Icons.delete_outline_rounded,
+                title: l.deleteUnsent,
+                danger: true,
+                showChevron: false,
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  ref.read(chatControllerProvider(widget.conversationId).notifier).discard(m.clientId);
                 },
               ),
             if (!m.fromMe && conv?.peer != null)
@@ -182,7 +196,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         final m = items[idx];
                         final older = idx + 1 < items.length ? items[idx + 1] : null;
                         final newDay = older == null || !DateUtils.isSameDay(older.sentAt, m.sentAt);
-                        return Column(children: [
+                        return Column(
+                          key: ValueKey(m.clientId), // stable rows: no re-layout jumps when messages arrive
+                          children: [
                           if (newDay) _SystemPill(text: DateFormat.yMMMd(Localizations.localeOf(context).languageCode).format(m.sentAt)),
                           _Bubble(
                             message: m,
@@ -230,6 +246,7 @@ class _Bubble extends StatelessWidget {
     const r = Radius.circular(20);
     const tail = Radius.circular(6);
     final statusIcon = switch (message.status) {
+      MessageStatus.queued => Icons.cloud_off_rounded, // waiting for the connection, sent by itself
       MessageStatus.sending => Icons.schedule_rounded,
       MessageStatus.sent => Icons.check_rounded,
       MessageStatus.delivered => Icons.done_all_rounded,
@@ -267,7 +284,14 @@ class _Bubble extends StatelessWidget {
                     if (me) ...[
                       const SizedBox(width: 4),
                       Semantics(
-                        label: message.status.name,
+                        label: switch (message.status) {
+                          MessageStatus.queued => l.msgQueued,
+                          MessageStatus.sending => l.sending,
+                          MessageStatus.sent => l.msgSent,
+                          MessageStatus.delivered => l.msgDelivered,
+                          MessageStatus.read => l.msgRead,
+                          MessageStatus.failed => l.notSentRetry,
+                        },
                         child: Icon(statusIcon, size: 14, color: message.status == MessageStatus.read ? OlfaColors.white : fg.withValues(alpha: 0.7)),
                       ),
                     ],
@@ -276,6 +300,11 @@ class _Bubble extends StatelessWidget {
               ),
             ),
             ),
+            if (me && message.status == MessageStatus.queued)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(l.msgQueuedNote, style: context.type.caption),
+              ),
             if (onRetry != null)
               TextButton.icon(
                 onPressed: onRetry,

@@ -4,7 +4,13 @@ abstract interface class MessagingRepository {
   /// All sections in one call; rows past the plan's limit come back locked.
   Future<ConversationIndex> index();
   Future<Conversation> conversation(String id);
-  Future<({List<ChatMessage> items, bool hasMore})> page(String conversationId, {DateTime? before});
+  /// Newest page first (oldest → newest inside). [beforeSeq]: older page when scrolling up.
+  /// [afterSeq]: catch-up after a reconnect or a gap (everything after that position).
+  /// [before] is the time cursor for sources without positions (preview data).
+  Future<MessagePage> page(String conversationId, {int? beforeSeq, int? afterSeq, DateTime? before});
+
+  /// "Received up to N" for the sender's ticks (best-effort, never throws).
+  void markDelivered(String conversationId, int upToSeq);
 
   /// Idempotent on [clientId]: retrying never duplicates a message.
   Future<ChatMessage> send(String conversationId, String clientId, String body, {OutgoingMedia? media});

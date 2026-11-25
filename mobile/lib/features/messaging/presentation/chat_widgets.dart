@@ -132,7 +132,7 @@ class _ChatComposerState extends ConsumerState<ChatComposer> {
       setState(_photos.clear);
       final err = await _chat.send(text, media: media);
       widget.onSent();
-      if (!mounted || err == null || err is NetworkFailure) return; // network: the bubble offers "retry"
+      if (!mounted || err == null || err is NetworkFailure) return; // offline: queued on the phone, sent by itself
       if (err is QuotaExceededFailure && _input.text.isEmpty) {
         // Nothing was sent: give the draft back so it isn't lost.
         _input.text = text;

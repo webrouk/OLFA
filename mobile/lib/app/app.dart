@@ -8,6 +8,7 @@ import '../core/routing/app_router.dart';
 import '../core/security/screen_protection.dart';
 import '../core/theme/olfa_theme.dart';
 import '../features/messaging/application/incoming_sounds.dart';
+import '../features/messaging/data/outbox.dart';
 import '../features/subscriptions/application/entitlements_controller.dart';
 
 class OlfaApp extends ConsumerWidget {
@@ -19,6 +20,7 @@ class OlfaApp extends ConsumerWidget {
     final router = ref.watch(routerProvider);
     ref.watch(incomingSoundsProvider); // message tone while the app is open
     ref.watch(storeListenerProvider); // store renewals / Ask to Buy / interrupted purchases → server
+    ref.watch(outboxProvider); // offline messages: resume sending at start-up, on reconnect and on resume
     return MaterialApp.router(
       title: 'OLFA',
       debugShowCheckedModeBanner: false,
