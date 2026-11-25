@@ -337,7 +337,7 @@ class ConversationTile extends ConsumerWidget {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
                   Flexible(child: Text(c.title, overflow: TextOverflow.ellipsis, style: t.bodyMedium.copyWith(fontWeight: unread ? FontWeight.w700 : FontWeight.w500))),
-                  if (c.peer != null) ...[const SizedBox(width: 6), VerificationTicks(profile: c.peer!, size: 15)],
+                  if (c.peer != null) ...[const SizedBox(width: 6), VerificationMark(profile: c.peer!, size: 15)],
                   if (c.isConsultation) ...[const SizedBox(width: 6), OlfaTag(l.consultationTag, style: OlfaTagStyle.accent)],
                   const Spacer(),
                   if (c.lastAt != null) Text(shortTime(context, c.lastAt!), style: t.caption),

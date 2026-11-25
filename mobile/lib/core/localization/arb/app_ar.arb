@@ -572,8 +572,6 @@
   "signOutDevice": "تسجيل الخروج",
   "signOutDeviceBody": "سيتم تسجيل خروج هذا الجهاز من ألفة فورًا.",
   "signedInDevicesSub": "اعرض الأجهزة وسجّل خروجها",
-  "tickIdentity": "البيانات الشخصية موثّقة",
-  "tickPhoto": "الصورة موثّقة",
   "unblock": "إلغاء الحظر",
   "unblockBody": "سيتمكن من العثور عليك والإعجاب بك مجددًا إذا تطابقت التفضيلات.",
   "unblockTitle": "إلغاء حظر {name}؟",
@@ -649,8 +647,8 @@
   "proofTwoTicks": "توثيق الصورة والبيانات",
   "proofCounselors": "استشاريون مرخّصون",
   "proofPrivate": "خصوصية من الأساس",
-  "photoVerifiedShort": "صورة موثّقة",
-  "detailsVerifiedShort": "بيانات موثّقة",
+  "photoVerifiedShort": "سيلفي موثّق",
+  "detailsVerifiedShort": "هوية موثّقة",
   "subscriptions": "الاشتراكات",
   "consultationsShort": "الاستشارات",
   "consultationPayment": "استشارة",
@@ -1057,5 +1055,8 @@
   "infoSectionBasics": "الأساسيات",
   "infoSectionBackground": "الخلفية",
   "infoSectionIntentions": "عنك وعن الزواج",
-  "completeHighlighted": "يرجى إكمال الحقول المحددة."
+  "completeHighlighted": "يرجى إكمال الحقول المحددة.",
+  "verifiedFull": "موثّق بالسيلفي والهوية",
+  "verifiedSelfieOnly": "موثّق بالسيلفي · الهوية لم تُوثّق بعد",
+  "verifiedIdOnly": "الهوية موثّقة · السيلفي لم يُوثّق بعد"
 }

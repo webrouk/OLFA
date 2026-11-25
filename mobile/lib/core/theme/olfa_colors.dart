@@ -13,4 +13,8 @@ abstract final class OlfaColors {
   static final Color textMuted = black.withValues(alpha: 0.62);
   static final Color textDisabled = black.withValues(alpha: 0.40);
   static final Color scrim = black.withValues(alpha: 0.42);
+
+  /// Opaque grey for the partial verification mark (black 45% over white),
+  /// so a white check stays readable on photos too.
+  static final Color markGray = Color.alphaBlend(black.withValues(alpha: 0.45), white);
 }

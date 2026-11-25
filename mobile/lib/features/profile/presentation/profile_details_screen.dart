@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/localization/bidi_text.dart';
 import '../../../core/localization/generated/app_localizations.dart';
 import '../../../core/theme/olfa_colors.dart';
 import '../../../core/theme/olfa_spacing.dart';
@@ -221,8 +222,8 @@ class _DetailsState extends ConsumerState<_Details> {
                   children: [
                     Row(
                       children: [
-                        Flexible(child: Text('${p.name}, ${p.age}', style: t.h1)),
-                        ...[const SizedBox(width: 8), VerificationTicks(profile: p, size: 22)],
+                        Flexible(child: Text(nameAge(context, p.name, p.age), style: t.h1)),
+                        ...[const SizedBox(width: 8), VerificationMark(profile: p, size: 22)],
                       ],
                     ),
                     if (p.showLocation) ...[

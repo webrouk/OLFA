@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/localization/bidi_text.dart';
 import '../../../core/localization/generated/app_localizations.dart';
 import '../../../core/routing/navigation.dart';
 import '../../../core/routing/routes.dart';
@@ -53,8 +54,8 @@ class MyProfileScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Flexible(child: Text('${me.name}, ${me.age}', style: t.h2)),
-                ...[const SizedBox(width: 8), VerificationTicks(profile: me, size: 22)],
+                Flexible(child: Text(nameAge(context, me.name, me.age), style: t.h2)),
+                ...[const SizedBox(width: 8), VerificationMark(profile: me, size: 22)],
               ]),
               Center(child: Text('${me.city} · ${countryLabel(context, me.countryIso)}', style: t.caption)),
               const SizedBox(height: 8),

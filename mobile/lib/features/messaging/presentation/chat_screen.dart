@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/localization/bidi_text.dart';
 import '../../../core/localization/generated/app_localizations.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theme/olfa_colors.dart';
@@ -18,6 +19,7 @@ import 'conversations_screen.dart' show OfflineBar, showConversationMenu;
 import '../../../shared/components/verification_ticks.dart';
 import 'chat_widgets.dart';
 import 'package:flutter/services.dart';
+
 import '../../../core/routing/navigation.dart';
 
 /// 19 — Private chat: realtime, paginated, optimistic, keyboard-aware.
@@ -145,7 +147,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                       Row(mainAxisSize: MainAxisSize.min, children: [
                         Flexible(child: Text(conv.title, overflow: TextOverflow.ellipsis, style: t.bodyLarge.copyWith(fontWeight: FontWeight.w700))),
-                        if (conv.peer != null) ...[const SizedBox(width: 6), VerificationTicks(profile: conv.peer!, size: 15)],
+                        if (conv.peer != null) ...[const SizedBox(width: 6), VerificationMark(profile: conv.peer!, size: 15)],
                       ]),
                       Text(
                         conv.isUnmatched
@@ -280,7 +282,7 @@ class _Bubble extends StatelessWidget {
                   if (message.body.isNotEmpty)
                     Padding(
                       padding: message.kind == MessageKind.image ? const EdgeInsets.fromLTRB(10, 6, 10, 0) : EdgeInsets.zero,
-                      child: Align(alignment: AlignmentDirectional.centerStart, widthFactor: 1, child: Text(message.body, style: context.type.bodyMedium.copyWith(color: fg))),
+                      child: Align(alignment: AlignmentDirectional.centerStart, widthFactor: 1, child: Text(isolateNumbers(message.body), style: context.type.bodyMedium.copyWith(color: fg))),
                     ),
                   const SizedBox(height: 2),
                   Row(mainAxisSize: MainAxisSize.min, children: [

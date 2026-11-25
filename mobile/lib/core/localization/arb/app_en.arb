@@ -899,8 +899,6 @@
   "signOutDevice": "Sign out",
   "signOutDeviceBody": "This device will be signed out of OLFA right away.",
   "signedInDevicesSub": "See and sign out devices",
-  "tickIdentity": "Personal details verified",
-  "tickPhoto": "Photo verified",
   "unblock": "Unblock",
   "unblockBody": "They'll be able to find and like you again if your preferences match.",
   "unblockTitle": "Unblock {name}?",
@@ -1025,8 +1023,8 @@
   "proofTwoTicks": "Photo + details verified",
   "proofCounselors": "Licensed counselors",
   "proofPrivate": "Private by design",
-  "photoVerifiedShort": "Photo verified",
-  "detailsVerifiedShort": "Details verified",
+  "photoVerifiedShort": "Selfie verified",
+  "detailsVerifiedShort": "ID verified",
   "subscriptions": "Subscriptions",
   "consultationsShort": "Consultations",
   "consultationPayment": "Consultation",
@@ -1679,5 +1677,8 @@
   "infoSectionBasics": "The basics",
   "infoSectionBackground": "Background",
   "infoSectionIntentions": "About you and marriage",
-  "completeHighlighted": "Please complete the highlighted fields."
+  "completeHighlighted": "Please complete the highlighted fields.",
+  "verifiedFull": "Selfie and ID verified",
+  "verifiedSelfieOnly": "Selfie verified · ID not yet verified",
+  "verifiedIdOnly": "ID verified · selfie not yet verified"
 }

@@ -572,8 +572,6 @@
   "signOutDevice": "Déconnecter",
   "signOutDeviceBody": "Cet appareil sera immédiatement déconnecté d’OLFA.",
   "signedInDevicesSub": "Voir et déconnecter les appareils",
-  "tickIdentity": "Informations personnelles vérifiées",
-  "tickPhoto": "Photo vérifiée",
   "unblock": "Débloquer",
   "unblockBody": "Cette personne pourra de nouveau vous trouver et vous aimer si vos préférences correspondent.",
   "unblockTitle": "Débloquer {name} ?",
@@ -649,8 +647,8 @@
   "proofTwoTicks": "Photo et informations vérifiées",
   "proofCounselors": "Conseillers diplômés",
   "proofPrivate": "Confidentiel par conception",
-  "photoVerifiedShort": "Photo vérifiée",
-  "detailsVerifiedShort": "Informations vérifiées",
+  "photoVerifiedShort": "Selfie vérifié",
+  "detailsVerifiedShort": "Identité vérifiée",
   "subscriptions": "Abonnements",
   "consultationsShort": "Consultations",
   "consultationPayment": "Consultation",
@@ -1057,5 +1055,8 @@
   "infoSectionBasics": "L’essentiel",
   "infoSectionBackground": "Parcours",
   "infoSectionIntentions": "Vous et le mariage",
-  "completeHighlighted": "Veuillez compléter les champs indiqués."
+  "completeHighlighted": "Veuillez compléter les champs indiqués.",
+  "verifiedFull": "Selfie et pièce d’identité vérifiés",
+  "verifiedSelfieOnly": "Selfie vérifié · identité pas encore vérifiée",
+  "verifiedIdOnly": "Identité vérifiée · selfie pas encore vérifié"
 }

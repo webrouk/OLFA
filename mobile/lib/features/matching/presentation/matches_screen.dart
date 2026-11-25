@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/localization/bidi_text.dart';
 import '../../../core/localization/generated/app_localizations.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theme/olfa_colors.dart';
@@ -105,8 +106,8 @@ class _MatchesScreenState extends ConsumerState<MatchesScreen> {
                             Expanded(
                               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                 Row(children: [
-                                  Flexible(child: Text('${m.peer.name}, ${m.peer.age}', style: t.bodyMedium.copyWith(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
-                                  ...[const SizedBox(width: 6), VerificationTicks(profile: m.peer, size: 16)],
+                                  Flexible(child: Text(nameAge(context, m.peer.name, m.peer.age), style: t.bodyMedium.copyWith(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                                  ...[const SizedBox(width: 6), VerificationMark(profile: m.peer, size: 16)],
                                   const SizedBox(width: 6),
                                   _MatchState(m: m),
                                 ]),

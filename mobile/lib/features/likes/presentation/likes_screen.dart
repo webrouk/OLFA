@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/errors/failure.dart';
+import '../../../core/localization/bidi_text.dart';
 import '../../../core/localization/generated/app_localizations.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theme/olfa_colors.dart';
@@ -77,7 +78,7 @@ class _LikesScreenState extends ConsumerState<LikesScreen> {
             _LikesFilter.all => items,
             _LikesFilter.compliments => const [],
             _LikesFilter.nearby => (items.where((x) => x.profile.distanceKm != null).toList()..sort((a, b) => a.profile.distanceKm!.compareTo(b.profile.distanceKm!))),
-            _LikesFilter.verified => items.where((x) => x.profile.identityVerified || x.profile.livenessVerified || x.profile.photosReviewed).toList(),
+            _LikesFilter.verified => items.where((x) => x.profile.verificationLevel != VerificationLevel.none).toList(),
           };
           return RefreshIndicator(
             color: OlfaColors.primary,
@@ -192,7 +193,7 @@ class _ComplimentCard extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [Flexible(child: Text('${p.name}, ${p.age}', style: t.h3, overflow: TextOverflow.ellipsis)), const SizedBox(width: 6), VerificationTicks(profile: p, size: 16)]),
+                Row(children: [Flexible(child: Text(nameAge(context, p.name, p.age), style: t.h3, overflow: TextOverflow.ellipsis)), const SizedBox(width: 6), VerificationMark(profile: p, size: 16)]),
                 Text([if (p.showLocation) p.city, if (p.distanceKm != null) l.kmAway(p.distanceKm!), shortTime(context, like.at)].join(' · '), style: t.caption),
               ]),
             ),
@@ -251,8 +252,8 @@ class _LikeTile extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
             child: Row(children: [
-              Expanded(child: Text('${p.name}, ${p.age}', style: t.bodyMedium.copyWith(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
-              VerificationTicks(profile: p, size: 15),
+              Expanded(child: Text(nameAge(context, p.name, p.age), style: t.bodyMedium.copyWith(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+              VerificationMark(profile: p, size: 15),
             ]),
           ),
           Padding(

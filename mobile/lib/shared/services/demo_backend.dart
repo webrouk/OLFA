@@ -1109,6 +1109,8 @@ class DemoBackend {
       photos: [for (var k = 0; k < 3; k++) ProfilePhoto(id: '$id-p$k')],
       photosReviewed: reviewed,
       livenessVerified: live,
+      // demo: some members also passed the ID check, so both mark colours show
+      identityVerified: const {'d1', 'd2', 'd4', 'd5', 'd8'}.contains(id),
       compatibility: cmp,
       completeness: completeness,
       // reciprocal, like the server: hiding your own status hides everyone's from you

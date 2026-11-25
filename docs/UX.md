@@ -83,3 +83,15 @@
     - the professional policy and account settings.
   - The desk and wallet lists now leave room for the floating bar.
   - In My consultations, the actions wrap instead of overflowing, and the held / disputed / refunded fee state is shown.
+
+## Round 3 — one verification mark, public preview
+- **Verification mark:** one check next to a member's name, never two.
+  - Burgundy: the live selfie **and** the ID document are both verified.
+  - Grey: only one of them is verified. Long-press says which one.
+  - Nothing: neither is verified. The routine photo review every live profile passes does not count.
+  - Code: `VerificationLevel` (`shared/models/models.dart`), `UserProfile.verificationLevel`, `VerificationMark` (`shared/components/verification_ticks.dart`), `OlfaColors.markGray`. The two-tick widget and its `tickPhoto` / `tickIdentity` strings were removed because the mark replaces them.
+  - The Likes "Verified" filter now means "has a mark" (selfie or ID).
+  - Counselors keep their burgundy licence mark.
+- **Bidi:** phone numbers inside Arabic chat messages keep their digit order (`isolateNumbers`, display only). Names read "سارة، 27" with the Arabic comma (`nameAge`).
+- **Chat composer (preview):** the voice button was clipped at the screen edge and the input sat on the home indicator; both fixed.
+- **Public preview:** nothing addressed to the team shows on the screens. State switches and simulators (verification states, OTP hint, failed selfie, closed-account type, offline / incoming-message simulators, store state, "Approve (demo)", admin "try it" notes, "demo" labels) only appear with `#team` in the preview URL (for example `#lang=ar&s=verify&team`). The ad card shows a realistic native ad instead of a layout note.

@@ -280,7 +280,7 @@ class _MatchArt extends StatelessWidget {
   }
 }
 
-/// Slide 3 — reviewed and verified: shield with the two ticks.
+/// Slide 3 — reviewed and verified: shield with the selfie and ID checks.
 class _VerifiedArt extends StatelessWidget {
   const _VerifiedArt();
   @override
@@ -310,7 +310,7 @@ class _VerifiedArt extends StatelessWidget {
         child: const Icon(Icons.verified_user_rounded, size: 58, color: OlfaColors.white),
       ),
       const SizedBox(height: 18),
-      tick(Icons.photo_camera_outlined, l.photoVerifiedShort),
+      tick(Icons.face_retouching_natural_outlined, l.photoVerifiedShort),
       const SizedBox(height: 8),
       tick(Icons.badge_outlined, l.detailsVerifiedShort),
     ]);

@@ -14,6 +14,23 @@ enum MarriageTimeline { within6Months, within1Year, within2Years, notSure }
 
 enum VerificationStatus { pending, rejected, approved }
 
+/// How much of a member's identity is confirmed, shown as ONE mark by the name.
+/// Only the live selfie and the ID document count — the routine photo review
+/// every live profile passes does not.
+enum VerificationLevel {
+  /// Neither selfie nor ID — no mark at all.
+  none,
+
+  /// Exactly one of selfie / ID — grey mark.
+  partial,
+
+  /// Both selfie and ID — burgundy mark.
+  full;
+
+  static VerificationLevel of({required bool selfie, required bool identity}) =>
+      selfie && identity ? full : (selfie || identity ? partial : none);
+}
+
 enum PlanCode { free, plus, premium }
 
 /// Chosen once during sign-up. Members look for marriage; professionals
@@ -154,6 +171,10 @@ class UserProfile {
   final bool online;
 
   ProfilePhoto? get mainPhoto => photos.isEmpty ? null : photos.first;
+
+  /// Selfie + ID → full; one of them → partial; neither → none.
+  VerificationLevel get verificationLevel =>
+      VerificationLevel.of(selfie: livenessVerified, identity: identityVerified);
 
   factory UserProfile.fromJson(Map<String, dynamic> j) => UserProfile(
         id: j['id'] as String,
