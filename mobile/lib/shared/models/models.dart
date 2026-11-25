@@ -127,7 +127,12 @@ class UserProfile {
     this.underReview = false,
     this.religion,
     this.sect,
+    this.managedBy,
   });
+
+  /// Set when a relative or trusted person runs this account for its owner:
+  /// only the relation is public ("Managed by her father").
+  final ManagedRelation? managedBy;
 
   /// Keys from shared/reference/religions.tsv; null when not shared ("prefer not to say").
   final String? religion;
@@ -523,7 +528,8 @@ class MatchItem {
 /// queued = saved on the phone while offline; it is sent by itself when the connection returns.
 enum MessageStatus { queued, sending, sent, delivered, read, failed }
 
-enum MessageKind { text, image, voice }
+/// compat = the compatibility result card (its own item in the thread).
+enum MessageKind { text, image, voice, compat }
 
 /// A photo or voice note. [url] is short-lived and signed (private storage);
 /// [localPath] is set while the sender's copy is still uploading.
@@ -552,7 +558,11 @@ class ChatMessage {
     this.attachments = const [],
     this.containsPhone = false,
     this.seq,
+    this.compat,
   });
+
+  /// The result card when [kind] is [MessageKind.compat].
+  final CompatResult? compat;
   final String id;
   final String clientId; // idempotency key
 
@@ -584,12 +594,17 @@ class ChatMessage {
         attachments: attachments ?? this.attachments,
         containsPhone: containsPhone,
         seq: seq ?? this.seq,
+        compat: compat,
       );
 }
 
 /// One page of a thread, oldest → newest, plus the other person's positions.
 class MessagePage {
-  const MessagePage({required this.items, required this.hasMore, this.lastSeq, this.peerDeliveredSeq, this.peerReadSeq});
+  const MessagePage({required this.items, required this.hasMore, this.lastSeq, this.peerDeliveredSeq, this.peerReadSeq, this.retentionExpiresAt, this.retentionDays = 30});
+
+  /// Consultation chats: when it will be deleted for both (null while the consultation runs).
+  final DateTime? retentionExpiresAt;
+  final int retentionDays;
   final List<ChatMessage> items;
   final bool hasMore;
   final int? lastSeq;
@@ -638,6 +653,16 @@ class ChatSearchResult {
 /// visible-conversation limit; unmatched and consultation chats do not.
 enum ConversationSection { inbox, archive, unmatched, consultation }
 
+/// Consultation chats in the counselor's (and client's) inbox.
+enum ConsultChatState { active, ended, archived }
+
+/// Whole days left before a deletion date, never negative ("today" = 0).
+int daysUntil(DateTime at, {DateTime? now}) {
+  final n = now ?? DateTime.now();
+  final h = at.difference(n).inHours;
+  return h <= 0 ? 0 : (h / 24).ceil();
+}
+
 enum RematchStatus { pending, accepted, declined }
 
 /// The single re-match request a conversation may ever carry.
@@ -649,9 +674,15 @@ class RematchInfo {
 
 /// The counselor side of a consultation chat.
 class CounselorChatInfo {
-  const CounselorChatInfo({required this.consultationId, required this.name, this.status, this.scheduledAt});
+  const CounselorChatInfo({required this.consultationId, required this.name, this.status, this.scheduledAt, this.counselorSide = false, this.service});
   final String consultationId;
+
+  /// The counselor's name (member side) or the client's first name (counselor side).
   final String name;
+
+  /// I am the counselor in this chat.
+  final bool counselorSide;
+  final ConsultationService? service;
   final ConsultationStatus? status;
   final DateTime? scheduledAt;
 }
@@ -671,8 +702,12 @@ class Conversation {
     this.expiringSoon = false,
     this.rematch,
     this.unmatchedByMe,
+    this.consultState = ConsultChatState.active,
   });
   final String id;
+
+  /// Consultation chats: running · ended (counting down to deletion) · archived by me.
+  final ConsultChatState consultState;
 
   /// Null for consultation chats (see [counselor]).
   final UserProfile? peer;
@@ -714,15 +749,18 @@ class Conversation {
         lastFromMe: fromMe,
         lastAt: at,
         unread: fromMe ? unread : unread + (countUnread ? 1 : 0),
-        expiresAt: expiresAt,
+        // a new message in an ended consultation chat restarts its 30 days
+        expiresAt: isConsultation && expiresAt != null ? at.add(const Duration(days: 30)) : expiresAt,
         expiringSoon: false,
         rematch: rematch,
         unmatchedByMe: unmatchedByMe,
+        consultState: consultState,
       );
 
   Conversation withUnread(int n) => Conversation(
         id: id, peer: peer, counselor: counselor, section: section, lastMessage: lastMessage, lastMessageKind: lastMessageKind,
         lastFromMe: lastFromMe, lastAt: lastAt, unread: n, expiresAt: expiresAt, expiringSoon: expiringSoon, rematch: rematch, unmatchedByMe: unmatchedByMe,
+        consultState: consultState,
       );
 }
 
@@ -1049,7 +1087,11 @@ class BlockedUser {
 
 /// Realtime chat event (WebSocket in production).
 class ChatEvent {
-  const ChatEvent._(this.conversationId, {this.message, this.typing, this.readClientId, this.movedTo, this.readByMe = false, this.readUpTo, this.deliveredUpTo, this.reconnected = false});
+  const ChatEvent._(this.conversationId, {this.message, this.typing, this.readClientId, this.movedTo, this.readByMe = false, this.readUpTo, this.deliveredUpTo, this.reconnected = false, this.compatChangedFlag = false});
+
+  /// Compatibility progress changed (the other person started or finished).
+  factory ChatEvent.compatChanged(String convId) => ChatEvent._(convId, compatChangedFlag: true);
+  final bool compatChangedFlag;
 
   /// The other person read / received my messages up to this position.
   factory ChatEvent.readUpToSeq(String convId, int seq) => ChatEvent._(convId, readUpTo: seq);
@@ -1309,4 +1351,93 @@ class StoreSubscription {
   final bool isApple;
   final String? manageUrl;
   bool get billingIssue => status == StoreSubStatus.gracePeriod || status == StoreSubStatus.billingRetry || status == StoreSubStatus.onHold;
+}
+
+
+// ───────────────────────── managed accounts ─────────────────────────
+
+/// Who runs an account on its owner's behalf.
+enum ManagedRelation { father, mother, brother, sister, grandparent, uncle, aunt, legalGuardian, relative, friend }
+
+/// Whose phone number signs in to a managed account.
+enum ManagedPhoneHolder { owner, manager }
+
+/// The arrangement as the account sees it (the manager's name never leaves the account).
+class AccountManagerInfo {
+  const AccountManagerInfo({required this.managerName, required this.relation, required this.phoneHolder, this.ownerConsentAt});
+  final String managerName;
+  final ManagedRelation relation;
+  final ManagedPhoneHolder phoneHolder;
+  final DateTime? ownerConsentAt;
+}
+
+// ───────────────────────── in-chat compatibility ─────────────────────────
+
+enum CompatDomain { finance, future, familyRoles, lifestyle, marriage }
+
+class CompatOptionItem {
+  const CompatOptionItem({required this.key, required this.label});
+  final String key;
+
+  /// {ar, en, fr}
+  final Map<String, String> label;
+  String text(String lang) => label[lang] ?? label['en'] ?? key;
+}
+
+class CompatQuestionItem {
+  const CompatQuestionItem({required this.id, required this.domain, required this.prompt, required this.options, this.answer});
+  final String id;
+  final CompatDomain domain;
+  final Map<String, String> prompt;
+  final List<CompatOptionItem> options;
+
+  /// My chosen option key (null = not answered yet).
+  final String? answer;
+  String text(String lang) => prompt[lang] ?? prompt['en'] ?? '';
+  CompatQuestionItem answered(String? key) => CompatQuestionItem(id: id, domain: domain, prompt: prompt, options: options, answer: key);
+}
+
+class CompatDomainScore {
+  const CompatDomainScore({required this.domain, required this.score});
+  final CompatDomain domain;
+  final int score;
+}
+
+/// Shown only after BOTH people answered everything (enforced by the server).
+class CompatResult {
+  const CompatResult({required this.score, required this.domains, this.agreed = 0, this.talkAbout = const []});
+  final int score;
+  final List<CompatDomainScore> domains;
+  final int agreed;
+
+  /// Topic keys worth talking about (biggest differences first).
+  final List<String> talkAbout;
+}
+
+enum CompatStatus { notStarted, inProgress, result }
+
+/// What I can see of the questionnaire in one chat: my questions and answers,
+/// the other person's progress (never their answers), and the result.
+class CompatState {
+  const CompatState({
+    required this.status,
+    this.enabled = true,
+    this.myAnswered = 0,
+    this.myTotal = 0,
+    this.peerStarted = false,
+    this.peerCompleted = false,
+    this.questions = const [],
+    this.result,
+  });
+  final CompatStatus status;
+  final bool enabled;
+  final int myAnswered;
+  final int myTotal;
+  final bool peerStarted;
+  final bool peerCompleted;
+  final List<CompatQuestionItem> questions;
+  final CompatResult? result;
+
+  bool get iCompleted => myTotal > 0 && myAnswered >= myTotal;
+  static const empty = CompatState(status: CompatStatus.notStarted);
 }

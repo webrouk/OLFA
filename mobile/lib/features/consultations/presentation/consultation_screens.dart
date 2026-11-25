@@ -18,6 +18,7 @@ import '../application/consultation_providers.dart';
 import '../data/consultations_repository_impl.dart';
 import '../domain/consultations_repository.dart';
 import 'consult_labels.dart';
+import 'payment_sheet.dart';
 import '../../profile/application/profile_controllers.dart';
 import '../../../shared/utils/text_fold.dart';
 import '../../../core/routing/navigation.dart';
@@ -540,18 +541,36 @@ class _BookConsultationScreenState extends ConsumerState<BookConsultationScreen>
     setState(() => _time = DateTime(d.year, d.month, d.day, tm.hour, tm.minute));
   }
 
-  Future<void> _payNow(CounselorOffering o) async {
+  /// Payment happens in a bottom sheet over this page: nothing typed here is lost
+  /// if the payment fails or is cancelled, and "Try again" pays the same booking.
+  Future<void> _payNow(Counselor c, CounselorOffering o) async {
     final l = AppLocalizations.of(context);
     final router = GoRouter.of(context);
-    setState(() => _busy = true);
     final repo = ref.read(consultationsRepositoryProvider);
+    setState(() => _busy = true);
     try {
-      _intent ??= await repo.book(offeringId: o.id, note: _note.text, preferredTime: _slot == null ? _time : null, slot: _slot);
-      await repo.pay(_intent!);
-      ref.invalidate(myConsultationsProvider);
+      final outcome = await showPaymentSheet(
+        context,
+        summary: PaySummary(
+          counselorName: c.name,
+          kind: c.kind,
+          details: '${serviceLabel(l, o.service)} · ${languageName(context, o.language)} · ${l.minutesShort(o.durationMinutes)}',
+          when: _slot,
+          amountMinor: o.priceMinor,
+          currency: o.currency,
+        ),
+        existingBookingId: _intent?.consultationId,
+        createBooking: () async => _intent = await repo.book(offeringId: o.id, note: _note.text, preferredTime: _slot == null ? _time : null, slot: _slot),
+      );
       if (!mounted) return;
-      showToast(context, l.paymentDone);
-      router.pushReplacement(Routes.myConsultations);
+      switch (outcome) {
+        case PayDone():
+          router.pushReplacement(Routes.myConsultations);
+        case PayClosed():
+          break; // the booking (if created) stays until its payment window ends
+        case PayBookingFailed(:final failure):
+          throw failure;
+      }
     } on ServerFailure catch (e) when (e.code == 'review_required') {
       // Mandatory questionnaire first: open the pending review.
       final pending = await repo.pendingReviews().catchError((Object _) => const <PendingReview>[]);
@@ -674,11 +693,11 @@ class _BookConsultationScreenState extends ConsumerState<BookConsultationScreen>
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
                 child: PrimaryButton(
-                  label: l.payAndRequest(money(context, o.priceMinor, o.currency)),
+                  label: l.continueToPayment,
                   icon: Icons.lock_outline_rounded,
                   loading: _busy,
                   // a counselor with published hours is booked on one of them
-                  onPressed: _busy || (ref.watch(slotsProvider((widget.counselorId, o.id))).valueOrNull?.scheduled == true && _slot == null) ? null : () => _payNow(o),
+                  onPressed: _busy || (ref.watch(slotsProvider((widget.counselorId, o.id))).valueOrNull?.scheduled == true && _slot == null) ? null : () => _payNow(c, o),
                 ),
               ),
             ),
@@ -757,6 +776,27 @@ class MyConsultationsScreen extends ConsumerWidget {
                             }
                           },
                           child: Text(l.cancelBooking),
+                        ),
+                      // waiting for payment (card declined / form closed): finish it in the payment sheet
+                      if (k.status == ConsultationStatus.awaitingPayment && (k.expiresAt == null || k.expiresAt!.isAfter(DateTime.now())))
+                        PrimaryButton(
+                          label: l.payCompleteAction,
+                          icon: Icons.lock_outline_rounded,
+                          expand: false,
+                          onPressed: () async {
+                            final out = await showPaymentSheet(
+                              context,
+                              existingBookingId: k.id,
+                              summary: PaySummary(
+                                counselorName: k.counselorName,
+                                details: '${serviceLabel(l, k.service)} · ${languageName(context, k.language)} · ${l.minutesShort(k.durationMinutes)}',
+                                when: k.scheduledAt,
+                                amountMinor: k.priceMinor,
+                                currency: k.currency,
+                              ),
+                            );
+                            if (out is PayDone) ref.invalidate(myConsultationsProvider);
+                          },
                         ),
                       if (k.conversationId != null && (k.status == ConsultationStatus.confirmed || k.status == ConsultationStatus.completed))
                         PrimaryButton(label: l.openChat, icon: Icons.chat_bubble_outline_rounded, expand: false, onPressed: () => context.pushOnce(Routes.chatWith(k.conversationId!))),

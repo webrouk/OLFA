@@ -110,11 +110,13 @@ enum MatchStatus {
   @@map("match_status")
 }
 
+/// COMPAT = the compatibility result card (compat_results.message_id points to it)
 enum MessageType {
   TEXT
   SYSTEM
   IMAGE
   VOICE
+  COMPAT
 
   @@map("message_type")
 }
@@ -1606,4 +1608,121 @@ model SelfieChallenge {
 
   @@index([userId, createdAt(sort: Desc)], map: "selfie_challenges_user_idx")
   @@map("selfie_challenges")
+}
+
+// ───────────────────────── managed accounts ─────────────────────────
+
+enum ManagedRelation {
+  FATHER
+  MOTHER
+  BROTHER
+  SISTER
+  GRANDPARENT
+  UNCLE
+  AUNT
+  LEGAL_GUARDIAN
+  RELATIVE
+  FRIEND
+
+  @@map("managed_relation")
+}
+
+enum ManagedPhoneHolder {
+  OWNER
+  MANAGER
+
+  @@map("managed_phone_holder")
+}
+
+/// An account run on the owner's behalf (a parent, a relative, or someone the
+/// owner trusts). The profile stays the owner's; only the relation is public.
+model AccountManager {
+  userId         String             @id @map("user_id") @db.Uuid
+  managerName    String             @map("manager_name") @db.VarChar(60)
+  relation       ManagedRelation
+  phoneHolder    ManagedPhoneHolder @default(MANAGER) @map("phone_holder")
+  ownerConsentAt DateTime           @map("owner_consent_at") @db.Timestamptz
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime           @default(now()) @map("updated_at") @db.Timestamptz
+  revokedAt      DateTime?          @map("revoked_at") @db.Timestamptz
+  revokedBy      String?            @map("revoked_by") @db.VarChar(10)
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("account_managers")
+}
+
+// ───────────────────────── in-chat compatibility ─────────────────────────
+
+enum CompatDomain {
+  FINANCE
+  FUTURE
+  FAMILY_ROLES
+  LIFESTYLE
+  MARRIAGE
+
+  @@map("compat_domain")
+}
+
+enum CompatAudience {
+  ALL
+  MALE
+  FEMALE
+
+  @@map("compat_audience")
+}
+
+model CompatQuestion {
+  id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// answers are compared per topic (a men's and a women's version share one)
+  topic     String         @db.VarChar(40)
+  domain    CompatDomain
+  audience  CompatAudience @default(ALL)
+  prompt    Json
+  options   Json
+  weight    Int            @default(3) @db.SmallInt
+  scoring   String         @default("SCALE") @db.VarChar(5)
+  active    Boolean        @default(true)
+  sortOrder Int            @default(0) @map("sort_order")
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime       @default(now()) @map("updated_at") @db.Timestamptz
+  answers   CompatAnswer[]
+
+  @@unique([topic, audience])
+  @@map("compat_questions")
+}
+
+model CompatSession {
+  conversationId  String         @id @map("conversation_id") @db.Uuid
+  startedBy       String         @map("started_by") @db.Uuid
+  maleQuestions   String[]       @map("male_questions") @db.Uuid
+  femaleQuestions String[]       @map("female_questions") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  answers         CompatAnswer[]
+  result          CompatResult?
+
+  @@map("compat_sessions")
+}
+
+model CompatAnswer {
+  conversationId String         @map("conversation_id") @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  questionId     String         @map("question_id") @db.Uuid
+  optionKey      String         @map("option_key") @db.VarChar(20)
+  answeredAt     DateTime       @default(now()) @map("answered_at") @db.Timestamptz
+  session        CompatSession  @relation(fields: [conversationId], references: [conversationId], onDelete: Cascade)
+  question       CompatQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@id([conversationId, userId, questionId])
+  @@map("compat_answers")
+}
+
+model CompatResult {
+  conversationId String        @id @map("conversation_id") @db.Uuid
+  score          Int           @db.SmallInt
+  breakdown      Json
+  messageId      String?       @map("message_id") @db.Uuid
+  computedAt     DateTime      @default(now()) @map("computed_at") @db.Timestamptz
+  session        CompatSession @relation(fields: [conversationId], references: [conversationId], onDelete: Cascade)
+
+  @@map("compat_results")
 }

@@ -138,6 +138,15 @@ export function fromPgError(e: unknown): AppError | null {
     // discovery ads (migration 20261125160000): show_ads on a paid plan
     case 'P0060':
       return new AppError(ErrorCode.VALIDATION, 'paid plans never show ads');
+    // managed accounts & in-chat compatibility (migration 20261126090000)
+    case 'P0072':
+      return new AppError(ErrorCode.WRONG_ACCOUNT_TYPE, 'only member accounts can be managed');
+    case 'P0073':
+      return new AppError(ErrorCode.VALIDATION, 'invalid compatibility question');
+    case 'P0074':
+      return new AppError(ErrorCode.INVALID_STATE, 'answer not accepted');
+    case 'P0075':
+      return new AppError(ErrorCode.INVALID_STATE, 'both people must finish first');
     // escrow / scheduling / support (migration 20261124160000)
     case '23P01': // exclusion constraint: the counselor is already booked at that time
       return new AppError(ErrorCode.SLOT_TAKEN);

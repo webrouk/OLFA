@@ -7,6 +7,8 @@ import '../../core/localization/locale_provider.dart';
 import '../models/models.dart';
 import '../utils/phone_detect.dart';
 import '../utils/text_fold.dart';
+import 'demo_compat_bank.dart';
+import 'demo_compat_scoring.dart';
 
 /// In-memory stand-in for the OLFA REST API + realtime gateway, used during
 /// the UI phase (Phase 2). It enforces the same rules the real server will
@@ -309,10 +311,14 @@ class DemoBackend {
     // client side shows the counselor's name; the counselor desk shows the client's
     for (final k in [..._bookings, ..._desk].where((k) => k.conversationId != null)) {
       final msgs = _messages[k.conversationId] ?? const <ChatMessage>[];
+      final exp = _consultExpiry(k, msgs);
       rows.add(Conversation(
         id: k.conversationId!,
         section: ConversationSection.consultation,
-        counselor: CounselorChatInfo(consultationId: k.id, name: k.clientName ?? k.counselorName, status: k.status, scheduledAt: k.scheduledAt),
+        counselor: CounselorChatInfo(consultationId: k.id, name: k.clientName ?? k.counselorName, status: k.status, scheduledAt: k.scheduledAt, counselorSide: k.clientName != null, service: k.service),
+        consultState: _consultArchived.contains(k.conversationId) ? ConsultChatState.archived : (exp != null ? ConsultChatState.ended : ConsultChatState.active),
+        expiresAt: exp,
+        expiringSoon: exp != null && daysUntil(exp) <= 3,
         lastMessage: msgs.isEmpty ? null : msgs.last.body,
         lastMessageKind: msgs.isEmpty ? MessageKind.text : msgs.last.kind,
         lastFromMe: msgs.isNotEmpty && msgs.last.fromMe,
@@ -336,6 +342,101 @@ class DemoBackend {
 
   Future<ConversationIndex> conversationIndex() => _call(_index);
 
+  // ───────────── in-chat compatibility (demo: the other person answers a few seconds after you) ─────────────
+
+  final _compat = <String, _DemoCompat>{};
+
+  Gender get _peerGender => myGender == Gender.male ? Gender.female : Gender.male;
+
+  CompatState _compatState(String id) {
+    final c = _compat[id];
+    if (c == null) return const CompatState(status: CompatStatus.notStarted);
+    final mine = demoQuestionsFor(myGender);
+    return CompatState(
+      status: c.result != null ? CompatStatus.result : CompatStatus.inProgress,
+      myAnswered: c.mine.length,
+      myTotal: mine.length,
+      peerStarted: c.peerStarted,
+      peerCompleted: c.peer.isNotEmpty,
+      result: c.result,
+      questions: [
+        for (final q in mine)
+          CompatQuestionItem(
+            id: q.id,
+            domain: q.domain,
+            prompt: q.prompt,
+            answer: c.mine[q.id],
+            options: [for (final o in q.options) CompatOptionItem(key: 'o${o.$1}', label: o.$2)],
+          ),
+      ],
+    );
+  }
+
+  Future<CompatState> compat(String id) => _call(() => _compatState(id), ms: 250);
+
+  Future<CompatState> startCompat(String id) => _call(() {
+        if (_conv[id]?.section == ConversationSection.unmatched) throw const ServerFailure('conversation_closed');
+        if (!_compat.containsKey(id)) {
+          final c = _compat[id] = _DemoCompat();
+          Timer(const Duration(seconds: 3), () {
+            c.peerStarted = true;
+            _events.add(ChatEvent.compatChanged(id));
+          });
+        }
+        return _compatState(id);
+      });
+
+  Future<CompatState> answerCompat(String id, Map<String, String> answers) => _call(() {
+        final c = _compat[id] ?? (throw const ServerFailure('invalid_state'));
+        if (c.result != null) throw const ServerFailure('invalid_state');
+        c.mine.addAll(answers);
+        final total = demoQuestionsFor(myGender).length;
+        if (c.mine.length >= total && c.peer.isEmpty && !c.finishing) {
+          c.finishing = true;
+          // the sample person finishes a little later, mostly agreeing
+          Timer(const Duration(seconds: 4), () {
+            final mineByTopic = {for (final q in demoCompatBank) if (c.mine[q.id] != null) q.topic: c.mine[q.id]!};
+            var i = 0;
+            for (final q in demoQuestionsFor(_peerGender)) {
+              final keys = [for (final o in q.options) 'o${o.$1}'];
+              final same = mineByTopic[q.topic];
+              final shift = (id.hashCode + i++) % 3; // 0,1: agree · 2: one step apart
+              final at = same == null ? 0 : keys.indexOf(same).clamp(0, keys.length - 1);
+              c.peer[q.id] = keys[shift < 2 || keys.length < 2 ? at : (at + 1 < keys.length ? at + 1 : at - 1)];
+            }
+            c.result = scoreDemoCompat(c.mine, c.peer);
+            final card = ChatMessage(
+              id: 'compat-$id', clientId: 'compat-$id', conversationId: id, fromMe: false, body: '', sentAt: DateTime.now(),
+              status: MessageStatus.read, kind: MessageKind.compat, compat: c.result,
+            );
+            _messages.putIfAbsent(id, () => []).add(card);
+            _events
+              ..add(ChatEvent.newMessage(card))
+              ..add(ChatEvent.compatChanged(id));
+          });
+        }
+        return _compatState(id);
+      }, ms: 300);
+
+  // ───────────── consultation chat retention (same rule as the server) ─────────────
+
+  final _consultArchived = <String>{};
+  static const consultRetentionDays = 30;
+
+  /// Ended consultations: deleted 30 days after the end or the last message, whichever is later.
+  DateTime? _consultExpiry(Consultation k, List<ChatMessage> msgs) {
+    const ended = {ConsultationStatus.completed, ConsultationStatus.cancelled, ConsultationStatus.refunded, ConsultationStatus.declined, ConsultationStatus.expired};
+    if (!ended.contains(k.status)) return null;
+    final end = k.scheduledAt ?? k.createdAt;
+    final last = msgs.isEmpty ? end : msgs.last.sentAt;
+    return (last.isAfter(end) ? last : end).add(const Duration(days: consultRetentionDays));
+  }
+
+  DateTime? consultRetention(String conversationId) {
+    final k = [..._bookings, ..._desk].where((x) => x.conversationId == conversationId).firstOrNull;
+    return k == null ? null : _consultExpiry(k, _messages[conversationId] ?? const []);
+  }
+
   Future<Conversation> conversation(String id) => _call(() {
         final ix = _index();
         if (ix.locked.any((c) => c.id == id)) throw const EntitlementRequiredFailure('visibleConversations');
@@ -345,6 +446,11 @@ class DemoBackend {
   _DemoConv _state(String id) => _conv[id] ?? (throw const ServerFailure('not_found'));
 
   Future<void> setFolder(String id, ConversationSection folder) => _call(() {
+        if ([..._bookings, ..._desk].any((k) => k.conversationId == id)) {
+          folder == ConversationSection.archive ? _consultArchived.add(id) : _consultArchived.remove(id);
+          _events.add(ChatEvent.moved(id, ConversationSection.consultation));
+          return;
+        }
         final st = _state(id);
         if (st.section == ConversationSection.unmatched) throw const ServerFailure('conversation_closed');
         st
@@ -678,6 +784,14 @@ class DemoBackend {
         });
       }, ms: 1200);
 
+  Future<BookingIntent> retryPayment(String id) => _call(() {
+        final k = _bookings.firstWhere((b) => b.id == id, orElse: () => throw const ServerFailure('not_found'));
+        if (k.status != ConsultationStatus.awaitingPayment) throw const ServerFailure('invalid_state');
+        final exp = k.expiresAt ?? DateTime.now().add(const Duration(minutes: 30));
+        if (exp.isBefore(DateTime.now())) throw const ServerFailure('invalid_state');
+        return BookingIntent(consultationId: id, amountMinor: k.priceMinor, currency: k.currency, expiresAt: exp, provider: 'test');
+      });
+
   Future<List<Consultation>> myConsultations() => _call(() {
         _seedConsultations();
         return List.unmodifiable(_bookings);
@@ -725,6 +839,21 @@ class DemoBackend {
               priceMinor: price, currency: 'AED', status: ConsultationStatus.paid, createdAt: DateTime.now().subtract(const Duration(hours: 2)),
               note: ar ? 'نرغب في تحسين أسلوب الحوار بيننا.' : 'We would like to improve how we communicate.');
           _desk.addAll([d('dk1', ar ? 'عميل نموذجي ١' : 'Sample client 1', ConsultationService.marital, 60, 30000), d('dk2', ar ? 'عميل نموذجي ٢' : 'Sample client 2', ConsultationService.premarital, 45, 25000)]);
+          // earlier sessions: their chats count down to deletion (30 days after the end or the last message)
+          final now = DateTime.now();
+          for (final (id, name, days, svc) in [
+            ('dk3', ar ? 'عميلة نموذجية ٣' : 'Sample client 3', 26, ConsultationService.marital),
+            ('dk4', ar ? 'عميل نموذجي ٤' : 'Sample client 4', 2, ConsultationService.family),
+            ('dk5', ar ? 'عميلة نموذجية ٥' : 'Sample client 5', 12, ConsultationService.premarital),
+          ]) {
+            final at = now.subtract(Duration(days: days));
+            _desk.add(_with(d(id, name, svc, 60, 30000), status: ConsultationStatus.completed, conversationId: 'k-$id', scheduledAt: at));
+            _messages['k-$id'] = [
+              ChatMessage(id: 'm$id', clientId: 'm$id', conversationId: 'k-$id', fromMe: false, status: MessageStatus.read, sentAt: at.add(const Duration(hours: 2)),
+                  body: ar ? 'شكرًا على الجلسة، كانت مفيدة جدًا.' : 'Thank you for the session, it was very helpful.'),
+            ];
+          }
+          _consultArchived.add('k-dk5');
         }
         return List.unmodifiable(_desk);
       });
@@ -1126,6 +1255,14 @@ final demoBackendProvider = Provider<DemoBackend>((ref) {
 });
 
 /// Per-conversation lifecycle state kept by the demo server.
+class _DemoCompat {
+  final mine = <String, String>{};
+  final peer = <String, String>{};
+  bool peerStarted = false;
+  bool finishing = false;
+  CompatResult? result;
+}
+
 class _DemoConv {
   ConversationSection section = ConversationSection.inbox;
   DateTime anchor = DateTime.now();

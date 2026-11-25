@@ -18,6 +18,7 @@ import '../../../core/errors/failure.dart';
 import 'conversations_screen.dart' show OfflineBar, showConversationMenu;
 import '../../../shared/components/verification_ticks.dart';
 import 'chat_widgets.dart';
+import 'compat_widgets.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/routing/navigation.dart';
@@ -166,6 +167,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         actions: [
           if (conv != null && conv.isConsultation && conv.peer != null)
             OlfaIconButton(icon: Icons.more_horiz_rounded, tooltip: l.reportOrBlock, onPressed: () => showReportSheet(context, ref, conv.peer!)),
+          if (conv != null && !conv.isConsultation && conv.canWrite) _CompatAction(conversationId: widget.conversationId, peerName: conv.title),
           if (conv != null && !conv.isConsultation)
             OlfaIconButton(icon: Icons.more_horiz_rounded, tooltip: l.conversationMenu, onPressed: () => showConversationMenu(context, ref, conv)),
           const SizedBox(width: 6),
@@ -174,8 +176,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       body: Column(
         children: [
           if (!online) OfflineBar(text: l.offlineChat),
-          if (conv != null && conv.expiringSoon && conv.expiresAt != null)
-            _ExpiryBanner(days: conv.expiresAt!.difference(DateTime.now()).inDays.clamp(0, 99).toInt()),
+          if (conv != null && !conv.isConsultation && conv.expiringSoon && conv.expiresAt != null)
+            _ExpiryBanner(days: daysUntil(conv.expiresAt!).clamp(0, 99).toInt()),
+          // ended consultation: when the chat is deleted for both (a new message moves the date)
+          if (conv != null && conv.isConsultation && chat.valueOrNull?.deletesAt != null)
+            _RetentionBanner(at: chat.valueOrNull!.deletesAt!, retentionDays: chat.valueOrNull!.retentionDays),
+          if (conv != null && !conv.isConsultation && conv.canWrite) CompatStrip(conversationId: widget.conversationId, peerName: conv.title),
           Expanded(
             child: Stack(
               children: [
@@ -202,6 +208,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         final m = items[idx];
                         final older = idx + 1 < items.length ? items[idx + 1] : null;
                         final newDay = older == null || !DateUtils.isSameDay(older.sentAt, m.sentAt);
+                        // the compatibility result: its own card in the middle, not a bubble
+                        if (m.kind == MessageKind.compat) {
+                          return Column(key: ValueKey(m.clientId), children: [
+                            if (newDay) _SystemPill(text: DateFormat.yMMMd(Localizations.localeOf(context).languageCode).format(m.sentAt)),
+                            if (m.compat != null) CompatResultCard(result: m.compat!),
+                          ]);
+                        }
                         return Column(
                           key: ValueKey(m.clientId), // stable rows: no re-layout jumps when messages arrive
                           children: [
@@ -378,6 +391,57 @@ class _TypingBubbleState extends State<_TypingBubble> with SingleTickerProviderS
             }),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// App-bar entry to the compatibility questions; a dot when the other person
+/// finished and I haven't.
+class _CompatAction extends ConsumerWidget {
+  const _CompatAction({required this.conversationId, required this.peerName});
+  final String conversationId;
+  final String peerName;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
+    final s = ref.watch(compatControllerProvider(conversationId)).valueOrNull;
+    if (s != null && !s.enabled) return const SizedBox.shrink();
+    final nudge = s != null && s.peerCompleted && !s.iCompleted && s.status != CompatStatus.result;
+    return Stack(clipBehavior: Clip.none, children: [
+      OlfaIconButton(icon: Icons.join_inner_rounded, tooltip: l.compatShort, onPressed: () => showCompatSheet(context, conversationId: conversationId, peerName: peerName)),
+      if (nudge)
+        PositionedDirectional(
+          top: 10,
+          end: 10,
+          child: Container(width: 9, height: 9, decoration: BoxDecoration(color: OlfaColors.primary, shape: BoxShape.circle, border: Border.all(color: OlfaColors.white, width: 1.5))),
+        ),
+    ]);
+  }
+}
+
+/// Ended consultation: the date it is deleted for both people, and that a new
+/// message restarts the count.
+class _RetentionBanner extends StatelessWidget {
+  const _RetentionBanner({required this.at, required this.retentionDays});
+  final DateTime at;
+  final int retentionDays;
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final days = daysUntil(at);
+    final date = DateFormat.yMMMd(Localizations.localeOf(context).languageCode).format(at);
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        width: double.infinity,
+        color: days <= 3 ? OlfaColors.primaryTint() : OlfaColors.gray.withValues(alpha: 0.5),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(Icons.auto_delete_outlined, size: 18, color: days <= 3 ? OlfaColors.primary : OlfaColors.textMuted),
+          const SizedBox(width: 8),
+          Expanded(child: Text(l.consultDeletesBanner(days, date, retentionDays), style: context.type.bodySmall)),
+        ]),
       ),
     );
   }

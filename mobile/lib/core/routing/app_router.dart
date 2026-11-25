@@ -6,6 +6,7 @@ import '../../features/account/account_type.dart';
 import '../../features/authentication/presentation/auth_screens.dart';
 import '../../features/consultations/application/consultation_providers.dart';
 import '../../features/consultations/presentation/review_screen.dart';
+import '../../features/profile/presentation/account_management_screen.dart';
 import '../../features/profile/presentation/account_type_screen.dart';
 import '../../features/profile/presentation/professional_profile_screen.dart';
 import '../../features/wallet/presentation/wallet_screen.dart';
@@ -18,6 +19,7 @@ import '../../features/location/presentation/location_screen.dart';
 import '../../features/matching/presentation/matches_screen.dart';
 import '../../features/messaging/presentation/chat_screen.dart';
 import '../../features/messaging/presentation/conversations_screen.dart';
+import '../../features/messaging/presentation/counselor_inbox_screen.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screens.dart';
 import '../../features/payments/presentation/payment_history_screen.dart';
@@ -112,6 +114,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       _root(Routes.editProfile, (_) => const EditProfileScreen()),
       _root(Routes.plans, (_) => const PlansScreen()),
       _root(Routes.partnerPreferences, (_) => const EditPartnerPreferencesScreen()),
+      _root(Routes.accountManagement, (_) => const AccountManagementScreen()),
       _root(Routes.payments, (_) => const PaymentHistoryScreen()),
       _root(Routes.privacy, (_) => const PrivacyScreen()),
       _root(Routes.help, (_) => const HelpScreen()),
@@ -144,7 +147,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         branches: [
           StatefulShellBranch(routes: [_tab(0, Routes.counselorDesk, const CounselorDeskScreen())]),
           StatefulShellBranch(routes: [_tab(1, Routes.wallet, const WalletScreen())]),
-          StatefulShellBranch(routes: [_tab(2, Routes.proMessages, const ConversationsScreen())]),
+          StatefulShellBranch(routes: [_tab(2, Routes.proMessages, const CounselorInboxScreen())]),
           StatefulShellBranch(routes: [_tab(3, Routes.proProfile, const ProfessionalProfileScreen())]),
         ],
       ),

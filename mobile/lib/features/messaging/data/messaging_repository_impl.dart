@@ -78,11 +78,20 @@ class ApiMessagingRepository implements MessagingRepository {
         if (upTo != null && m['userId'] != await _me()) _events.add(ChatEvent.deliveredUpToSeq(m['conversationId'] as String, upTo));
       } catch (_) {}
     });
+    s.on('compat:updated', (data) {
+      final m = Map<String, dynamic>.from(data as Map);
+      _events.add(ChatEvent.compatChanged(m['conversationId'] as String));
+    });
     s.on('conversation:moved', (data) {
       final m = Map<String, dynamic>.from(data as Map);
       _events.add(ChatEvent.moved(m['conversationId'] as String, fromApiEnum(ConversationSection.values, m['section'], ConversationSection.inbox)));
     });
   }
+
+  /// The last list, reused for a few seconds: opening a chat from the list
+  /// doesn't download the whole list again.
+  ConversationIndex? _lastIndex;
+  DateTime? _lastIndexAt;
 
   @override
   Future<ConversationIndex> index() => guard(() async {
@@ -99,11 +108,15 @@ class ApiMessagingRepository implements MessagingRepository {
             visible.add(ApiMappers.conversation(j));
           }
         }
-        return ConversationIndex(visible: visible, locked: locked, visibleLimit: limit);
+        _lastIndexAt = DateTime.now();
+        return _lastIndex = ConversationIndex(visible: visible, locked: locked, visibleLimit: limit);
       });
 
   @override
   Future<Conversation> conversation(String id) async {
+    final fresh = _lastIndex != null && _lastIndexAt != null && DateTime.now().difference(_lastIndexAt!) < const Duration(seconds: 20);
+    final cached = fresh ? _lastIndex!.visible.where((c) => c.id == id).firstOrNull : null;
+    if (cached != null) return cached;
     final ix = await index();
     if (ix.locked.any((c) => c.id == id)) throw const EntitlementRequiredFailure('visibleConversations');
     return ix.visible.firstWhere((c) => c.id == id, orElse: () => throw const ServerFailure('not_found'));
@@ -137,8 +150,24 @@ class ApiMessagingRepository implements MessagingRepository {
           lastSeq: (d['lastSeq'] as num?)?.toInt(),
           peerDeliveredSeq: (d['peerDeliveredSeq'] as num?)?.toInt(),
           peerReadSeq: (d['peerReadSeq'] as num?)?.toInt(),
+          retentionExpiresAt: d['retention'] is Map ? DateTime.tryParse('${(d['retention'] as Map)['expiresAt']}')?.toLocal() : null,
+          retentionDays: d['retention'] is Map ? ((d['retention'] as Map)['retentionDays'] as num?)?.toInt() ?? 30 : 30,
         );
       });
+
+  @override
+  Future<CompatState> compat(String conversationId) => guard(() async =>
+      ApiMappers.compatState((await _api.dio.get<Map<String, dynamic>>('/conversations/$conversationId/compat')).data!));
+
+  @override
+  Future<CompatState> startCompat(String conversationId) => guard(() async =>
+      ApiMappers.compatState((await _api.dio.post<Map<String, dynamic>>('/conversations/$conversationId/compat/start')).data!));
+
+  @override
+  Future<CompatState> answerCompat(String conversationId, Map<String, String> answers) => guard(() async => ApiMappers.compatState((await _api.dio.put<Map<String, dynamic>>(
+        '/conversations/$conversationId/compat/answers',
+        data: {'answers': [for (final e in answers.entries) {'questionId': e.key, 'optionKey': e.value}]},
+      )).data!));
 
   @override
   void markDelivered(String conversationId, int upToSeq) {
@@ -260,8 +289,14 @@ class DemoMessagingRepository implements MessagingRepository {
   @override
   Future<MessagePage> page(String conversationId, {int? beforeSeq, int? afterSeq, DateTime? before}) async {
     final p = await _b.messages(conversationId, before: before);
-    return MessagePage(items: p.items, hasMore: p.hasMore);
+    return MessagePage(items: p.items, hasMore: p.hasMore, retentionExpiresAt: _b.consultRetention(conversationId));
   }
+  @override
+  Future<CompatState> compat(String conversationId) => _b.compat(conversationId);
+  @override
+  Future<CompatState> startCompat(String conversationId) => _b.startCompat(conversationId);
+  @override
+  Future<CompatState> answerCompat(String conversationId, Map<String, String> answers) => _b.answerCompat(conversationId, answers);
   @override
   void markDelivered(String conversationId, int upToSeq) {} // preview data has no positions
   @override

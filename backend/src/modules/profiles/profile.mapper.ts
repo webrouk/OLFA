@@ -9,6 +9,7 @@ export const profileInclude = {
   photos: { where: { deletedAt: null }, orderBy: { position: 'asc' } },
   verifications: { where: { revokedAt: null }, select: { type: true } },
   privacy: true,
+  accountManager: { select: { managerName: true, relation: true, phoneHolder: true, ownerConsentAt: true, revokedAt: true } },
 } satisfies Prisma.UserInclude;
 
 export type UserWithProfile = Prisma.UserGetPayload<{ include: typeof profileInclude }>;
@@ -73,6 +74,8 @@ export function toPublicProfile(u: UserWithProfile, cdn: string, extra: ViewCont
     compatibility: extra.compatibility ?? null,
     photosBlurred: blurred,
     underReview,
+    // "Managed by her father": the relation only — never the manager's name or contact
+    managedBy: u.accountManager && !u.accountManager.revokedAt ? { relation: u.accountManager.relation } : null,
     // reciprocal presence; never a precise last-seen time
     online: isSelf ? null : isOnlineVisible(extra.viewer ?? privacyOf(null), priv, u.lastActiveAt),
   };
@@ -88,6 +91,10 @@ export function toOwnProfile(u: UserWithProfile, cdn: string) {
     timezone: u.timezone,
     phone: u.phoneE164, // owner only
     frozenAt: u.frozenAt,
+    // who runs this account on the owner's behalf (owner / manager only)
+    manager: u.accountManager && !u.accountManager.revokedAt
+      ? { managerName: u.accountManager.managerName, relation: u.accountManager.relation, phoneHolder: u.accountManager.phoneHolder, ownerConsentAt: u.accountManager.ownerConsentAt }
+      : null,
     privacy: { ...privacyOf(u.privacy), showCity: u.profile?.showLocation ?? true },
     profile: base && {
       ...base,

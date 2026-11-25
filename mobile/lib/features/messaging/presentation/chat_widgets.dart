@@ -238,9 +238,9 @@ class _ChatComposerState extends ConsumerState<ChatComposer> {
 
   void _onHoldMove(LongPressMoveUpdateDetails d) {
     if (_voice != _Voice.holding) return;
-    final rtl = Directionality.of(context) == TextDirection.rtl;
-    // "toward the start": left in LTR, right in RTL
-    final toStart = rtl ? d.offsetFromOrigin.dx : -d.offsetFromOrigin.dx;
+    // The composer keeps send / mic on the right in every language, so
+    // "slide to cancel" is always toward the left (away from the button).
+    final toStart = -d.offsetFromOrigin.dx;
     setState(() {
       _dx = toStart.clamp(0, _cancelAt + 20).toDouble();
       _dy = (-d.offsetFromOrigin.dy).clamp(0, _lockAt + 20).toDouble();
@@ -298,13 +298,19 @@ class _ChatComposerState extends ConsumerState<ChatComposer> {
           ),
       ]),
     );
+    // Send / mic sit on the RIGHT of the text field in every language (Arabic
+    // included), attachments on the left: the row is laid out left-to-right
+    // while the field itself keeps the reading direction.
+    final reading = Directionality.of(context);
     return DecoratedBox(
       decoration: const BoxDecoration(color: OlfaColors.white, border: Border(top: BorderSide(color: OlfaColors.gray))),
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 8, 10, 8),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+          child: Directionality(
+           textDirection: TextDirection.ltr,
+           child: Column(mainAxisSize: MainAxisSize.min, children: [
             if (_photos.isNotEmpty || _preparing) _PhotoTray(photos: _photos, preparing: _preparing, onRemove: (i) => setState(() => _photos.removeAt(i))),
             switch (_voice) {
               _Voice.review => _VoiceReview(clip: _clip!, onDelete: _cancelVoice, onSend: _finishVoice),
@@ -318,7 +324,9 @@ class _ChatComposerState extends ConsumerState<ChatComposer> {
                         : Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
                             OlfaIconButton(icon: Icons.add_photo_alternate_outlined, tooltip: l.addPhotos, size: 44, onPressed: _preparing ? null : _pickSource),
                             Expanded(
-                              child: TextField(
+                              child: Directionality(
+                               textDirection: reading,
+                               child: TextField(
                                 controller: _input,
                                 minLines: 1,
                                 maxLines: 5,
@@ -334,20 +342,22 @@ class _ChatComposerState extends ConsumerState<ChatComposer> {
                                   focusedBorder: OutlineInputBorder(borderRadius: OlfaRadius.all(24), borderSide: const BorderSide(color: OlfaColors.primary, width: 1.5)),
                                 ),
                               ),
+                              ),
                             ),
                           ]),
                   ),
                   const SizedBox(width: 6),
                   if (canSend && _voice == _Voice.idle)
-                    // arrow_forward mirrors automatically in RTL.
-                    OlfaIconButton(icon: Icons.arrow_forward_rounded, tooltip: l.send, style: OlfaIconStyle.filled, circle: true, size: 48, onPressed: _send)
+                    // an upward arrow reads the same in both directions
+                    OlfaIconButton(icon: Icons.arrow_upward_rounded, tooltip: l.send, style: OlfaIconStyle.filled, circle: true, size: 48, onPressed: _send)
                   else
                     mic,
                 ]),
             },
             if (_input.text.length > 1800 && _voice == _Voice.idle)
-              Align(alignment: AlignmentDirectional.centerEnd, child: Padding(padding: const EdgeInsetsDirectional.only(end: 60, top: 2), child: Text('${_input.text.length}/2000', style: context.type.caption))),
+              Align(alignment: Alignment.centerRight, child: Padding(padding: const EdgeInsets.only(right: 60, top: 2), child: Text('${_input.text.length}/2000', style: context.type.caption))),
           ]),
+          ),
         ),
       ),
     );
@@ -376,7 +386,7 @@ class _HoldingBar extends StatelessWidget {
           Opacity(
             opacity: (1 - slide).clamp(0.2, 1.0).toDouble(),
             child: Row(children: [
-              const Icon(Icons.chevron_left_rounded, color: OlfaColors.textMuted), // mirrors in RTL
+              const Icon(Icons.chevron_left_rounded, color: OlfaColors.textMuted), // the composer is laid out left-to-right: always toward the left
               Text(l.slideToCancel, style: context.type.bodySmall.copyWith(color: OlfaColors.textMuted)),
             ]),
           ),
@@ -454,7 +464,7 @@ class _VoiceReviewState extends State<_VoiceReview> {
         ),
       ),
       const SizedBox(width: 6),
-      OlfaIconButton(icon: Icons.arrow_forward_rounded, tooltip: l.send, style: OlfaIconStyle.filled, circle: true, size: 48, onPressed: widget.onSend),
+      OlfaIconButton(icon: Icons.arrow_upward_rounded, tooltip: l.send, style: OlfaIconStyle.filled, circle: true, size: 48, onPressed: widget.onSend),
     ]);
   }
 }
@@ -537,7 +547,7 @@ class _RecordingBar extends StatelessWidget {
         Text(l.secondsLeft(left.inSeconds.clamp(0, 60).toInt()), style: context.type.caption),
         const SizedBox(width: 4),
         OlfaIconButton(icon: Icons.stop_circle_outlined, tooltip: l.stopAndListen, size: 44, onPressed: onStop),
-        OlfaIconButton(icon: Icons.arrow_forward_rounded, tooltip: l.send, style: OlfaIconStyle.filled, circle: true, size: 48, onPressed: onSend),
+        OlfaIconButton(icon: Icons.arrow_upward_rounded, tooltip: l.send, style: OlfaIconStyle.filled, circle: true, size: 48, onPressed: onSend),
       ]),
     );
   }

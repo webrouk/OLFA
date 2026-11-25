@@ -1680,5 +1680,220 @@
   "completeHighlighted": "Please complete the highlighted fields.",
   "verifiedFull": "Selfie and ID verified",
   "verifiedSelfieOnly": "Selfie verified · ID not yet verified",
-  "verifiedIdOnly": "ID verified · selfie not yet verified"
+  "verifiedIdOnly": "ID verified · selfie not yet verified",
+  "compatTitle": "Compatibility questions",
+  "compatShort": "Compatibility",
+  "compatIntro": "A few questions about money, the future, family roles, lifestyle and marriage. You each answer on your own; the result appears in this chat only when you both finish.",
+  "compatStart": "Start",
+  "compatContinue": "Continue",
+  "compatView": "View",
+  "compatMyProgress": "You: {answered}/{total}",
+  "@compatMyProgress": {
+    "placeholders": {
+      "answered": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "compatPeerNotStarted": "{name} hasn't started",
+  "@compatPeerNotStarted": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "compatPeerAnswering": "{name} is answering",
+  "@compatPeerAnswering": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "compatPeerDone": "{name} finished",
+  "@compatPeerDone": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "compatWaiting": "Done. The result appears in the chat when {name} finishes.",
+  "@compatWaiting": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "compatPrivate": "Your answers are never shown to the other person, only the shared result.",
+  "compatResultTitle": "Your compatibility",
+  "compatAgreed": "{count, plural, =0{No identical answers} =1{Same answer on 1 question} other{Same answer on {count} questions}}",
+  "@compatAgreed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "compatTalkAbout": "{count, plural, =1{1 topic worth talking about} other{{count} topics worth talking about}}",
+  "@compatTalkAbout": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "compatDomainFinance": "Money",
+  "compatDomainFuture": "Future plans",
+  "compatDomainFamily": "Family roles",
+  "compatDomainLifestyle": "Lifestyle",
+  "compatDomainMarriage": "Marriage expectations",
+  "compatResultPreview": "Compatibility result",
+  "compatOff": "Compatibility questions are not available right now.",
+  "compatQuestionOf": "Question {index} of {total}",
+  "@compatQuestionOf": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "consultDeletesBanner": "{days, plural, =0{This chat is deleted for both of you today.} =1{This chat is deleted for both of you tomorrow ({date}).} other{This chat is deleted for both of you on {date}, in {days} days.}} A new message restarts the {retention} days.",
+  "@consultDeletesBanner": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      },
+      "date": {
+        "type": "String"
+      },
+      "retention": {
+        "type": "int"
+      }
+    }
+  },
+  "consultDaysLeft": "{days, plural, =0{Deleted today} =1{Deleted tomorrow} other{Deleted in {days} days}}",
+  "@consultDaysLeft": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "consultActive": "Active",
+  "consultEnded": "Ended",
+  "consultArchived": "Archive",
+  "consultSearchHint": "Search by name or message",
+  "consultFilterStatus": "Session status",
+  "consultEmptyActive": "No active consultations",
+  "consultEmptyActiveBody": "Confirmed sessions appear here with their chat.",
+  "consultEmptyEnded": "No ended consultations",
+  "consultEmptyEndedBody": "After a session ends, its chat stays here for 30 days, then it is deleted for both sides.",
+  "consultEmptyArchive": "Nothing archived",
+  "consultEmptyArchiveBody": "Archive a consultation chat to keep your list tidy. Archived chats follow the same 30-day rule.",
+  "consultRetentionNote": "Consultation chats are deleted for both sides 30 days after the session ends or after the last message.",
+  "consultArchiveAction": "Archive",
+  "consultRestoreAction": "Move back",
+  "consultSessionOn": "Session {date}",
+  "@consultSessionOn": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "paySheetTitle": "Complete payment",
+  "payMethodTitle": "Payment method",
+  "payMethodCard": "Card, Apple Pay or Google Pay",
+  "payMethodCardSub": "Secure checkout. OLFA never sees your card number.",
+  "payNowAmount": "Pay {amount}",
+  "@payNowAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "payProcessing": "Processing your payment…",
+  "paySuccessTitle": "Payment received",
+  "paySuccessBody": "Your request has been sent. The counselor will confirm the time, and the chat will appear in Messages.",
+  "payFailedTitle": "Payment didn't go through",
+  "payCancelledTitle": "Payment cancelled",
+  "payKeptUntil": "Your booking and its time are kept until {time}. You can try again.",
+  "@payKeptUntil": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "payViewConsultations": "My consultations",
+  "payCompleteAction": "Complete payment",
+  "payWindowClosed": "The payment window has closed. Please book again.",
+  "continueToPayment": "Continue to payment",
+  "accountForTitle": "Who is this account for?",
+  "accountForMe": "For me",
+  "accountForMeSub": "I'll run my own profile.",
+  "accountForSomeone": "For a family member",
+  "accountForSomeoneSub": "A parent, sibling or trusted person creates and runs the account for its owner, with the owner's agreement.",
+  "managerSectionTitle": "About you, the manager",
+  "managerNameLabel": "Your name",
+  "managerRelationLabel": "Your relation to the account owner",
+  "managerPhoneQ": "Whose phone number signs in to this account?",
+  "managerPhoneOwner": "The owner's number",
+  "managerPhoneManager": "My number",
+  "managerConsent": "The account owner knows about this account and agrees that I manage it.",
+  "managerOwnerNote": "The profile, photos and details you add describe the owner, not you.",
+  "managerPublicNote": "Others only see your relation (for example \"Managed by: Father\"). Your name stays private.",
+  "managedBy": "Managed by: {relation}",
+  "@managedBy": {
+    "placeholders": {
+      "relation": {
+        "type": "String"
+      }
+    }
+  },
+  "managedByBody": "A family member runs this account on the owner's behalf. The profile describes the owner.",
+  "accountManagement": "Account management",
+  "accountManagementSelf": "You run this account yourself.",
+  "accountManagementAdd": "A family member manages it",
+  "managerRevoke": "Stop the management arrangement",
+  "managerRevokeBody": "The \"Managed by\" notice disappears from the profile at once. The account and its data stay as they are.",
+  "managerConsentRequired": "The owner's agreement is required.",
+  "relFather": "Father",
+  "relMother": "Mother",
+  "relBrother": "Brother",
+  "relSister": "Sister",
+  "relGrandparent": "Grandparent",
+  "relUncle": "Uncle",
+  "relAunt": "Aunt",
+  "relLegalGuardian": "Legal guardian",
+  "relRelative": "Another relative",
+  "relFriend": "Trusted friend",
+  "profileSectionBasics": "The basics",
+  "profileSectionAbout": "About",
+  "profileSectionBackground": "Background",
+  "profileSectionMarriage": "Marriage & family",
+  "profileSectionInterests": "Interests",
+  "profileSectionTrust": "Trust & verification",
+  "photoOf": "Photo {index} of {total}",
+  "@photoOf": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "profileSectionPhotos": "Photos"
 }

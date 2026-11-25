@@ -9,7 +9,7 @@ import { BullModule, InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { randomUUID } from 'node:crypto';
 import { containsPhoneNumber } from '../../domain/phone-detect';
-import { foldedLikePattern } from '../../domain/text-fold';
+import { foldForSearch, foldedLikePattern } from '../../domain/text-fold';
 import { IntegrityService } from '../integrity/integrity.module';
 import { MEDIA_QUEUE, MediaModule } from '../media/media.module';
 import { StorageService } from '../media/storage.service';
@@ -54,6 +54,10 @@ class SearchQuery {
 
 class ListQuery {
   @ApiPropertyOptional({ enum: ['INBOX', 'ARCHIVE', 'UNMATCHED', 'CONSULTATION'] }) @IsOptional() @IsIn(['INBOX', 'ARCHIVE', 'UNMATCHED', 'CONSULTATION']) section?: string;
+  /** Consultation chats only: running · ended (countdown to deletion) · archived by me. */
+  @ApiPropertyOptional({ enum: ['ACTIVE', 'ENDED', 'ARCHIVE'] }) @IsOptional() @IsIn(['ACTIVE', 'ENDED', 'ARCHIVE']) consult?: 'ACTIVE' | 'ENDED' | 'ARCHIVE';
+  /** Search by the other person's name or the last message (case and diacritics folded on the device too). */
+  @ApiPropertyOptional() @IsOptional() @IsString() @Length(1, 60) q?: string;
 }
 
 class RematchResponseDto {
@@ -122,8 +126,11 @@ export class MessagingService {
     let peerId: string;
     if (c.kind === 'CONSULTATION') {
       const k = c.consultation!;
-      const graceDays = await this.settings.get('consultations.chatOpenDaysAfterCompletion', 7);
-      const open = k.status === 'CONFIRMED' || (k.status === 'COMPLETED' && !!k.completedAt && Date.now() - k.completedAt.getTime() < graceDays * 86_400_000);
+      // Running consultations are open; ended ones stay open until the chat's
+      // deletion date (each message moves it — see olfa_consult_chat_expires_at).
+      const expiresAt = await this.consultChatExpiresAt(conversationId);
+      const open = k.status === 'PAID' || k.status === 'CONFIRMED' || (!!expiresAt && expiresAt.getTime() > Date.now());
+      if (!open && expiresAt && expiresAt.getTime() <= Date.now()) throw new AppError(ErrorCode.NOT_FOUND); // past its date: gone for both
       if (opts.forWrite && !open) throw new AppError(ErrorCode.CONVERSATION_CLOSED, 'Consultation chat is closed');
       peerId = k.clientId === userId ? k.counselorId : k.clientId;
     } else {
@@ -143,9 +150,15 @@ export class MessagingService {
     return { peerId, kind: c.kind, consultationId };
   }
 
+  /** Deletion date of an ended consultation chat (null while it runs). */
+  async consultChatExpiresAt(conversationId: string): Promise<Date | null> {
+    const [row] = await this.prisma.$queryRaw<{ at: Date | null }[]>`SELECT olfa_consult_chat_expires_at(${conversationId}::uuid) AS at`;
+    return row?.at ?? null;
+  }
+
   private async listRows(userId: string) {
     const ent = await this.entitlements.forUser(userId);
-    return this.prisma.$queryRaw<{ conversation_id: string; section: 'INBOX' | 'ARCHIVE' | 'UNMATCHED' | 'CONSULTATION'; list_position: number | null; locked: boolean; expires_at: Date | null; warn: boolean }[]>`
+    return this.prisma.$queryRaw<{ conversation_id: string; section: 'INBOX' | 'ARCHIVE' | 'UNMATCHED' | 'CONSULTATION'; list_position: number | null; locked: boolean; expires_at: Date | null; warn: boolean; folder: 'INBOX' | 'ARCHIVE'; consult_ended: boolean }[]>`
       SELECT * FROM olfa_conversation_list(${userId}::uuid, ${ent.visibleConversations}::int)`;
   }
 
@@ -153,8 +166,11 @@ export class MessagingService {
    * Sections: INBOX · ARCHIVE · UNMATCHED · CONSULTATION. Locked rows (over the
    * plan's limit) carry no peer identity and no message preview.
    */
-  async list(userId: string, section?: string) {
-    const rows = (await this.listRows(userId)).filter((r) => !section || r.section === section);
+  async list(userId: string, section?: string, consult?: 'ACTIVE' | 'ENDED' | 'ARCHIVE', q?: string) {
+    const consultState = (r: { folder: string; consult_ended: boolean }) => (r.folder === 'ARCHIVE' ? 'ARCHIVE' : r.consult_ended ? 'ENDED' : 'ACTIVE');
+    const rows = (await this.listRows(userId))
+      .filter((r) => !section || r.section === section)
+      .filter((r) => !consult || (r.section === 'CONSULTATION' && consultState(r) === consult));
     const viewer = privacyOf(await this.prisma.userPrivacySettings.findUnique({ where: { userId } }));
     const ids = rows.filter((r) => !r.locked).map((r) => r.conversation_id);
     const convs = await this.prisma.conversation.findMany({
@@ -165,7 +181,14 @@ export class MessagingService {
         lastMessageAt: true,
         rematch: { select: { requestedBy: true, status: true } },
         match: { select: { userAId: true, endedAt: true, endedBy: true, userA: { include: profileInclude }, userB: { include: profileInclude } } },
-        consultation: { select: { id: true, status: true, scheduledAt: true, clientId: true, counselor: { select: { userId: true, displayName: true, kind: true } } } },
+        consultation: {
+          select: {
+            id: true, status: true, scheduledAt: true, completedAt: true, service: true, clientId: true,
+            counselor: { select: { userId: true, displayName: true, kind: true } },
+            // the counselor sees the client's first name only
+            client: { select: { profile: { select: { displayName: true } } } },
+          },
+        },
         members: { where: { userId }, select: { lastReadAt: true } },
         lastSeq: true,
         messages: { where: { deletedAt: null }, orderBy: { seq: 'desc' }, take: 1, select: { body: true, type: true, senderId: true, createdAt: true } },
@@ -182,16 +205,25 @@ export class MessagingService {
       GROUP BY m.conversation_id`;
     const unreadOf = new Map(unreadRows.map((r) => [r.conversation_id, r.n]));
     const last = (c: (typeof convs)[number]) => (c.messages[0] ? { ...c.messages[0], mine: c.messages[0].senderId === userId } : null);
-    return Promise.all(
+    const out = await Promise.all(
       rows.map(async (r) => {
-        const base = { id: r.conversation_id, section: r.section, locked: r.locked, expiresAt: r.expires_at, expiringSoon: r.warn };
+        const base = { id: r.conversation_id, section: r.section, locked: r.locked, expiresAt: r.expires_at, expiringSoon: r.warn, folder: r.folder };
         const c = byId.get(r.conversation_id);
         if (r.locked || !c) return base;
         const unread = unreadOf.get(c.id) ?? 0;
         const rematch = c.rematch ? { status: c.rematch.status, byMe: c.rematch.requestedBy === userId } : null;
         if (c.kind === 'CONSULTATION') {
           const k = c.consultation!;
-          return { ...base, kind: c.kind, unread, lastMessage: last(c), lastMessageAt: c.lastMessageAt, lastSeq: Number(c.lastSeq), consultation: { id: k.id, status: k.status, scheduledAt: k.scheduledAt, counselor: k.clientId === userId ? k.counselor : null } };
+          const iAmClient = k.clientId === userId;
+          return {
+            ...base, kind: c.kind, unread, lastMessage: last(c), lastMessageAt: c.lastMessageAt, lastSeq: Number(c.lastSeq),
+            consultState: consultState(r),
+            consultation: {
+              id: k.id, status: k.status, scheduledAt: k.scheduledAt, completedAt: k.completedAt, service: k.service,
+              counselor: iAmClient ? k.counselor : null,
+              client: iAmClient ? null : { displayName: k.client.profile?.displayName ?? null },
+            },
+          };
         }
         const m = c.match!;
         const peer = m.userAId === userId ? m.userB : m.userA;
@@ -210,6 +242,14 @@ export class MessagingService {
         };
       }),
     );
+    if (!q) return out;
+    const needle = foldForSearch(q.trim());
+    return out.filter((row) => {
+      const r = row as { locked?: boolean; peer?: { displayName?: string } | null; consultation?: { counselor?: { displayName?: string } | null; client?: { displayName?: string | null } | null }; lastMessage?: { body?: string } | null };
+      if (r.locked) return false;
+      const hay = [r.peer?.displayName, r.consultation?.counselor?.displayName, r.consultation?.client?.displayName, r.lastMessage?.body].filter(Boolean).join(' ');
+      return foldForSearch(hay).includes(needle);
+    });
   }
 
   async setFolder(userId: string, conversationId: string, folder: 'INBOX' | 'ARCHIVE') {
@@ -257,7 +297,7 @@ export class MessagingService {
   }
 
   async page(userId: string, conversationId: string, q: PageQuery) {
-    const { peerId } = await this.assertCanChat(userId, conversationId).catch((e) => {
+    const { peerId, kind } = await this.assertCanChat(userId, conversationId).catch((e) => {
       if (e instanceof AppError && e.code === ErrorCode.BLOCKED) throw new AppError(ErrorCode.NOT_FOUND);
       throw e;
     });
@@ -300,13 +340,15 @@ export class MessagingService {
       })),
     );
     return {
-      items: out,
+      items: await this.attachCompat(out),
       hasMore,
       readReceipts: showRead,
       lastSeq: Number(conv.lastSeq),
       // positions of the other person: "delivered / read up to N" for my messages
       peerDeliveredSeq: Number(peer?.lastDeliveredSeq ?? 0),
       peerReadSeq: showRead ? Number(peer?.lastReadSeq ?? 0) : null,
+      // consultation chats: deletion date for the countdown (null while the consultation runs)
+      retention: kind === 'CONSULTATION' ? { expiresAt: await this.consultChatExpiresAt(conversationId), retentionDays: await this.settings.get('consultations.chatRetentionDays', 30) } : null,
     };
   }
 
@@ -402,12 +444,22 @@ export class MessagingService {
   }
 
   /** A message as the app receives it (same shape for a first send and an idempotent retry). */
-  private async messageOut(id: string) {
+  async messageOut(id: string) {
     const m = await this.prisma.message.findUniqueOrThrow({
       where: { id },
       select: { id: true, seq: true, clientMessageId: true, senderId: true, body: true, type: true, createdAt: true, containsPhone: true, attachments: { orderBy: { position: 'asc' }, select: attachmentSelect } },
     });
-    return { ...m, seq: Number(m.seq), attachments: await this.signAttachments(m.attachments) };
+    const [withCard] = await this.attachCompat([{ ...m, seq: Number(m.seq), attachments: await this.signAttachments(m.attachments) }]);
+    return withCard;
+  }
+
+  /** COMPAT messages carry their result card (score + per-domain scores; never anyone's answers). */
+  private async attachCompat<T extends { id: string; type: string }>(items: T[]): Promise<(T & { compat?: unknown })[]> {
+    const ids = items.filter((m) => m.type === 'COMPAT').map((m) => m.id);
+    if (!ids.length) return items;
+    const results = await this.prisma.compatResult.findMany({ where: { messageId: { in: ids } }, select: { messageId: true, score: true, breakdown: true, computedAt: true } });
+    const byMsg = new Map(results.map((r) => [r.messageId, { score: r.score, ...(r.breakdown as object), computedAt: r.computedAt }]));
+    return items.map((m) => (m.type === 'COMPAT' ? { ...m, compat: byMsg.get(m.id) ?? null } : m));
   }
 
   /** Voice notes per conversation: Free 10 · Plus 30 · Premium unlimited (consultation chats unlimited). */
@@ -553,6 +605,10 @@ export class ChatGateway implements OnGatewayConnection {
     events.on('support', (e: { userId: string; ticketId: string; message: unknown }) =>
       this.server?.to(`user:${e.userId}`).emit('support:message', { ticketId: e.ticketId, message: e.message }),
     );
+    // compatibility progress changed (started / someone finished): the chat refreshes only that strip
+    events.on('compat', (e: { userIds: string[]; conversationId: string }) =>
+      e.userIds.forEach((u) => this.server?.to(`user:${u}`).emit('compat:updated', { conversationId: e.conversationId })),
+    );
     // unmatch / re-match / archive moves: clients re-fetch the affected section
     events.on('conversation', (e: { userIds: string[]; conversationId: string; section: string }) =>
       e.userIds.forEach((u) => this.server?.to(`user:${u}`).emit('conversation:moved', { conversationId: e.conversationId, section: e.section })),
@@ -630,7 +686,7 @@ export class MessagingController {
   /** Sections: INBOX · ARCHIVE · UNMATCHED · CONSULTATION (omit for all). */
   @Get()
   list(@CurrentUser() u: AuthUser, @Query() q: ListQuery) {
-    return this.messaging.list(u.id, q.section);
+    return this.messaging.list(u.id, q.section, q.consult, q.q);
   }
 
   @Post(':id/archive') @HttpCode(204)
@@ -700,6 +756,6 @@ export class MessagingController {
   imports: [JwtModule.register({}), MediaModule, BullModule.registerQueue({ name: MEDIA_QUEUE })],
   controllers: [MessagingController],
   providers: [MessagingService, ChatGateway, ChatEvents],
-  exports: [ChatEvents],
+  exports: [ChatEvents, MessagingService],
 })
 export class MessagingModule {}

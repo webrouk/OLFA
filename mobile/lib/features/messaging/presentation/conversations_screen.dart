@@ -102,7 +102,8 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
               value: ix,
               onRetry: () => ref.invalidate(conversationIndexProvider),
               data: (ix) {
-                final consult = ix.section(ConversationSection.consultation);
+                // archived consultation chats live in the Archive screen
+                final consult = ix.section(ConversationSection.consultation).where((c) => c.consultState != ConsultChatState.archived).toList();
                 final inbox = ix.section(ConversationSection.inbox);
                 final locked = ix.lockedIn(ConversationSection.inbox);
                 final typed = _search.text.trim();
@@ -208,7 +209,11 @@ class _SectionScreen extends ConsumerWidget {
         value: ref.watch(conversationIndexProvider),
         onRetry: () => ref.invalidate(conversationIndexProvider),
         data: (ix) {
-          final rows = ix.section(section);
+          final rows = [
+            ...ix.section(section),
+            // archived consultation chats (same 30-day rule) sit with the archived member chats
+            if (section == ConversationSection.archive) ...ix.section(ConversationSection.consultation).where((c) => c.consultState == ConsultChatState.archived),
+          ];
           final locked = ix.lockedIn(section);
           if (rows.isEmpty && locked.isEmpty) return EmptyState(icon: icon, title: emptyTitle, body: emptyBody);
           return RefreshIndicator(
@@ -300,7 +305,9 @@ class ConversationTile extends ConsumerWidget {
     final t = context.type;
     final c = conversation;
     final unread = c.unread > 0 && !c.isUnmatched;
-    final days = c.expiresAt == null ? null : c.expiresAt!.difference(DateTime.now()).inDays.clamp(0, 99).toInt();
+    final days = c.expiresAt == null ? null : daysUntil(c.expiresAt!).clamp(0, 99).toInt();
+    // ended consultation chats always show their countdown; member chats only near the end
+    final showCountdown = days != null && (c.isConsultation || c.expiringSoon);
     final subtitle = switch (c.section) {
       ConversationSection.unmatched => switch (c.rematch?.status) {
           RematchStatus.pending => c.rematch!.byMe ? l.rematchWaiting(c.title) : l.rematchIncoming(c.title),
@@ -310,6 +317,7 @@ class ConversationTile extends ConsumerWidget {
       _ => (c.lastFromMe && c.lastMessage != null ? '${l.you}: ' : '') +
           switch (c.lastMessageKind) {
             MessageKind.voice => '🎙 ${l.voiceMessageShort}',
+            MessageKind.compat => l.compatResultPreview,
             MessageKind.image when (c.lastMessage ?? '').isEmpty => '📷 ${l.photoMessageShort}',
             MessageKind.image => '📷 ${c.lastMessage}',
             _ => (c.lastMessage ?? '').isEmpty ? (c.isConsultation ? l.consultationChatNote : l.saySalam) : c.lastMessage!,
@@ -317,7 +325,7 @@ class ConversationTile extends ConsumerWidget {
     };
     return InkWell(
       onTap: () => context.pushOnce(Routes.chatWith(c.id)),
-      onLongPress: c.isConsultation ? null : () => showConversationMenu(context, ref, c),
+      onLongPress: () => c.isConsultation ? showConsultChatMenu(context, ref, c) : showConversationMenu(context, ref, c),
       child: Opacity(
         opacity: c.isUnmatched ? 0.78 : 1,
         child: Padding(
@@ -352,9 +360,9 @@ class ConversationTile extends ConsumerWidget {
                       style: t.bodySmall.copyWith(color: unread ? OlfaColors.black : OlfaColors.textMuted, fontWeight: unread ? FontWeight.w500 : FontWeight.w400),
                     ),
                   ),
-                  if (c.expiringSoon && days != null) ...[
+                  if (showCountdown) ...[
                     const SizedBox(width: 8),
-                    OlfaTag(l.expiresShort(days), style: OlfaTagStyle.accent, icon: Icons.schedule_rounded),
+                    OlfaTag(c.isConsultation ? l.consultDaysLeft(days) : l.expiresShort(days), style: c.expiringSoon ? OlfaTagStyle.accent : OlfaTagStyle.neutral, icon: Icons.schedule_rounded),
                   ],
                   if (c.isUnmatched && c.rematch?.status == RematchStatus.pending) ...[
                     const SizedBox(width: 8),
@@ -597,4 +605,40 @@ class _Highlighted extends StatelessWidget {
       overflow: TextOverflow.ellipsis,
     );
   }
+}
+
+
+/// Archive / move back for a consultation chat (the 30-day rule is the same in both places).
+Future<void> showConsultChatMenu(BuildContext context, WidgetRef ref, Conversation c) async {
+  final l = AppLocalizations.of(context);
+  final actions = ref.read(conversationActionsProvider);
+  final archived = c.consultState == ConsultChatState.archived;
+  await showModalBottomSheet<void>(
+    context: context,
+    builder: (sheet) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Padding(padding: const EdgeInsets.fromLTRB(4, 0, 4, 12), child: Text(c.title, style: sheet.type.h3)),
+          TileGroup(children: [
+            OlfaListTile(
+              icon: archived ? Icons.unarchive_outlined : Icons.inventory_2_outlined,
+              title: archived ? l.consultRestoreAction : l.consultArchiveAction,
+              showChevron: false,
+              onTap: () async {
+                Navigator.of(sheet).pop();
+                try {
+                  await (archived ? actions.restore(c.id) : actions.archive(c.id));
+                  if (context.mounted) showToast(context, archived ? l.restored : l.archived);
+                } on Failure catch (e) {
+                  if (context.mounted) showToast(context, failureMessage(context, e));
+                }
+              },
+            ),
+          ]),
+          Padding(padding: const EdgeInsets.fromLTRB(4, 12, 4, 0), child: Text(l.consultRetentionNote, style: sheet.type.caption)),
+        ]),
+      ),
+    ),
+  );
 }

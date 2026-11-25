@@ -106,6 +106,20 @@ class ApiProfileRepository implements ProfileRepository, PhotoRepository {
   Future<void> savePreferences(ProfileDraft d) => guard(() => _dio.put<void>('/me/preferences', data: _prefsBody(d)));
 
   @override
+  Future<AccountManagerInfo?> manager() => guard(() async => ApiMappers.manager((await _dio.get<Object?>('/me/manager')).data));
+
+  @override
+  Future<AccountManagerInfo?> setManager(AccountManagerInfo m) => guard(() async => ApiMappers.manager((await _dio.put<Object?>('/me/manager', data: {
+            'managerName': m.managerName.trim(),
+            'relation': toApiEnum(m.relation),
+            'phoneHolder': toApiEnum(m.phoneHolder),
+            'ownerConsent': true,
+          })).data));
+
+  @override
+  Future<void> revokeManager() => guard(() => _dio.delete<void>('/me/manager'));
+
+  @override
   Future<VerificationInfo> verification() => guard(() async {
         final r = await _dio.get<Map<String, dynamic>>('/me/verification');
         final req = r.data!['request'] as Map?;
@@ -193,6 +207,25 @@ class DemoProfileRepository implements ProfileRepository, PhotoRepository {
   Future<void> savePreferences(ProfileDraft draft) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     _prefs = draft;
+  }
+
+  AccountManagerInfo? _manager;
+  @override
+  Future<AccountManagerInfo?> manager() async {
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    return _manager;
+  }
+
+  @override
+  Future<AccountManagerInfo?> setManager(AccountManagerInfo info) async {
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    return _manager = AccountManagerInfo(managerName: info.managerName.trim(), relation: info.relation, phoneHolder: info.phoneHolder, ownerConsentAt: DateTime.now());
+  }
+
+  @override
+  Future<void> revokeManager() async {
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    _manager = null;
   }
   @override
   Future<String> upload({required int position, required Uint8List bytes, required String mimeType}) async => 'demo-photo-${_seq++}';

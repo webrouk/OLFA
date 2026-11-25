@@ -17,6 +17,7 @@ import { IntegrityModule } from './modules/integrity/integrity.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
+import { CompatModule } from './modules/compat/compat.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ProfilesModule } from './modules/profiles/profiles.module';
 import { QuotasModule } from './modules/quotas/quotas.module';
@@ -65,6 +66,7 @@ export const bullConnection = {
     SupportModule,
     MatchingModule,
     MessagingModule,
+    CompatModule,
     ConsultationsModule,
     PaymentsModule,
     WalletModule,

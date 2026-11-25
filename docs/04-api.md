@@ -241,3 +241,27 @@ Errors `403 ACCOUNT_BANNED` / `ACCOUNT_SUSPENDED` carry `{permanent, until, reas
   - Unit ids must look like `ca-app-pub-<16 digits>/<10 digits>`, or be empty.
   - Switching ads on needs at least one unit id. The change is audited (`settings.ads`).
 - `PUT /v1/admin/plans/:code/entitlements` accepts `show_ads` for FREE only. A paid plan → 400, and the DB refuses it too (P0060).
+
+## Consultation chats: retention, counselor inbox (migration 20261126090000)
+- An ended consultation (completed, cancelled, declined, refunded or expired) keeps its chat for `consultations.chatRetentionDays` (30) after **the later of** the end and the last message. Any new message from either side restarts the 30 days. Then `olfa_run_retention()` deletes the conversation, its messages and attachments **for both people** (`deleted_consultation`); the consultation record itself stays (payments, reviews, disputes). Both get one warning `consultations.chatWarnBeforeDays` (3) days before.
+- The chat stays writable until that date (DB trigger `olfa_message_guard`); past it the API answers 404 and the list no longer shows it, even before the hourly sweep.
+- `GET /v1/conversations?section=CONSULTATION&consult=ACTIVE|ENDED|ARCHIVE&q=` — counselor inbox tabs and search (name or last message, Arabic spelling folded). Rows carry `consultState`, `folder`, `expiresAt` (deletion date) and, on the counselor side, the client's first name (`consultation.client.displayName`). Archive/restore use the existing `POST :id/archive|restore`.
+- `GET /v1/conversations/:id/messages` returns `retention: { expiresAt, retentionDays }` for consultation chats (null `expiresAt` while the consultation runs).
+
+## Payment retry
+- `POST /v1/consultations/:id/payment` — a new payment attempt for a booking still `AWAITING_PAYMENT` inside its window (declined card or closed payment sheet). Same booking, time and note; earlier unfinished attempts are marked FAILED. Response = the booking response (`payment.clientSecret`).
+
+## Managed accounts
+- `GET /v1/me/manager` → `{ managerName, relation, phoneHolder, ownerConsentAt, since } | null`
+- `PUT /v1/me/manager` `{ managerName, relation: FATHER|MOTHER|BROTHER|SISTER|GRANDPARENT|UNCLE|AUNT|LEGAL_GUARDIAN|RELATIVE|FRIEND, phoneHolder: OWNER|MANAGER, ownerConsent: true }` — members only; consent is required every time (DTO `Equals(true)` + `owner_consent_at NOT NULL`).
+- `DELETE /v1/me/manager` — ends the arrangement (row kept with `revoked_at`, audit-logged).
+- Public profiles carry `managedBy: { relation } | null` — never the manager's name. The owner's `/me` carries the full `manager`.
+- Admin: `GET /v1/admin/users/:id` includes `accountManager`; `POST /v1/admin/users/:id/manager/revoke { reason }` (users.manage).
+
+## In-chat compatibility questions
+- `GET /v1/conversations/:id/compat` → `{ enabled, status: NOT_STARTED|IN_PROGRESS|RESULT, me: {answered,total,completed}, peer: {started,completed}, questions: [{id, domain, prompt{ar,en,fr}, options[{key,label}], answer}], result }` — my questions and answers only; the other person's progress, never their answers.
+- `POST /v1/conversations/:id/compat/start` — either person; the question set (by gender) is fixed at this moment.
+- `PUT /v1/conversations/:id/compat/answers { answers: [{questionId, optionKey}] }` — saved as chosen, changeable until the result exists. When **both** have answered everything the server computes the score once and adds a `COMPAT` message to the thread (`message.compat = { score, domains[{domain,score,topics}], agreed, talkAbout[] }`); realtime `message:new` + `compat:updated`.
+- Scoring (`src/domain/compat.ts`): answers compared per topic; SCALE agreement = 1 − |a − b| / range, MATCH = same value; weighted mean, 0–100; per-domain scores.
+- DB guarantees: answers only from members, only for questions in their own set, only existing options, frozen once the result exists (P0074); no result row unless both finished (P0075); answered questions keep their options (P0073).
+- Admin (`settings.manage`): `GET|POST /v1/admin/compat/questions`, `PUT /v1/admin/compat/questions/:id`, `POST /v1/admin/compat/questions/:id/active {active}`, `PUT /v1/admin/compat/enabled {active}`; `GET /v1/admin/compat/stats` (users.read) — totals only.

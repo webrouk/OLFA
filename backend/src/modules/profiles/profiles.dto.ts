@@ -107,3 +107,13 @@ export class FreezeDto {
 export class DeleteAccountDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(40) reason?: string;
 }
+
+export const MANAGED_RELATIONS = ['FATHER', 'MOTHER', 'BROTHER', 'SISTER', 'GRANDPARENT', 'UNCLE', 'AUNT', 'LEGAL_GUARDIAN', 'RELATIVE', 'FRIEND'] as const;
+
+/** Running the account on the owner's behalf (a parent, a relative, a trusted person). */
+export class ManagerDto {
+  @ApiProperty({ minLength: 2, maxLength: 60 }) @IsString() @Length(2, 60) @Matches(NAME) managerName: string;
+  @ApiProperty({ enum: MANAGED_RELATIONS }) @IsIn(MANAGED_RELATIONS as unknown as string[]) relation: (typeof MANAGED_RELATIONS)[number];
+  @ApiProperty({ enum: ['OWNER', 'MANAGER'], description: "Whose phone number signs in to this account" }) @IsIn(['OWNER', 'MANAGER']) phoneHolder: 'OWNER' | 'MANAGER';
+  @ApiProperty({ description: 'The account owner agreed to the account being managed — required' }) @Equals(true) ownerConsent: true;
+}

@@ -7,7 +7,7 @@ import { AllowPending, AuthUser, CurrentUser, MembersOnly, Public, RateLimit } f
 import { AuditService, PrismaService, SettingsService } from '../../common/infra';
 import { ageOn, profileCompleteness } from '../../domain/security';
 import { profileInclude, toOwnProfile, toPublicProfile } from './profile.mapper';
-import { AccountTypeDto, CreateProfileDto, DeleteAccountDto, FreezeDto, LocaleDto, PreferencesDto, PrivacyDto, UpdateProfileDto, LocationDto } from './profiles.dto';
+import { AccountTypeDto, CreateProfileDto, DeleteAccountDto, FreezeDto, LocaleDto, ManagerDto, PreferencesDto, PrivacyDto, UpdateProfileDto, LocationDto } from './profiles.dto';
 import { privacyOf } from '../../domain/privacy';
 import { EntitlementsService } from '../quotas/quotas.module';
 import { defaultNationality, isQualifiedSect, isSectOf } from '../../domain/reference';
@@ -28,6 +28,31 @@ export class ProfilesService {
     if (!u.profile) return { id: u.id, accountType: u.accountType, status: u.status, profile: null, preferences: null };
     const prefs = await this.prisma.userPreference.findUnique({ where: { userId } });
     return { ...toOwnProfile(u, this.env.CDN_BASE_URL), accountType: u.accountType, preferences: prefs };
+  }
+
+  /** Who runs this account on the owner's behalf (null = the owner runs it). */
+  async manager(userId: string) {
+    const m = await this.prisma.accountManager.findUnique({ where: { userId } });
+    return m && !m.revokedAt ? { managerName: m.managerName, relation: m.relation, phoneHolder: m.phoneHolder, ownerConsentAt: m.ownerConsentAt, since: m.createdAt } : null;
+  }
+
+  /** Set or change the manager. The owner's consent is required every time (DTO + NOT NULL column). */
+  async setManager(userId: string, dto: ManagerDto) {
+    const before = await this.manager(userId);
+    const data = { managerName: dto.managerName.trim(), relation: dto.relation, phoneHolder: dto.phoneHolder, ownerConsentAt: new Date(), revokedAt: null, revokedBy: null };
+    try {
+      await this.prisma.accountManager.upsert({ where: { userId }, create: { userId, ...data }, update: data });
+    } catch (e) {
+      throw fromPgError(e) ?? e;
+    }
+    await this.audit.record({ actorType: 'USER', actorId: userId, action: before ? 'account.manager_changed' : 'account.manager_added', entityType: 'user', entityId: userId, before, after: { relation: dto.relation, phoneHolder: dto.phoneHolder } });
+    return this.manager(userId);
+  }
+
+  /** End the arrangement: the public notice disappears at once. The history row stays (audit). */
+  async revokeManager(userId: string) {
+    const r = await this.prisma.accountManager.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date(), revokedBy: 'ACCOUNT' } });
+    if (r.count) await this.audit.record({ actorType: 'USER', actorId: userId, action: 'account.manager_revoked', entityType: 'user', entityId: userId });
   }
 
   /**
@@ -353,6 +378,22 @@ export class ProfilesController {
   @AllowPending() @MembersOnly() @Put('me/preferences') @HttpCode(200)
   preferences(@CurrentUser() u: AuthUser, @Body() dto: PreferencesDto) {
     return this.profiles.setPreferences(u.id, dto);
+  }
+
+  /** Account managed on someone's behalf (parent, relative, trusted person) — members only. */
+  @AllowPending() @MembersOnly() @Get('me/manager')
+  getManager(@CurrentUser() u: AuthUser) {
+    return this.profiles.manager(u.id);
+  }
+
+  @AllowPending() @MembersOnly() @RateLimit(10, 86400) @Put('me/manager') @HttpCode(200)
+  setManager(@CurrentUser() u: AuthUser, @Body() dto: ManagerDto) {
+    return this.profiles.setManager(u.id, dto);
+  }
+
+  @AllowPending() @MembersOnly() @Delete('me/manager') @HttpCode(204)
+  revokeManager(@CurrentUser() u: AuthUser) {
+    return this.profiles.revokeManager(u.id);
   }
 
   @AllowPending() @Get('me/privacy')

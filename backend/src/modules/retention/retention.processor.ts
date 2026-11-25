@@ -7,13 +7,15 @@ import { StorageService } from '../media/storage.service';
 
 export const RETENTION_QUEUE = 'retention';
 
-type RetentionRow = { action: 'warned' | 'expired' | 'deleted_unmatched' | 'deleted_empty'; conversation_id: string; user_id: string | null };
+type RetentionRow = { action: 'warned' | 'expired' | 'deleted_unmatched' | 'deleted_consultation' | 'deleted_empty'; conversation_id: string; user_id: string | null };
 
 /**
  * Hourly sweep (idempotent):
  *  · inbox chats with no message for 15 days leave the list (warning at day 10)
  *  · archived chats are removed after 30 days (warning 7 days before)
  *  · unmatched chats are deleted 30 days after the unmatch without a re-match
+ *  · consultation chats are deleted for both 30 days after the consultation
+ *    ended or after the last message, whichever is later (warning 3 days before)
  *  · unpaid consultation bookings expire after their payment window
  * All windows come from app_settings; the rules live in olfa_run_retention().
  */

@@ -39,6 +39,7 @@ abstract final class Routes {
   static const editProfile = '/me/edit';
   static const plans = '/me/plans';
   static const partnerPreferences = '/me/partner-preferences'; // edit after sign-up (not a setup step)
+  static const accountManagement = '/me/account-management'; // managed on the owner's behalf (members)
   static const payments = '/me/payments';
   static const privacy = '/me/privacy';
   static const help = '/me/help';
@@ -78,7 +79,7 @@ abstract final class Routes {
   /// the server refuses them too).
   static bool memberOnly(String loc) =>
       loc.startsWith('/discover') || loc.startsWith('/likes') || loc.startsWith('/matches') || loc == myProfile || loc == conversations ||
-      loc == editProfile || loc == partnerPreferences || loc == plans || loc == preferences || loc == profileInfo || loc == archive || loc == unmatched ||
+      loc == editProfile || loc == partnerPreferences || loc == accountManagement || loc == plans || loc == preferences || loc == profileInfo || loc == archive || loc == unmatched ||
       loc.startsWith('/consultations');
 
   /// The professional workspace (members are sent to Discover).

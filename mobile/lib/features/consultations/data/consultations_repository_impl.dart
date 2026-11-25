@@ -76,6 +76,20 @@ class ApiConsultationsRepository implements ConsultationsRepository {
   }
 
   @override
+  Future<BookingIntent> retryPayment(String consultationId) => guard(() async {
+        final j = (await _dio.post<Map<String, dynamic>>('/consultations/$consultationId/payment')).data!;
+        final pay = Map<String, dynamic>.from(j['payment'] as Map);
+        return BookingIntent(
+          consultationId: j['id'] as String,
+          amountMinor: (j['amountMinor'] as num).toInt(),
+          currency: j['currency'] as String,
+          expiresAt: DateTime.parse(j['expiresAt'] as String).toLocal(),
+          provider: pay['provider'] as String,
+          clientSecret: pay['clientSecret'] as String?,
+        );
+      });
+
+  @override
   Future<List<Consultation>> mine() => guard(() async {
         final r = await _dio.get<List<dynamic>>('/consultations');
         return r.data!.map((j) => ApiMappers.consultation(Map<String, dynamic>.from(j as Map))).toList();
@@ -271,6 +285,8 @@ class DemoConsultationsRepository implements ConsultationsRepository {
   Future<BookingIntent> book({required String offeringId, String? note, DateTime? preferredTime, DateTime? slot}) => _b.book(offeringId, note);
   @override
   Future<void> pay(BookingIntent intent) => _b.payBooking(intent.consultationId);
+  @override
+  Future<BookingIntent> retryPayment(String consultationId) => _b.retryPayment(consultationId);
   @override
   Future<List<Consultation>> mine() => _b.myConsultations();
   @override

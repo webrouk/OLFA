@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -153,6 +154,40 @@ class _DetailsState extends ConsumerState<_Details> {
     return null;
   }
 
+  // Section jump bar: Photos · About · Basics · Background · Marriage · Interests · Trust
+  final _keys = {for (final k in _Section.values) k: GlobalKey()};
+  _Section _current = _Section.photos;
+
+  void _jump(_Section s) {
+    setState(() => _current = s);
+    final ctx = _keys[s]!.currentContext;
+    // land just under the pinned jump bar (status bar + 52 px)
+    final under = ((MediaQuery.paddingOf(context).top + 60) / MediaQuery.sizeOf(context).height).clamp(0.0, 0.4).toDouble();
+    if (ctx != null) Scrollable.ensureVisible(ctx, duration: motion(context, const Duration(milliseconds: 280)), curve: Curves.easeOut, alignmentPolicy: ScrollPositionAlignmentPolicy.explicit, alignment: s == _Section.photos ? 0 : under);
+  }
+
+  void _photo(int delta) {
+    final n = widget.profile.photos.length;
+    if (n < 2) return;
+    final next = (_page + delta).clamp(0, n - 1).toInt();
+    if (next != _page) _pager.animateToPage(next, duration: motion(context, const Duration(milliseconds: 220)), curve: Curves.easeOut);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _precacheAround(0);
+  }
+
+  /// The next photos are fetched before they are swiped to (no blank frame).
+  void _precacheAround(int i) {
+    final photos = widget.profile.photos;
+    for (final j in [i + 1, i + 2]) {
+      final u = j < photos.length ? photos[j].fullUrl : null;
+      if (u != null) precacheImage(CachedNetworkImageProvider(u), context).ignore();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -161,6 +196,30 @@ class _DetailsState extends ConsumerState<_Details> {
     final top = MediaQuery.paddingOf(context).top;
     final photos = p.photos;
     final actions = _actions(l);
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    final lang = langOf(context);
+    final sections = <_Section, String>{
+      _Section.photos: l.profileSectionPhotos,
+      _Section.about: l.profileSectionAbout,
+      _Section.basics: l.profileSectionBasics,
+      _Section.background: l.profileSectionBackground,
+      _Section.marriage: l.profileSectionMarriage,
+      if (p.interests.isNotEmpty) _Section.interests: l.profileSectionInterests,
+      _Section.trust: l.profileSectionTrust,
+    };
+
+    Widget card(_Section s, List<Widget> children) => Padding(
+          key: _keys[s],
+          padding: const EdgeInsets.only(top: 14),
+          child: OlfaCard(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(sections[s]!, style: t.bodyLarge.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 10),
+              ...children,
+            ]),
+          ),
+        );
 
     return Column(
       children: [
@@ -169,6 +228,7 @@ class _DetailsState extends ConsumerState<_Details> {
             slivers: [
               SliverToBoxAdapter(
                 child: AspectRatio(
+                  key: _keys[_Section.photos],
                   aspectRatio: 4 / 5,
                   child: Stack(
                     fit: StackFit.expand,
@@ -178,10 +238,19 @@ class _DetailsState extends ConsumerState<_Details> {
                       PageView.builder(
                         controller: _pager,
                         itemCount: photos.isEmpty ? 1 : photos.length,
-                        onPageChanged: (i) => setState(() => _page = i),
+                        onPageChanged: (i) {
+                          setState(() => _page = i);
+                          _precacheAround(i);
+                        },
                         // The card-size photo (already cached from Discovery) shows until the full one loads.
                         itemBuilder: (_, i) => OlfaImage(url: photos.isEmpty ? null : photos[i].fullUrl, placeholderUrl: photos.isEmpty ? null : photos[i].cardUrl),
                       ),
+                      // tap the sides to move between photos (like swiping)
+                      if (photos.length > 1)
+                        Row(children: [
+                          Expanded(child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: () => _photo(rtl ? 1 : -1))),
+                          Expanded(child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: () => _photo(rtl ? -1 : 1))),
+                        ]),
                       PositionedDirectional(
                         top: top + 6,
                         start: 12,
@@ -194,7 +263,7 @@ class _DetailsState extends ConsumerState<_Details> {
                           ],
                         ),
                       ),
-                      if (photos.length > 1)
+                      if (photos.length > 1) ...[
                         PositionedDirectional(
                           bottom: 14,
                           start: 16,
@@ -212,24 +281,78 @@ class _DetailsState extends ConsumerState<_Details> {
                             ],
                           ),
                         ),
+                        PositionedDirectional(
+                          bottom: 26,
+                          end: 16,
+                          child: Semantics(
+                            label: l.photoOf(_page + 1, photos.length),
+                            excludeSemantics: true,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                              decoration: BoxDecoration(color: OlfaColors.black.withValues(alpha: 0.55), borderRadius: OlfaRadius.all(10)),
+                              child: Text('${_page + 1}/${photos.length}', textDirection: TextDirection.ltr, style: const TextStyle(color: OlfaColors.white, fontSize: 12, fontWeight: FontWeight.w600, fontFamily: 'Montserrat')),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ),
+              // header: who, where, how compatible
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Flexible(child: Text(nameAge(context, p.name, p.age), style: t.h1)),
+                      const SizedBox(width: 8),
+                      VerificationMark(profile: p, size: 22),
+                    ]),
+                    const SizedBox(height: 4),
+                    Wrap(spacing: 10, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                      if (p.showLocation)
+                        Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.place_outlined, size: 16, color: OlfaColors.textMuted),
+                          const SizedBox(width: 4),
+                          Text('${p.city} · ${countryLabel(context, p.countryIso)}', style: t.caption),
+                          if (p.distanceKm != null) Text(' · ${l.kmAway(p.distanceKm!)}', style: t.caption),
+                        ]),
+                      if (p.online && !widget.own)
+                        Row(mainAxisSize: MainAxisSize.min, children: [
+                          Container(width: 8, height: 8, decoration: const BoxDecoration(color: OlfaColors.primary, shape: BoxShape.circle)),
+                          const SizedBox(width: 5),
+                          Text(l.onlineNow, style: t.caption),
+                        ]),
+                    ]),
+                    if (widget.complete) ...[
+                      const SizedBox(height: 12),
+                      Wrap(spacing: 8, runSpacing: 8, children: [
+                        if (!widget.own && p.compatibility > 0) OlfaTag(l.compatibility(p.compatibility), style: OlfaTagStyle.accent, icon: Icons.people_alt_outlined),
+                        OlfaTag(l.timelineLabel(p.timeline), icon: Icons.event_outlined),
+                      ]),
+                      if (p.managedBy != null) ...[
+                        const SizedBox(height: 12),
+                        InfoBanner(icon: Icons.family_restroom_rounded, text: '${l.managedBy(relationLabel(l, p.managedBy!))}. ${l.managedByBody}'),
+                      ],
+                    ],
+                  ]),
+                ),
+              ),
+              if (widget.complete)
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _JumpBar(
+                    top: top,
+                    items: sections,
+                    current: _current,
+                    onTap: _jump,
+                  ),
+                ),
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
                 sliver: SliverList.list(
                   children: [
-                    Row(
-                      children: [
-                        Flexible(child: Text(nameAge(context, p.name, p.age), style: t.h1)),
-                        ...[const SizedBox(width: 8), VerificationMark(profile: p, size: 22)],
-                      ],
-                    ),
-                    if (p.showLocation) ...[
-                      const SizedBox(height: 4),
-                      Row(children: [Icon(Icons.place_outlined, size: 16, color: OlfaColors.textMuted), const SizedBox(width: 4), Text('${p.city} · ${countryLabel(context, p.countryIso)}', style: t.caption)]),
-                    ],
                     if (!widget.complete) ...const [
                       SizedBox(height: 18),
                       OlfaSkeleton(width: 200, height: 26, radius: 13),
@@ -244,42 +367,73 @@ class _DetailsState extends ConsumerState<_Details> {
                       SizedBox(height: 26),
                       OlfaSkeleton(height: 120, radius: 14),
                     ] else ...[
-                    const SizedBox(height: 14),
-                    Wrap(spacing: 8, runSpacing: 8, children: [
-                      if (!widget.own) OlfaTag(l.compatibility(p.compatibility), style: OlfaTagStyle.accent, icon: Icons.people_alt_outlined),
-                      OlfaTag(l.timelineLabel(p.timeline)),
-                    ]),
-                    SectionLabel(l.about),
-                    Text(p.bio, style: t.bodyMedium),
-                    SectionLabel(l.basics),
-                    _KeyValueGrid(items: [
-                      (l.maritalStatus, l.maritalLabel(p.maritalStatus)),
-                      (l.education, l.educationLabel(p.education)),
-                      (l.occupation, occupationLabel(context, p.occupation)),
-                      if (p.heightCm != null) (l.height, '${p.heightCm} ${l.cm}'),
-                      if (p.weightKg != null) (l.weight, '${p.weightKg} ${l.kg}'),
-                      if (p.nationality != null) (l.nationality, nationalityByIso(p.nationality)?.label(langOf(context), female: p.gender == Gender.female) ?? p.nationality!),
-                      (l.marriageTimeline, l.timelineLabel(p.timeline)),
-                    ]),
-                    SectionLabel(l.interests),
-                    Wrap(spacing: 8, runSpacing: 8, children: [for (final k in p.interests) OlfaTag(interestLabel(context, k))]),
-                    SectionLabel(l.verification),
-                    TileGroup(children: [
-                      _VerifRow(icon: Icons.image_outlined, label: l.photosReviewed, ok: p.photosReviewed, pendingLabel: l.statusPending),
-                      _VerifRow(icon: Icons.camera_alt_outlined, label: l.realPerson, ok: p.livenessVerified, pendingLabel: '—'),
-                      _VerifRow(icon: Icons.badge_outlined, label: p.identityVerified ? l.identityVerified : l.identityNotVerified, ok: p.identityVerified, pendingLabel: '—'),
-                    ]),
-                    if (!widget.own) ...[
-                      const SizedBox(height: 14),
-                      Center(
-                        child: TextButton.icon(
-                          onPressed: () => showReportSheet(context, ref, p),
-                          icon: const Icon(Icons.flag_outlined, size: 18),
-                          label: Text(l.reportOrBlock),
-                          style: TextButton.styleFrom(foregroundColor: OlfaColors.textMuted),
+                      card(_Section.about, [Text(p.bio.isEmpty ? '—' : p.bio, style: t.bodyMedium)]),
+                      card(_Section.basics, [
+                        _KeyValueGrid(items: [
+                          (l.maritalStatus, l.maritalLabel(p.maritalStatus)),
+                          if (p.showLocation) (l.city, p.city),
+                          if (p.nationality != null) (l.nationality, nationalityByIso(p.nationality)?.label(lang, female: p.gender == Gender.female) ?? p.nationality!),
+                          if (p.heightCm != null) (l.height, '${p.heightCm} ${l.cm}'),
+                          if (p.weightKg != null) (l.weight, '${p.weightKg} ${l.kg}'),
+                        ]),
+                      ]),
+                      card(_Section.background, [
+                        _KeyValueGrid(items: [
+                          (l.education, l.educationLabel(p.education)),
+                          (l.occupation, occupationLabel(context, p.occupation)),
+                          if (p.religion != null) (l.religion, religionLabel(context, p.religion)),
+                          if (p.sect != null && sectLabel(context, p.religion, p.sect).isNotEmpty) (l.sect, sectLabel(context, p.religion, p.sect)),
+                        ]),
+                      ]),
+                      card(_Section.marriage, [
+                        _KeyValueGrid(items: [
+                          (l.marriageTimeline, l.timelineLabel(p.timeline)),
+                          (l.maritalStatus, l.maritalLabel(p.maritalStatus)),
+                        ]),
+                        if (!widget.own && p.compatibility > 0) ...[
+                          const SizedBox(height: 12),
+                          Row(children: [
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: OlfaRadius.all(4),
+                                child: LinearProgressIndicator(value: p.compatibility / 100, minHeight: 6, color: OlfaColors.primary, backgroundColor: OlfaColors.gray),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(l.compatibility(p.compatibility), style: t.bodySmall.copyWith(fontWeight: FontWeight.w600)),
+                          ]),
+                        ],
+                      ]),
+                      if (p.interests.isNotEmpty)
+                        card(_Section.interests, [
+                          Wrap(spacing: 8, runSpacing: 8, children: [for (final k in p.interests) OlfaTag(interestLabel(context, k))]),
+                        ]),
+                      card(_Section.trust, [
+                        TileGroup(children: [
+                          _VerifRow(icon: Icons.face_retouching_natural_outlined, label: l.realPerson, ok: p.livenessVerified, pendingLabel: '—'),
+                          _VerifRow(icon: Icons.badge_outlined, label: p.identityVerified ? l.identityVerified : l.identityNotVerified, ok: p.identityVerified, pendingLabel: '—'),
+                          _VerifRow(icon: Icons.image_outlined, label: l.photosReviewed, ok: p.photosReviewed, pendingLabel: l.statusPending),
+                        ]),
+                        if (p.managedBy != null) ...[
+                          const SizedBox(height: 10),
+                          Row(children: [
+                            const Icon(Icons.family_restroom_rounded, size: 18, color: OlfaColors.primary),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(l.managedBy(relationLabel(l, p.managedBy!)), style: t.bodySmall.copyWith(fontWeight: FontWeight.w600))),
+                          ]),
+                        ],
+                      ]),
+                      if (!widget.own) ...[
+                        const SizedBox(height: 14),
+                        Center(
+                          child: TextButton.icon(
+                            onPressed: () => showReportSheet(context, ref, p),
+                            icon: const Icon(Icons.flag_outlined, size: 18),
+                            label: Text(l.reportOrBlock),
+                            style: TextButton.styleFrom(foregroundColor: OlfaColors.textMuted),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
                     ],
                   ],
                 ),
@@ -295,6 +449,49 @@ class _DetailsState extends ConsumerState<_Details> {
       ],
     );
   }
+}
+
+enum _Section { photos, about, basics, background, marriage, interests, trust }
+
+/// Pinned chips under the header: jump to any part of the profile.
+class _JumpBar extends SliverPersistentHeaderDelegate {
+  _JumpBar({required this.top, required this.items, required this.current, required this.onTap});
+  final double top;
+  final Map<_Section, String> items;
+  final _Section current;
+  final ValueChanged<_Section> onTap;
+
+  static const double _h = 52;
+  @override
+  double get minExtent => _h + top;
+  @override
+  double get maxExtent => _h + top;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => Container(
+        color: OlfaColors.white,
+        padding: EdgeInsets.only(top: top),
+        alignment: Alignment.center,
+        child: Row(children: [
+          const SizedBox(width: 8),
+          OlfaIconButton(icon: Icons.arrow_back_rounded, tooltip: MaterialLocalizations.of(context).backButtonTooltip, onPressed: () => Navigator.of(context).maybePop()),
+          Expanded(
+           child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsetsDirectional.fromSTEB(4, 8, 20, 8),
+          children: [
+            for (final e in items.entries) ...[
+              OlfaChoice(label: e.value, selected: e.key == current, small: true, onTap: () => onTap(e.key)),
+              const SizedBox(width: 8),
+            ],
+          ],
+           ),
+          ),
+        ]),
+      );
+
+  @override
+  bool shouldRebuild(_JumpBar old) => old.current != current || old.items.length != items.length || old.top != top;
 }
 
 class _KeyValueGrid extends StatelessWidget {

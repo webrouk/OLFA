@@ -18,6 +18,7 @@ type UserDetail = Row & {
   reportsMade: number;
   openTickets: number;
   history: { action: string; actorType: string; reason: string | null; createdAt: string }[];
+  accountManager: { managerName: string; relation: string; phoneHolder: 'OWNER' | 'MANAGER'; ownerConsentAt: string; createdAt: string; revokedAt: string | null; revokedBy: string | null } | null;
 };
 
 const STATUSES = ['ACTIVE', 'PENDING_VERIFICATION', 'SUSPENDED', 'RESTRICTED', 'BANNED', 'REJECTED', 'DELETED'];
@@ -117,7 +118,7 @@ export function UserDetailPage({ id }: { id: string }) {
   const f = useFmt();
   const load = useLoad(() => GET<UserDetail>('users/' + id), [id]);
   const act = useAction();
-  const [dialog, setDialog] = useState<'ban' | 'suspend' | 'unrestrict' | 'lift' | null>(null);
+  const [dialog, setDialog] = useState<'ban' | 'suspend' | 'unrestrict' | 'lift' | 'manager' | null>(null);
   const [until, setUntil] = useState('');
 
   return (
@@ -163,6 +164,33 @@ export function UserDetailPage({ id }: { id: string }) {
               </dl>
               {u.profile?.bio && <p className="bio">{u.profile.bio}</p>}
               <p className="muted small">{t('u.privacyNote')}</p>
+              {u.accountManager && (
+                <>
+                  <h3>{t('mgr.title')}</h3>
+                  {u.accountManager.revokedAt ? (
+                    <p className="muted small">{t('mgr.revoked', { d: f.date(u.accountManager.revokedAt), by: t(('mgr.by.' + (u.accountManager.revokedBy ?? 'ACCOUNT')) as Key) })}</p>
+                  ) : (
+                    <>
+                      <dl className="kv">
+                        <dt>{t('mgr.relation')}</dt>
+                        <dd>{t(('rel.' + u.accountManager.relation) as Key)}</dd>
+                        <dt>{t('mgr.name')}</dt>
+                        <dd>{u.accountManager.managerName}</dd>
+                        <dt>{t('mgr.phone')}</dt>
+                        <dd>{t(u.accountManager.phoneHolder === 'OWNER' ? 'mgr.phoneOwner' : 'mgr.phoneManager')}</dd>
+                        <dt>{t('mgr.consent')}</dt>
+                        <dd>{f.date(u.accountManager.ownerConsentAt)}</dd>
+                      </dl>
+                      <p className="muted small">{t('mgr.publicNote')}</p>
+                      <div className="row end">
+                        <Btn kind="danger" onClick={() => setDialog('manager')}>
+                          {t('mgr.revoke')}
+                        </Btn>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
             </div>
             <div className="panel">
               <h2>{t('u.restrictions')}</h2>
@@ -236,6 +264,21 @@ export function UserDetailPage({ id }: { id: string }) {
                 onClose={() => setDialog(null)}
                 onSubmit={async (reason) => {
                   const ok = await act.run(() => POST(`users/${u.id}/unrestrict`, { reason }), t('saved'));
+                  if (ok) load.reload();
+                  return ok;
+                }}
+              />
+            )}
+            {dialog === 'manager' && (
+              <ReasonDialog
+                title={t('mgr.revoke')}
+                confirm={t('mgr.revoke')}
+                danger
+                min={3}
+                extra={<p className="muted small">{t('mgr.revokeHint')}</p>}
+                onClose={() => setDialog(null)}
+                onSubmit={async (reason) => {
+                  const ok = await act.run(() => POST(`users/${u.id}/manager/revoke`, { reason }), t('saved'));
                   if (ok) load.reload();
                   return ok;
                 }}

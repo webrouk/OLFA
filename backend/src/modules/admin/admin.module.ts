@@ -224,6 +224,8 @@ export class AdminService {
         suspendedUntil: true, restrictionReason: true, restrictedAt: true, deletionRequestedAt: true,
         profile: { select: { displayName: true, gender: true, birthDate: true, countryCode: true, city: true, maritalStatus: true, occupation: true, bio: true } },
         verifications: { where: { revokedAt: null }, select: { type: true, verifiedAt: true } },
+        // managed on someone's behalf: manager name and relation (admins see the name; the public sees the relation only)
+        accountManager: { select: { managerName: true, relation: true, phoneHolder: true, ownerConsentAt: true, createdAt: true, revokedAt: true, revokedBy: true } },
       },
     });
     if (!u) throw new AppError(ErrorCode.NOT_FOUND);
@@ -331,6 +333,13 @@ export class AdminService {
   }
 
   /** Ban (permanent) or suspend (temporary) — sessions are revoked, the app shows the closed-account screen. */
+  /** End a managed-account arrangement (e.g. the owner says they did not agree). */
+  async revokeManager(userId: string, reason: string, admin: AuthAdmin) {
+    const r = await this.prisma.accountManager.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date(), revokedBy: 'ADMIN' } });
+    if (!r.count) throw new AppError(ErrorCode.NOT_FOUND, 'no active manager');
+    await this.audit.record({ actorType: 'ADMIN', actorId: admin.id, action: 'account.manager_revoked', entityType: 'user', entityId: userId, reason });
+  }
+
   async restrict(userId: string, dto: RestrictDto, admin: AuthAdmin) {
     const until = dto.until ? new Date(dto.until) : null;
     if (dto.action === 'suspend' && until && until.getTime() <= Date.now()) throw new AppError(ErrorCode.VALIDATION, 'until must be in the future');
@@ -452,6 +461,11 @@ export class AdminController {
   @ApiBearerAuth() @RequirePermissions('users.manage') @Post('users/:id/unrestrict') @HttpCode(200)
   unrestrict(@Param('id') id: string, @Body() dto: UnrestrictDto, @CurrentAdmin() a: AuthAdmin) {
     return this.admin.unrestrict(id, dto, a);
+  }
+
+  @ApiBearerAuth() @RequirePermissions('users.manage') @Post('users/:id/manager/revoke') @HttpCode(204)
+  revokeManager(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UnrestrictDto, @CurrentAdmin() a: AuthAdmin) {
+    return this.admin.revokeManager(id, dto.reason, a);
   }
 
   @ApiBearerAuth() @RequirePermissions('settings.manage') @Get('matching/weights')

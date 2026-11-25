@@ -58,3 +58,17 @@ String shortTime(BuildContext context, DateTime t) {
   if (now.difference(t).inDays < 7) return DateFormat.E(locale).format(t);
   return DateFormat.yMd(locale).format(t);
 }
+
+/// Who runs a managed account ("Managed by: Father").
+String relationLabel(AppLocalizations l, ManagedRelation r) => switch (r) {
+      ManagedRelation.father => l.relFather,
+      ManagedRelation.mother => l.relMother,
+      ManagedRelation.brother => l.relBrother,
+      ManagedRelation.sister => l.relSister,
+      ManagedRelation.grandparent => l.relGrandparent,
+      ManagedRelation.uncle => l.relUncle,
+      ManagedRelation.aunt => l.relAunt,
+      ManagedRelation.legalGuardian => l.relLegalGuardian,
+      ManagedRelation.relative => l.relRelative,
+      ManagedRelation.friend => l.relFriend,
+    };

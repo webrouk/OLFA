@@ -43,6 +43,7 @@ abstract final class ApiMappers {
         photosReviewed: j['isPhotosReviewed'] as bool? ?? false,
         livenessVerified: j['isLivenessVerified'] as bool? ?? false,
         identityVerified: j['isIdentityVerified'] as bool? ?? false,
+        managedBy: j['managedBy'] is Map ? fromApiEnum(ManagedRelation.values, (j['managedBy'] as Map)['relation'], ManagedRelation.relative) : null,
         compatibility: (j['compatibility'] as num?)?.toInt() ?? 0,
         completeness: (j['completeness'] as num?)?.toInt() ?? 0,
         showLocation: j['showLocation'] as bool? ?? true,
@@ -128,7 +129,8 @@ abstract final class ApiMappers {
       body: j['body'] as String? ?? '',
       sentAt: DateTime.parse(j['createdAt'] as String).toLocal(),
       status: !mine ? MessageStatus.delivered : (read ? MessageStatus.read : (delivered ? MessageStatus.delivered : MessageStatus.sent)),
-      kind: switch (j['type']) { 'IMAGE' => MessageKind.image, 'VOICE' => MessageKind.voice, _ => MessageKind.text },
+      kind: switch (j['type']) { 'IMAGE' => MessageKind.image, 'VOICE' => MessageKind.voice, 'COMPAT' => MessageKind.compat, _ => MessageKind.text },
+      compat: j['compat'] is Map ? compatResult(Map<String, dynamic>.from(j['compat'] as Map)) : null,
       containsPhone: j['containsPhone'] == true,
       seq: (j['seq'] as num?)?.toInt(),
       attachments: (j['attachments'] as List? ?? const [])
@@ -162,11 +164,55 @@ abstract final class ApiMappers {
   static DateTime? _date(Object? v) => v is String ? DateTime.tryParse(v)?.toLocal() : null;
 
   /// One row of GET /conversations (unlocked).
+  static Map<String, String> _i18n(Object? j) => j is Map ? j.map((k, v) => MapEntry(k as String, v as String)) : const {};
+
+  static CompatResult compatResult(Map<String, dynamic> j) => CompatResult(
+        score: (j['score'] as num?)?.toInt() ?? 0,
+        agreed: (j['agreed'] as num?)?.toInt() ?? 0,
+        talkAbout: (j['talkAbout'] as List? ?? const []).cast<String>(),
+        domains: (j['domains'] as List? ?? const [])
+            .map((d) => Map<String, dynamic>.from(d as Map))
+            .map((d) => CompatDomainScore(domain: fromApiEnum(CompatDomain.values, d['domain'], CompatDomain.lifestyle), score: (d['score'] as num).toInt()))
+            .toList(),
+      );
+
+  static CompatState compatState(Map<String, dynamic> j) {
+    final me = j['me'] as Map?;
+    final peer = j['peer'] as Map?;
+    return CompatState(
+      status: switch (j['status']) { 'RESULT' => CompatStatus.result, 'IN_PROGRESS' => CompatStatus.inProgress, _ => CompatStatus.notStarted },
+      enabled: j['enabled'] != false,
+      myAnswered: (me?['answered'] as num?)?.toInt() ?? 0,
+      myTotal: (me?['total'] as num?)?.toInt() ?? 0,
+      peerStarted: peer?['started'] == true,
+      peerCompleted: peer?['completed'] == true,
+      result: j['result'] is Map ? compatResult(Map<String, dynamic>.from(j['result'] as Map)) : null,
+      questions: (j['questions'] as List? ?? const []).map((q) => Map<String, dynamic>.from(q as Map)).map((q) => CompatQuestionItem(
+            id: q['id'] as String,
+            domain: fromApiEnum(CompatDomain.values, q['domain'], CompatDomain.lifestyle),
+            prompt: _i18n(q['prompt']),
+            answer: q['answer'] as String?,
+            options: (q['options'] as List? ?? const []).map((o) => Map<String, dynamic>.from(o as Map)).map((o) => CompatOptionItem(key: o['key'] as String, label: _i18n(o['label']))).toList(),
+          )).toList(),
+    );
+  }
+
+  static AccountManagerInfo? manager(Object? j) {
+    if (j is! Map) return null;
+    return AccountManagerInfo(
+      managerName: j['managerName'] as String? ?? '',
+      relation: fromApiEnum(ManagedRelation.values, j['relation'], ManagedRelation.relative),
+      phoneHolder: fromApiEnum(ManagedPhoneHolder.values, j['phoneHolder'], ManagedPhoneHolder.manager),
+      ownerConsentAt: _date(j['ownerConsentAt']),
+    );
+  }
+
   static Conversation conversation(Map<String, dynamic> j) {
     final last = j['lastMessage'] as Map?;
     final rm = j['rematch'] as Map?;
     final k = j['consultation'] as Map?;
     final c = k?['counselor'] as Map?;
+    final client = k?['client'] as Map?;
     return Conversation(
       id: j['id'] as String,
       section: fromApiEnum(ConversationSection.values, j['section'], ConversationSection.inbox),
@@ -175,12 +221,16 @@ abstract final class ApiMappers {
           ? null
           : CounselorChatInfo(
               consultationId: k['id'] as String,
-              name: c?['displayName'] as String? ?? '',
+              // member side: the counselor's name · counselor side: the client's first name
+              name: (c?['displayName'] ?? client?['displayName']) as String? ?? '',
+              counselorSide: c == null && client != null,
+              service: k['service'] == null ? null : fromApiEnum(ConsultationService.values, k['service'], ConsultationService.marital),
               status: fromApiEnum(ConsultationStatus.values, k['status'], ConsultationStatus.confirmed),
               scheduledAt: _date(k['scheduledAt']),
             ),
+      consultState: fromApiEnum(ConsultChatState.values, j['consultState'] == 'ARCHIVE' ? 'ARCHIVED' : j['consultState'], ConsultChatState.active),
       lastMessage: last?['body'] as String?,
-      lastMessageKind: switch (last?['type']) { 'IMAGE' => MessageKind.image, 'VOICE' => MessageKind.voice, _ => MessageKind.text },
+      lastMessageKind: switch (last?['type']) { 'IMAGE' => MessageKind.image, 'VOICE' => MessageKind.voice, 'COMPAT' => MessageKind.compat, _ => MessageKind.text },
       lastFromMe: last?['mine'] == true,
       lastAt: _date(j['lastMessageAt']),
       unread: (j['unread'] as num?)?.toInt() ?? 0,

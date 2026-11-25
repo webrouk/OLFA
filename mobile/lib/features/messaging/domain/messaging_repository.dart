@@ -38,6 +38,14 @@ abstract interface class MessagingRepository {
   Future<void> requestRematch(String conversationId);
   Future<void> respondRematch(String conversationId, {required bool accept});
 
+  /// In-chat compatibility questions (match chats only).
+  Future<CompatState> compat(String conversationId);
+  Future<CompatState> startCompat(String conversationId);
+
+  /// Saves answers (questionId → optionKey). When both people have answered
+  /// everything, the server adds the result card to the chat.
+  Future<CompatState> answerCompat(String conversationId, Map<String, String> answers);
+
   /// Realtime events (WebSocket in production).
   Stream<ChatEvent> events();
 }

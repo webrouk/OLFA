@@ -41,6 +41,7 @@ export const NAV: { path: string; key: Key; perm?: string }[] = [
   { path: 'integrity', key: 'nav.integrity', perm: 'integrity.manage' },
   { path: 'withdrawals', key: 'nav.withdrawals', perm: 'payouts.manage' },
   { path: 'faq', key: 'nav.faq', perm: 'support.manage' },
+  { path: 'compat', key: 'nav.compat', perm: 'settings.manage' },
   { path: 'ads', key: 'nav.ads', perm: 'settings.manage' },
   { path: 'settings', key: 'nav.settings', perm: 'settings.manage' },
 ];

@@ -11,17 +11,23 @@ import '../domain/thread_order.dart';
 import '../domain/messaging_repository.dart';
 
 class ChatState {
-  const ChatState({this.messages = const [], this.hasMore = true, this.loadingMore = false, this.peerTyping = false});
+  const ChatState({this.messages = const [], this.hasMore = true, this.loadingMore = false, this.peerTyping = false, this.deletesAt, this.retentionDays = 30});
   final List<ChatMessage> messages; // oldest → newest
   final bool hasMore;
   final bool loadingMore;
   final bool peerTyping;
 
-  ChatState copyWith({List<ChatMessage>? messages, bool? hasMore, bool? loadingMore, bool? peerTyping}) => ChatState(
+  /// Ended consultation chats: deleted for both on this date (any new message moves it).
+  final DateTime? deletesAt;
+  final int retentionDays;
+
+  ChatState copyWith({List<ChatMessage>? messages, bool? hasMore, bool? loadingMore, bool? peerTyping, DateTime? deletesAt}) => ChatState(
         messages: messages ?? this.messages,
         hasMore: hasMore ?? this.hasMore,
         loadingMore: loadingMore ?? this.loadingMore,
         peerTyping: peerTyping ?? this.peerTyping,
+        deletesAt: deletesAt ?? this.deletesAt,
+        retentionDays: retentionDays,
       );
 }
 
@@ -59,11 +65,14 @@ class ChatController extends AutoDisposeFamilyAsyncNotifier<ChatState, String> {
   void _set(List<ChatMessage> messages, {bool? hasMore, bool? loadingMore, bool? peerTyping}) {
     final cur = state.valueOrNull;
     if (cur == null) return;
+    // a new message (either side) restarts an ended consultation chat's 30 days
+    final grew = messages.length > cur.messages.length && cur.deletesAt != null;
     state = AsyncData(cur.copyWith(
       messages: applyPeerPositions(messages, deliveredUpTo: _peerDelivered, readUpTo: _peerRead),
       hasMore: hasMore,
       loadingMore: loadingMore,
       peerTyping: peerTyping,
+      deletesAt: grew ? DateTime.now().add(Duration(days: cur.retentionDays)) : null,
     ));
   }
 
@@ -97,6 +106,8 @@ class ChatController extends AutoDisposeFamilyAsyncNotifier<ChatState, String> {
     return ChatState(
       messages: applyPeerPositions(mergeThread(page.items, waiting), deliveredUpTo: _peerDelivered, readUpTo: _peerRead),
       hasMore: page.hasMore,
+      deletesAt: page.retentionExpiresAt,
+      retentionDays: page.retentionDays,
     );
   }
 
@@ -288,3 +299,55 @@ final chatSearchProvider = FutureProvider.autoDispose.family<ChatSearchResult, S
   if (q.trim().length < 2) return ChatSearchResult.empty;
   return ref.watch(messagingRepositoryProvider).search(q.trim());
 });
+
+
+/// The compatibility questionnaire of one chat. Stays in step with the other
+/// person through realtime events; answering never reloads the conversation.
+class CompatController extends AutoDisposeFamilyAsyncNotifier<CompatState, String> {
+  late MessagingRepository _repo;
+
+  @override
+  Future<CompatState> build(String conversationId) async {
+    _repo = ref.watch(messagingRepositoryProvider);
+    final sub = _repo.events().where((e) => e.conversationId == conversationId && (e.compatChangedFlag || e.message?.kind == MessageKind.compat)).listen((_) => _refresh());
+    ref.onDispose(sub.cancel);
+    return _repo.compat(conversationId);
+  }
+
+  Future<void> _refresh() async {
+    try {
+      state = AsyncData(await _repo.compat(arg));
+    } catch (_) {
+      // keep what is shown; the next event or open retries
+    }
+  }
+
+  Future<void> start() async {
+    state = AsyncData(await _repo.startCompat(arg));
+  }
+
+  /// Optimistic: the choice shows at once; reverted if the server refuses it.
+  Future<void> answer(String questionId, String optionKey) async {
+    final cur = state.valueOrNull;
+    if (cur == null) return;
+    final wasNew = cur.questions.any((q) => q.id == questionId && q.answer == null);
+    state = AsyncData(CompatState(
+      status: cur.status,
+      enabled: cur.enabled,
+      myAnswered: cur.myAnswered + (wasNew ? 1 : 0),
+      myTotal: cur.myTotal,
+      peerStarted: cur.peerStarted,
+      peerCompleted: cur.peerCompleted,
+      result: cur.result,
+      questions: [for (final q in cur.questions) q.id == questionId ? q.answered(optionKey) : q],
+    ));
+    try {
+      state = AsyncData(await _repo.answerCompat(arg, {questionId: optionKey}));
+    } catch (_) {
+      state = AsyncData(cur);
+      rethrow;
+    }
+  }
+}
+
+final compatControllerProvider = AsyncNotifierProvider.autoDispose.family<CompatController, CompatState, String>(CompatController.new);

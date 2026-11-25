@@ -438,6 +438,24 @@ export class ConsultationsService {
     };
   }
 
+  /**
+   * Pay again for a booking still waiting for payment (the card was declined or
+   * the payment sheet was closed). Keeps the booking, its time and note; the
+   * earlier unfinished attempt is marked FAILED so only one can succeed.
+   */
+  async retryPayment(userId: string, id: string) {
+    const k = await this.prisma.consultation.findFirst({ where: { id, clientId: userId } });
+    if (!k) throw new AppError(ErrorCode.NOT_FOUND);
+    if (k.status !== 'AWAITING_PAYMENT') throw new AppError(ErrorCode.INVALID_STATE, 'This booking is not waiting for payment');
+    if (k.expiresAt.getTime() <= Date.now()) throw new AppError(ErrorCode.INVALID_STATE, 'The payment window has closed — book again');
+    await this.prisma.payment.updateMany({ where: { consultationId: id, userId, status: 'PENDING' }, data: { status: 'FAILED' } });
+    const intent = await this.gateway.createIntent({ amountMinor: k.priceMinor, currency: k.currency, consultationId: k.id, userId });
+    await this.prisma.payment.create({
+      data: { userId, consultationId: k.id, provider: 'WEB', providerPaymentId: intent.providerPaymentId, amountMinor: k.priceMinor, currency: k.currency, status: 'PENDING' },
+    });
+    return { id: k.id, status: k.status, expiresAt: k.expiresAt, amountMinor: k.priceMinor, currency: k.currency, payment: { provider: this.gateway.name, clientSecret: intent.clientSecret } };
+  }
+
   /** Development only: simulates the provider webhook for the test gateway. */
   async testPay(userId: string, id: string) {
     if (this.gateway.name !== 'test' || this.env.NODE_ENV === 'production') throw new AppError(ErrorCode.NOT_FOUND);
@@ -818,6 +836,11 @@ export class ConsultationsController {
   @Get('consultations/:id')
   one(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.svc.mineOne(u.id, id);
+  }
+  /** New payment attempt for a booking still waiting for payment (after a declined card or a closed sheet). */
+  @MembersOnly() @RateLimit(20, 3600) @Post('consultations/:id/payment') @HttpCode(200)
+  retryPayment(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.svc.retryPayment(u.id, id);
   }
   @MembersOnly() @Post('consultations/:id/cancel') @HttpCode(200)
   cancel(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {

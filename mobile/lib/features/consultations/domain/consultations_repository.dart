@@ -78,6 +78,10 @@ abstract interface class ConsultationsRepository {
 
   /// Completes payment for [intent] (payment sheet or, outside production, the test gateway).
   Future<void> pay(BookingIntent intent);
+
+  /// A new payment attempt for a booking still waiting for payment (after a
+  /// declined card or a closed sheet): same booking, time and note.
+  Future<BookingIntent> retryPayment(String consultationId);
   Future<List<Consultation>> mine();
   Future<void> cancel(String consultationId);
   /// Mandatory questionnaire after a completed consultation.

@@ -11,6 +11,7 @@ import '../../../core/theme/olfa_spacing.dart';
 import '../../../core/theme/olfa_typography.dart';
 import '../../../core/widgets/olfa_widgets.dart';
 import '../../../shared/services/demo_backend.dart';
+import '../../account/account_type.dart';
 import '../../authentication/data/auth_repository_impl.dart';
 import '../data/settings_repository.dart';
 import '../../../shared/components/labels.dart';
@@ -49,6 +50,9 @@ class SettingsScreen extends ConsumerWidget {
                   : (kNativeLanguageNames[lang] ?? 'English'),
               onTap: () => context.push(Routes.languageSettings),
             ),
+            // members only: an account run by a family member on the owner's behalf
+            if (!(ref.watch(accountTypeProvider)?.isProfessional ?? false))
+              OlfaListTile(icon: Icons.family_restroom_rounded, title: l.accountManagement, onTap: () => context.push(Routes.accountManagement)),
           ]),
           SectionLabel(l.pushNotifications),
           TileGroup(children: [
