@@ -12,6 +12,7 @@
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "worker": "node dist/worker.js",
+    "admin:create": "node dist/create-admin.js",
     "lint": "tsc --noEmit -p tsconfig.json",
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",

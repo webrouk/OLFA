@@ -129,6 +129,9 @@ export const ProfessionalsOnly = () => AccountTypes('PSYCHOLOGIST', 'FAMILY_COUN
 
 export const ADMIN_ROUTE = 'olfa:admin';
 export const PERMISSIONS = 'olfa:permissions';
+export const ADMIN_MFA_SETUP = 'olfa:adminMfaSetup';
+/** Admin route reachable before two-factor sign-in is set up (me, TOTP enrolment). */
+export const AdminMfaSetup = () => SetMetadata(ADMIN_MFA_SETUP, true);
 /** Admin route requiring every listed permission. */
 export const RequirePermissions = (...perms: string[]) =>
   applyDecorators(SetMetadata(ADMIN_ROUTE, true), SetMetadata(PERMISSIONS, perms));
@@ -174,7 +177,7 @@ export class AuthGuard implements CanActivate {
     const meta = <T>(k: string) => this.reflector.getAllAndOverride<T>(k, [ctx.getHandler(), ctx.getClass()]);
 
     if (meta<boolean>(ADMIN_ROUTE)) {
-      await this.authenticateAdmin(req, meta<string[]>(PERMISSIONS) ?? []);
+      await this.authenticateAdmin(req, meta<string[]>(PERMISSIONS) ?? [], meta<boolean>(ADMIN_MFA_SETUP) ?? false);
     } else if (!meta<boolean>(IS_PUBLIC)) {
       await this.authenticateUser(req, meta<boolean>(ALLOW_PENDING) ?? false);
       const types = meta<AccountTypeName[]>(ACCOUNT_TYPES);
@@ -235,14 +238,16 @@ export class AuthGuard implements CanActivate {
     }
   }
 
-  private async authenticateAdmin(req: OlfaRequest, required: string[]) {
-    let payload: { sub: string; typ: string };
+  private async authenticateAdmin(req: OlfaRequest, required: string[], mfaSetup = false) {
+    let payload: { sub: string; typ: string; mfa?: boolean };
     try {
       payload = await this.jwt.verifyAsync(this.bearer(req), { secret: this.env.ADMIN_JWT_SECRET });
     } catch {
       throw new AppError(ErrorCode.UNAUTHORIZED);
     }
     if (payload.typ !== 'admin') throw new AppError(ErrorCode.UNAUTHORIZED);
+    // Without a second factor an admin session can only finish setting it up.
+    if (this.env.ADMIN_REQUIRE_TOTP && !payload.mfa && !mfaSetup) throw new AppError(ErrorCode.FORBIDDEN, 'Two-factor sign-in is required', { totpSetupRequired: true });
     const admin = await this.prisma.adminUser.findUnique({
       where: { id: payload.sub },
       select: { isActive: true, roles: { select: { role: { select: { permissions: { select: { permission: { select: { key: true } } } } } } } } },

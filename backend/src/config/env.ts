@@ -12,6 +12,10 @@ const schema = z.object({
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().default(900),
   REFRESH_TTL_DAYS: z.coerce.number().int().default(60),
   ADMIN_JWT_SECRET: z.string().min(32),
+  /// base64 of 32 bytes — seals admin TOTP secrets. Required for the admin dashboard in production.
+  ADMIN_TOTP_KEY: z.string().refine((v) => Buffer.from(v, 'base64').length === 32, 'must be base64 of 32 bytes').optional(),
+  /// Admins must use two-factor sign-in (default on).
+  ADMIN_REQUIRE_TOTP: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
   OTP_HMAC_SECRET: z.string().min(32),
   IP_HASH_PEPPER: z.string().min(16),
 

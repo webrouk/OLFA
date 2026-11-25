@@ -797,6 +797,10 @@ model AdminUser {
   name                 String                @db.VarChar(80)
   passwordHash         String                @map("password_hash")
   totpSecretEnc        String?               @map("totp_secret_enc")
+  /// Two-factor sign-in confirmed (set after the first valid code).
+  totpConfirmedAt      DateTime?             @map("totp_confirmed_at") @db.Timestamptz
+  /// Last accepted 30-second step (replay protection).
+  totpLastStep         BigInt?               @map("totp_last_step")
   isActive             Boolean               @default(true) @map("is_active")
   lastLoginAt          DateTime?             @map("last_login_at") @db.Timestamptz
   createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz
