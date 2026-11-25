@@ -176,3 +176,7 @@ details pre { background: #f6f6f6; padding: 10px; border-radius: 10px; overflow:
   .cards { grid-template-columns: 1fr; }
   .table { display: block; overflow-x: auto; }
 }
+
+.avatar { width: 44px; height: 44px; border-radius: 50%; background: #f6eef0; color: var(--wine); display: grid; place-items: center; font-weight: 800; flex: none; }
+.stars { color: var(--wine); letter-spacing: 1px; }
+.table.compact td { padding: 7px 10px; font-size: 13.5px; }
