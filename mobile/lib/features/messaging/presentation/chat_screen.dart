@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/localization/bidi_text.dart';
 import '../../../core/localization/generated/app_localizations.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theme/olfa_colors.dart';
@@ -17,7 +18,10 @@ import '../../../core/errors/failure.dart';
 import 'conversations_screen.dart' show OfflineBar, showConversationMenu;
 import '../../../shared/components/verification_ticks.dart';
 import 'chat_widgets.dart';
+import 'compat_widgets.dart';
 import 'package:flutter/services.dart';
+
+import '../../../core/routing/navigation.dart';
 
 /// 19 — Private chat: realtime, paginated, optimistic, keyboard-aware.
 class ChatScreen extends ConsumerStatefulWidget {
@@ -38,6 +42,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       // reverse: true → offset 0 is the newest message.
       final far = _scroll.offset > 400;
       if (far != _showJump) setState(() => _showJump = far);
+      // back at the newest messages: drop pages scrolled through long ago (memory stays flat)
+      if (_scroll.offset < 80) ref.read(chatControllerProvider(widget.conversationId).notifier).trimToRecent();
       if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 200) {
         ref.read(chatControllerProvider(widget.conversationId).notifier).loadOlder();
       }
@@ -76,6 +82,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   showToast(context, l.copied);
                 },
               ),
+            // still on this phone (waiting / failed): it can be removed before it is sent
+            if (m.fromMe && (m.status == MessageStatus.queued || m.status == MessageStatus.failed))
+              OlfaListTile(
+                icon: Icons.delete_outline_rounded,
+                title: l.deleteUnsent,
+                danger: true,
+                showChevron: false,
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  ref.read(chatControllerProvider(widget.conversationId).notifier).discard(m.clientId);
+                },
+              ),
             if (!m.fromMe && conv?.peer != null)
               OlfaListTile(
                 icon: Icons.flag_outlined,
@@ -97,7 +115,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final t = context.type;
-    final conv = ref.watch(conversationProvider(widget.conversationId)).valueOrNull;
+    // The row the member tapped already has the name, photo and state: show them
+    // at once; the full conversation replaces it when it arrives.
+    final conv = ref.watch(conversationProvider(widget.conversationId)).valueOrNull ??
+        ref.watch(conversationIndexProvider.select((v) => v.valueOrNull?.visible.where((c) => c.id == widget.conversationId).firstOrNull));
     final chat = ref.watch(chatControllerProvider(widget.conversationId));
     final online = ref.watch(connectionProvider);
     final typing = chat.valueOrNull?.peerTyping ?? false;
@@ -111,7 +132,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         title: conv == null
             ? const OlfaSkeleton(width: 120, height: 14)
             : InkWell(
-                onTap: conv.peer == null ? null : () => context.push(Routes.profile(conv.peer!.id)),
+                onTap: conv.peer == null ? null : () => context.pushOnce(Routes.profile(conv.peer!.id), extra: conv.peer),
                 child: Row(children: [
                   if (conv.peer != null)
                     OlfaAvatar(size: 40, url: conv.peer!.mainPhoto?.thumbUrl, online: conv.peer!.online && conv.canWrite)
@@ -127,7 +148,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                       Row(mainAxisSize: MainAxisSize.min, children: [
                         Flexible(child: Text(conv.title, overflow: TextOverflow.ellipsis, style: t.bodyLarge.copyWith(fontWeight: FontWeight.w700))),
-                        if (conv.peer != null) ...[const SizedBox(width: 6), VerificationTicks(profile: conv.peer!, size: 15)],
+                        if (conv.peer != null) ...[const SizedBox(width: 6), VerificationMark(profile: conv.peer!, size: 15)],
                       ]),
                       Text(
                         conv.isUnmatched
@@ -146,6 +167,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         actions: [
           if (conv != null && conv.isConsultation && conv.peer != null)
             OlfaIconButton(icon: Icons.more_horiz_rounded, tooltip: l.reportOrBlock, onPressed: () => showReportSheet(context, ref, conv.peer!)),
+          if (conv != null && !conv.isConsultation && conv.canWrite) _CompatAction(conversationId: widget.conversationId, peerName: conv.title),
           if (conv != null && !conv.isConsultation)
             OlfaIconButton(icon: Icons.more_horiz_rounded, tooltip: l.conversationMenu, onPressed: () => showConversationMenu(context, ref, conv)),
           const SizedBox(width: 6),
@@ -154,8 +176,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       body: Column(
         children: [
           if (!online) OfflineBar(text: l.offlineChat),
-          if (conv != null && conv.expiringSoon && conv.expiresAt != null)
-            _ExpiryBanner(days: conv.expiresAt!.difference(DateTime.now()).inDays.clamp(0, 99).toInt()),
+          if (conv != null && !conv.isConsultation && conv.expiringSoon && conv.expiresAt != null)
+            _ExpiryBanner(days: daysUntil(conv.expiresAt!).clamp(0, 99).toInt()),
+          // ended consultation: when the chat is deleted for both (a new message moves the date)
+          if (conv != null && conv.isConsultation && chat.valueOrNull?.deletesAt != null)
+            _RetentionBanner(at: chat.valueOrNull!.deletesAt!, retentionDays: chat.valueOrNull!.retentionDays),
+          if (conv != null && !conv.isConsultation && conv.canWrite) CompatStrip(conversationId: widget.conversationId, peerName: conv.title),
           Expanded(
             child: Stack(
               children: [
@@ -182,7 +208,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         final m = items[idx];
                         final older = idx + 1 < items.length ? items[idx + 1] : null;
                         final newDay = older == null || !DateUtils.isSameDay(older.sentAt, m.sentAt);
-                        return Column(children: [
+                        // the compatibility result: its own card in the middle, not a bubble
+                        if (m.kind == MessageKind.compat) {
+                          return Column(key: ValueKey(m.clientId), children: [
+                            if (newDay) _SystemPill(text: DateFormat.yMMMd(Localizations.localeOf(context).languageCode).format(m.sentAt)),
+                            if (m.compat != null) CompatResultCard(result: m.compat!),
+                          ]);
+                        }
+                        return Column(
+                          key: ValueKey(m.clientId), // stable rows: no re-layout jumps when messages arrive
+                          children: [
                           if (newDay) _SystemPill(text: DateFormat.yMMMd(Localizations.localeOf(context).languageCode).format(m.sentAt)),
                           _Bubble(
                             message: m,
@@ -230,6 +265,7 @@ class _Bubble extends StatelessWidget {
     const r = Radius.circular(20);
     const tail = Radius.circular(6);
     final statusIcon = switch (message.status) {
+      MessageStatus.queued => Icons.cloud_off_rounded, // waiting for the connection, sent by itself
       MessageStatus.sending => Icons.schedule_rounded,
       MessageStatus.sent => Icons.check_rounded,
       MessageStatus.delivered => Icons.done_all_rounded,
@@ -259,7 +295,7 @@ class _Bubble extends StatelessWidget {
                   if (message.body.isNotEmpty)
                     Padding(
                       padding: message.kind == MessageKind.image ? const EdgeInsets.fromLTRB(10, 6, 10, 0) : EdgeInsets.zero,
-                      child: Align(alignment: AlignmentDirectional.centerStart, widthFactor: 1, child: Text(message.body, style: context.type.bodyMedium.copyWith(color: fg))),
+                      child: Align(alignment: AlignmentDirectional.centerStart, widthFactor: 1, child: Text(isolateNumbers(message.body), style: context.type.bodyMedium.copyWith(color: fg))),
                     ),
                   const SizedBox(height: 2),
                   Row(mainAxisSize: MainAxisSize.min, children: [
@@ -267,7 +303,14 @@ class _Bubble extends StatelessWidget {
                     if (me) ...[
                       const SizedBox(width: 4),
                       Semantics(
-                        label: message.status.name,
+                        label: switch (message.status) {
+                          MessageStatus.queued => l.msgQueued,
+                          MessageStatus.sending => l.sending,
+                          MessageStatus.sent => l.msgSent,
+                          MessageStatus.delivered => l.msgDelivered,
+                          MessageStatus.read => l.msgRead,
+                          MessageStatus.failed => l.notSentRetry,
+                        },
                         child: Icon(statusIcon, size: 14, color: message.status == MessageStatus.read ? OlfaColors.white : fg.withValues(alpha: 0.7)),
                       ),
                     ],
@@ -276,6 +319,11 @@ class _Bubble extends StatelessWidget {
               ),
             ),
             ),
+            if (me && message.status == MessageStatus.queued)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(l.msgQueuedNote, style: context.type.caption),
+              ),
             if (onRetry != null)
               TextButton.icon(
                 onPressed: onRetry,
@@ -343,6 +391,57 @@ class _TypingBubbleState extends State<_TypingBubble> with SingleTickerProviderS
             }),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// App-bar entry to the compatibility questions; a dot when the other person
+/// finished and I haven't.
+class _CompatAction extends ConsumerWidget {
+  const _CompatAction({required this.conversationId, required this.peerName});
+  final String conversationId;
+  final String peerName;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
+    final s = ref.watch(compatControllerProvider(conversationId)).valueOrNull;
+    if (s != null && !s.enabled) return const SizedBox.shrink();
+    final nudge = s != null && s.peerCompleted && !s.iCompleted && s.status != CompatStatus.result;
+    return Stack(clipBehavior: Clip.none, children: [
+      OlfaIconButton(icon: Icons.join_inner_rounded, tooltip: l.compatShort, onPressed: () => showCompatSheet(context, conversationId: conversationId, peerName: peerName)),
+      if (nudge)
+        PositionedDirectional(
+          top: 10,
+          end: 10,
+          child: Container(width: 9, height: 9, decoration: BoxDecoration(color: OlfaColors.primary, shape: BoxShape.circle, border: Border.all(color: OlfaColors.white, width: 1.5))),
+        ),
+    ]);
+  }
+}
+
+/// Ended consultation: the date it is deleted for both people, and that a new
+/// message restarts the count.
+class _RetentionBanner extends StatelessWidget {
+  const _RetentionBanner({required this.at, required this.retentionDays});
+  final DateTime at;
+  final int retentionDays;
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final days = daysUntil(at);
+    final date = DateFormat.yMMMd(Localizations.localeOf(context).languageCode).format(at);
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        width: double.infinity,
+        color: days <= 3 ? OlfaColors.primaryTint() : OlfaColors.gray.withValues(alpha: 0.5),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(Icons.auto_delete_outlined, size: 18, color: days <= 3 ? OlfaColors.primary : OlfaColors.textMuted),
+          const SizedBox(width: 8),
+          Expanded(child: Text(l.consultDeletesBanner(days, date, retentionDays), style: context.type.bodySmall)),
+        ]),
       ),
     );
   }

@@ -108,7 +108,8 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     final r = ref.read(authControllerProvider).result;
     // Returning users skip setup; new users continue to age confirmation.
     if (r != null && r.profileComplete) {
-      context.go(r.accountStatus == 'ACTIVE' ? Routes.discover : Routes.verification);
+      final pro = r.accountType?.isProfessional ?? false;
+      context.go(r.accountStatus == 'ACTIVE' ? (pro ? Routes.counselorDesk : Routes.discover) : Routes.verification);
     } else {
       context.push(Routes.age);
     }

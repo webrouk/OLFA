@@ -5,9 +5,11 @@
  * 2. Compatibility score 0–100 from admin-tunable weights.
  * 3. Ranking with a deterministic daily tie-break (fair rotation).
  *
- * Deliberately NOT used: religion, ethnicity, appearance, income, popularity
- * or any inferred trait. Only what users declared about themselves and what
- * they asked for in a partner.
+ * Deliberately NOT used in the SCORE: religion, ethnicity, appearance, income,
+ * popularity or any inferred trait. Religion and sect act only as a hard filter
+ * when a member explicitly lists the religions/sects they accept — what they
+ * declared about themselves and asked for in a partner, nothing inferred.
+ * "undisclosed" (or no answer) never passes a religion filter.
  */
 
 export type Gender = 'MALE' | 'FEMALE';
@@ -30,6 +32,8 @@ export interface MatchProfile {
   wantsChildren?: boolean | null;
   smoking?: boolean | null;
   willingToRelocate?: boolean | null;
+  religion?: string | null;
+  sect?: string | null;
 }
 
 export interface MatchPreferences {
@@ -42,6 +46,8 @@ export interface MatchPreferences {
   educationLevels: Education[]; // empty = any
   occupations: string[]; // soft preference
   wantsChildren?: boolean | null; // true = partner must not say "no children"
+  religions?: string[]; // empty = any
+  sects?: string[]; // "religion.sect", empty = any
 }
 
 export interface Member {
@@ -75,7 +81,8 @@ export type HardFilterReason =
   | 'country'
   | 'marital_status'
   | 'education'
-  | 'children';
+  | 'children'
+  | 'religion';
 
 const EDU_ORDER: Education[] = ['HIGH_SCHOOL', 'DIPLOMA', 'BACHELOR', 'MASTER', 'DOCTORATE'];
 const TIMELINE_ORDER: Timeline[] = ['WITHIN_6_MONTHS', 'WITHIN_1_YEAR', 'WITHIN_2_YEARS'];
@@ -91,7 +98,23 @@ export function acceptsOneWay(viewer: Member, other: Member): HardFilterReason |
   if (p.maritalStatuses.length > 0 && !p.maritalStatuses.includes(o.maritalStatus)) return 'marital_status';
   if (p.educationLevels.length > 0 && !p.educationLevels.includes(o.education)) return 'education';
   if (p.wantsChildren === true && o.wantsChildren === false) return 'children';
+  if (!religionAccepted(p.religions ?? [], p.sects ?? [], o.religion ?? null, o.sect ?? null)) return 'religion';
   return null;
+}
+
+/**
+ * Religion filter (preferences and search). A sect list narrows only its own
+ * religion: accepting "islam" with sects ["islam.sunni"] and "christianity"
+ * with no sects accepts Sunni Muslims and all Christians.
+ */
+export function religionAccepted(religions: string[], sects: string[], religion: string | null, sect: string | null): boolean {
+  if (religions.length === 0 && sects.length === 0) return true;
+  if (!religion || religion === 'undisclosed') return false;
+  const sectRels = new Set(sects.map((s) => s.split('.')[0]));
+  const relOk = religions.length === 0 ? sectRels.has(religion) : religions.includes(religion);
+  if (!relOk) return false;
+  if (!sectRels.has(religion)) return true; // no sect narrowing for this religion
+  return !!sect && sects.includes(`${religion}.${sect}`);
 }
 
 /** Mutual hard filter: both directions must pass. */

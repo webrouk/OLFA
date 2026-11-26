@@ -32,27 +32,66 @@ class ApiMessagingRepository implements MessagingRepository {
     if (token == null || _socket != null) return; // not signed in yet: connect on the next call
     final s = io.io('$apiBaseUrl/chat', io.OptionBuilder().setTransports(['websocket']).setAuth({'token': token}).enableReconnection().build());
     _socket = s;
-    s.onConnect((_) => _onConnection(true));
+    var connectedBefore = false;
+    s.onConnect((_) {
+      _onConnection(true);
+      // after a drop: open threads and the list fetch what they missed
+      if (connectedBefore) _events.add(ChatEvent.reconnectedEvent());
+      connectedBefore = true;
+    });
     s.onDisconnect((_) => _onConnection(false));
     s.on('message:new', (data) async {
-      final m = Map<String, dynamic>.from(data as Map);
-      final convId = m['conversationId'] as String;
-      _events.add(ChatEvent.newMessage(ApiMappers.message(Map<String, dynamic>.from(m['message'] as Map), convId, await _me())));
+      try {
+        final m = Map<String, dynamic>.from(data as Map);
+        final convId = m['conversationId'] as String;
+        final j = Map<String, dynamic>.from(m['message'] as Map)..putIfAbsent('receipts', () => const []);
+        final msg = ApiMappers.message(j, convId, await _me());
+        _events.add(ChatEvent.newMessage(msg));
+        // this phone received it: the sender sees "delivered"
+        if (!msg.fromMe && msg.seq != null) markDelivered(convId, msg.seq!);
+      } catch (_) {
+        // malformed event or /me unavailable: the next page load catches up
+      }
     });
     s.on('typing', (data) {
       final m = Map<String, dynamic>.from(data as Map);
       _events.add(ChatEvent.typingChanged(m['conversationId'] as String, m['on'] == true));
     });
-    s.on('message:read', (data) {
+    s.on('message:read', (data) async {
+      try {
+        final m = Map<String, dynamic>.from(data as Map);
+        final convId = m['conversationId'] as String;
+        // The server also sends my own reads to my devices: those clear my unread
+        // badges and must never mark my sent messages as "read".
+        final upTo = (m['upToSeq'] as num?)?.toInt();
+        if (m['readerId'] == await _me()) {
+          _events.add(ChatEvent.readByMeEvent(convId));
+        } else {
+          _events.add(upTo != null ? ChatEvent.readUpToSeq(convId, upTo) : ChatEvent.readReceipt(convId, '*'));
+        }
+      } catch (_) {}
+    });
+    s.on('message:delivered', (data) async {
+      try {
+        final m = Map<String, dynamic>.from(data as Map);
+        final upTo = (m['upToSeq'] as num?)?.toInt();
+        if (upTo != null && m['userId'] != await _me()) _events.add(ChatEvent.deliveredUpToSeq(m['conversationId'] as String, upTo));
+      } catch (_) {}
+    });
+    s.on('compat:updated', (data) {
       final m = Map<String, dynamic>.from(data as Map);
-      // Read receipts apply to all my messages in the conversation up to `at`.
-      _events.add(ChatEvent.readReceipt(m['conversationId'] as String, '*'));
+      _events.add(ChatEvent.compatChanged(m['conversationId'] as String));
     });
     s.on('conversation:moved', (data) {
       final m = Map<String, dynamic>.from(data as Map);
       _events.add(ChatEvent.moved(m['conversationId'] as String, fromApiEnum(ConversationSection.values, m['section'], ConversationSection.inbox)));
     });
   }
+
+  /// The last list, reused for a few seconds: opening a chat from the list
+  /// doesn't download the whole list again.
+  ConversationIndex? _lastIndex;
+  DateTime? _lastIndexAt;
 
   @override
   Future<ConversationIndex> index() => guard(() async {
@@ -69,11 +108,15 @@ class ApiMessagingRepository implements MessagingRepository {
             visible.add(ApiMappers.conversation(j));
           }
         }
-        return ConversationIndex(visible: visible, locked: locked, visibleLimit: limit);
+        _lastIndexAt = DateTime.now();
+        return _lastIndex = ConversationIndex(visible: visible, locked: locked, visibleLimit: limit);
       });
 
   @override
   Future<Conversation> conversation(String id) async {
+    final fresh = _lastIndex != null && _lastIndexAt != null && DateTime.now().difference(_lastIndexAt!) < const Duration(seconds: 20);
+    final cached = fresh ? _lastIndex!.visible.where((c) => c.id == id).firstOrNull : null;
+    if (cached != null) return cached;
     final ix = await index();
     if (ix.locked.any((c) => c.id == id)) throw const EntitlementRequiredFailure('visibleConversations');
     return ix.visible.firstWhere((c) => c.id == id, orElse: () => throw const ServerFailure('not_found'));
@@ -93,17 +136,48 @@ class ApiMessagingRepository implements MessagingRepository {
   Future<void> respondRematch(String conversationId, {required bool accept}) => _post('/conversations/$conversationId/rematch/respond', {'accept': accept});
 
   @override
-  Future<({List<ChatMessage> items, bool hasMore})> page(String conversationId, {DateTime? before}) => guard(() async {
+  Future<MessagePage> page(String conversationId, {int? beforeSeq, int? afterSeq, DateTime? before}) => guard(() async {
         unawaited(_connect());
         final me = await _me();
         final r = await _api.dio.get<Map<String, dynamic>>('/conversations/$conversationId/messages', queryParameters: {
-          if (before != null) 'before': before.toUtc().toIso8601String(),
+          if (afterSeq != null) 'afterSeq': afterSeq else if (beforeSeq != null) 'beforeSeq': beforeSeq else if (before != null) 'before': before.toUtc().toIso8601String(),
         });
-        final items = (r.data!['items'] as List).map((j) => ApiMappers.message(Map<String, dynamic>.from(j as Map), conversationId, me)).toList();
-        // Opening the thread marks it read.
-        unawaited(_api.dio.post<void>('/conversations/$conversationId/read').catchError((_) => null));
-        return (items: items, hasMore: r.data!['hasMore'] as bool);
+        final d = r.data!;
+        final items = (d['items'] as List).map((j) => ApiMappers.message(Map<String, dynamic>.from(j as Map), conversationId, me)).toList();
+        return MessagePage(
+          items: items,
+          hasMore: d['hasMore'] as bool,
+          lastSeq: (d['lastSeq'] as num?)?.toInt(),
+          peerDeliveredSeq: (d['peerDeliveredSeq'] as num?)?.toInt(),
+          peerReadSeq: (d['peerReadSeq'] as num?)?.toInt(),
+          retentionExpiresAt: d['retention'] is Map ? DateTime.tryParse('${(d['retention'] as Map)['expiresAt']}')?.toLocal() : null,
+          retentionDays: d['retention'] is Map ? ((d['retention'] as Map)['retentionDays'] as num?)?.toInt() ?? 30 : 30,
+        );
       });
+
+  @override
+  Future<CompatState> compat(String conversationId) => guard(() async =>
+      ApiMappers.compatState((await _api.dio.get<Map<String, dynamic>>('/conversations/$conversationId/compat')).data!));
+
+  @override
+  Future<CompatState> startCompat(String conversationId) => guard(() async =>
+      ApiMappers.compatState((await _api.dio.post<Map<String, dynamic>>('/conversations/$conversationId/compat/start')).data!));
+
+  @override
+  Future<CompatState> answerCompat(String conversationId, Map<String, String> answers) => guard(() async => ApiMappers.compatState((await _api.dio.put<Map<String, dynamic>>(
+        '/conversations/$conversationId/compat/answers',
+        data: {'answers': [for (final e in answers.entries) {'questionId': e.key, 'optionKey': e.value}]},
+      )).data!));
+
+  @override
+  void markDelivered(String conversationId, int upToSeq) {
+    final s = _socket;
+    if (s != null && s.connected) {
+      s.emit('delivered', {'conversationId': conversationId, 'upToSeq': upToSeq});
+    } else {
+      unawaited(_api.dio.post<void>('/conversations/$conversationId/delivered', data: {'upToSeq': upToSeq}).then((_) {}, onError: (Object _) {}));
+    }
+  }
 
   @override
   Future<ChatMessage> send(String conversationId, String clientId, String body, {OutgoingMedia? media}) => guard(() async {
@@ -169,6 +243,15 @@ class ApiMessagingRepository implements MessagingRepository {
       });
 
   @override
+  Future<void> markRead(String conversationId) async {
+    try {
+      await _api.dio.post<void>('/conversations/$conversationId/read');
+    } catch (_) {
+      // best-effort: the next open marks it read
+    }
+  }
+
+  @override
   void setTyping(String conversationId, bool on) => sendTyping(conversationId, on);
 
   @override
@@ -204,9 +287,22 @@ class DemoMessagingRepository implements MessagingRepository {
   @override
   Future<void> respondRematch(String conversationId, {required bool accept}) => _b.respondRematch(conversationId, accept);
   @override
-  Future<({List<ChatMessage> items, bool hasMore})> page(String conversationId, {DateTime? before}) => _b.messages(conversationId, before: before);
+  Future<MessagePage> page(String conversationId, {int? beforeSeq, int? afterSeq, DateTime? before}) async {
+    final p = await _b.messages(conversationId, before: before);
+    return MessagePage(items: p.items, hasMore: p.hasMore, retentionExpiresAt: _b.consultRetention(conversationId));
+  }
+  @override
+  Future<CompatState> compat(String conversationId) => _b.compat(conversationId);
+  @override
+  Future<CompatState> startCompat(String conversationId) => _b.startCompat(conversationId);
+  @override
+  Future<CompatState> answerCompat(String conversationId, Map<String, String> answers) => _b.answerCompat(conversationId, answers);
+  @override
+  void markDelivered(String conversationId, int upToSeq) {} // preview data has no positions
   @override
   Future<ChatMessage> send(String conversationId, String clientId, String body, {OutgoingMedia? media}) => _b.send(conversationId, clientId, body, media: media);
+  @override
+  Future<void> markRead(String conversationId) => _b.markRead(conversationId);
   @override
   void setTyping(String conversationId, bool on) {} // the demo peer types on its own
   @override
@@ -238,13 +334,67 @@ final messagingRepositoryProvider = Provider<MessagingRepository>((ref) {
   return repo;
 });
 
-/// Re-fetched whenever a conversation moves between sections (socket event).
-final conversationIndexProvider = FutureProvider<ConversationIndex>((ref) {
-  final repo = ref.watch(messagingRepositoryProvider);
-  final sub = repo.events().where((e) => e.movedTo != null).listen((_) => ref.invalidateSelf());
-  ref.onDispose(sub.cancel);
-  return repo.index();
-});
+/// The Messages list, kept live without reloading the page:
+///  - a new message (sent or received) updates that row's preview, time and unread
+///    count and moves it to the top at once — the list is always latest message first;
+///  - my own reads clear badges; section moves and reconnects re-read the server;
+///  - a quiet re-read reconciles with the server after bursts (coalesced).
+class ConversationIndexController extends AsyncNotifier<ConversationIndex> {
+  Timer? _reconcile;
+
+  @override
+  Future<ConversationIndex> build() async {
+    final repo = ref.watch(messagingRepositoryProvider);
+    final sub = repo.events().listen(_onEvent);
+    ref.onDispose(() {
+      _reconcile?.cancel();
+      sub.cancel();
+    });
+    return _sorted(await repo.index());
+  }
+
+  ConversationIndex _sorted(ConversationIndex ix) =>
+      ConversationIndex(visible: [...ix.visible]..sort(byLatestActivity), locked: ix.locked, visibleLimit: ix.visibleLimit);
+
+  void _onEvent(ChatEvent e) {
+    final cur = state.valueOrNull;
+    if (e.movedTo != null || e.reconnected) return _scheduleReconcile(const Duration(milliseconds: 300));
+    if (cur == null) return;
+    final m = e.message;
+    if (m != null) {
+      final i = cur.visible.indexWhere((c) => c.id == m.conversationId);
+      if (i < 0) return _scheduleReconcile(const Duration(milliseconds: 300)); // new conversation
+      final open = ref.read(openConversationProvider) == m.conversationId;
+      final updated = cur.visible[i].withMessage(preview: m.body, kind: m.kind, fromMe: m.fromMe, at: m.sentAt, countUnread: !open);
+      final list = [...cur.visible]..[i] = updated;
+      state = AsyncData(ConversationIndex(visible: list..sort(byLatestActivity), locked: cur.locked, visibleLimit: cur.visibleLimit));
+      _scheduleReconcile(const Duration(seconds: 3));
+    } else if (e.readByMe) {
+      state = AsyncData(ConversationIndex(
+        visible: [for (final c in cur.visible) c.id == e.conversationId ? c.withUnread(0) : c],
+        locked: cur.locked,
+        visibleLimit: cur.visibleLimit,
+      ));
+    }
+  }
+
+  void _scheduleReconcile(Duration after) {
+    _reconcile?.cancel();
+    _reconcile = Timer(after, () async {
+      try {
+        final fresh = _sorted(await ref.read(messagingRepositoryProvider).index());
+        state = AsyncData(fresh);
+      } catch (_) {
+        // keep what is shown; the next event or open retries
+      }
+    });
+  }
+}
+
+final conversationIndexProvider = AsyncNotifierProvider<ConversationIndexController, ConversationIndex>(ConversationIndexController.new);
+
+/// The conversation on screen right now (its new messages are not "unread").
+final openConversationProvider = StateProvider<String?>((_) => null);
 
 final conversationProvider = FutureProvider.family<Conversation, String>((ref, id) {
   final repo = ref.watch(messagingRepositoryProvider);

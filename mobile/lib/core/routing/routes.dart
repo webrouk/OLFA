@@ -12,6 +12,8 @@ abstract final class Routes {
 
   // 2. Profile setup (5)
   static const gender = '/setup/gender';
+  static const accountType = '/setup/account-type'; // member · psychologist · family counselor
+  static const professionalInfo = '/setup/professional'; // "about you" for professionals
   static const profileInfo = '/setup/info';
   static const preferences = '/setup/preferences';
   static const photos = '/setup/photos';
@@ -36,6 +38,8 @@ abstract final class Routes {
   // 5. Account & services (6)
   static const editProfile = '/me/edit';
   static const plans = '/me/plans';
+  static const partnerPreferences = '/me/partner-preferences'; // edit after sign-up (not a setup step)
+  static const accountManagement = '/me/account-management'; // managed on the owner's behalf (members)
   static const payments = '/me/payments';
   static const privacy = '/me/privacy';
   static const help = '/me/help';
@@ -46,6 +50,13 @@ abstract final class Routes {
   static const terms = '/legal/terms';
   static const privacyPolicy = '/legal/privacy';
   static const frozen = '/account/frozen';
+  static const closed = '/account/closed'; // banned (permanent) or suspended (until a date)
+  static const selfie = '/setup/selfie'; // after the photos, first sign-up
+  static const selfieRetake = '/setup/selfie/retake';
+  static const supportThread = '/me/help/tickets/:id';
+  static const newTicket = '/me/help/new';
+  static const counselorSchedule = '/counselor/schedule';
+  static const counselorReviews = '/counselor/reviews';
 
   // 6. Family & marital consultations
   static const consultations = '/consultations';
@@ -53,7 +64,35 @@ abstract final class Routes {
   static const counselor = '/consultations/counselor/:id';
   static const book = '/consultations/counselor/:id/book';
   static const counselorApply = '/counselor/apply';
+  static const reviewConsultationPath = '/consultations/:id/review'; // mandatory questionnaire
+
+  // 7. Professional workspace (psychologist / family counselor accounts) — floating-nav tabs
   static const counselorDesk = '/counselor/desk';
+  static const wallet = '/counselor/wallet';
+  static const proMessages = '/counselor/messages';
+  static const proProfile = '/counselor/profile';
+  /// Counselor tab on the round button: plan, directory placement, last 30 days.
+  static const proPerformance = '/counselor/performance';
+  /// Counselor plans (Free / Plus / Premium for counselors).
+  static const proPlans = '/counselor/plans';
+  static const payoutMethods = '/counselor/wallet/payout-methods';
+  static const withdrawals = '/counselor/wallet/withdrawals';
+  static const professionalPolicy = '/legal/professional';
+
+  /// Marriage-only areas a professional account never reaches (router redirect;
+  /// the server refuses them too).
+  static bool memberOnly(String loc) =>
+      loc.startsWith('/discover') || loc.startsWith('/likes') || loc.startsWith('/matches') || loc == myProfile || loc == conversations ||
+      loc == editProfile || loc == partnerPreferences || loc == accountManagement || loc == plans || loc == preferences || loc == profileInfo || loc == archive || loc == unmatched ||
+      // a counselor may open their own public card (counselorDetails), never booking or the list
+      (loc.startsWith('/consultations') && !RegExp(r'^/consultations/counselor/[^/]+$').hasMatch(loc));
+
+  /// The professional workspace (members are sent to Discover).
+  static bool professionalOnly(String loc) => loc.startsWith('/counselor/') || loc == professionalInfo;
+
+  static String ticket(String id) => '/me/help/tickets/$id';
+
+  static String reviewConsultation(String id) => '/consultations/$id/review';
 
   static String counselorDetails(String id) => '/consultations/counselor/$id';
   static String bookCounselor(String id) => '/consultations/counselor/$id/book';

@@ -9,19 +9,29 @@ import '../models/models.dart';
 import 'labels.dart';
 
 class SubscriptionCard extends StatelessWidget {
-  const SubscriptionCard({super.key, required this.plan, required this.selected, required this.current, required this.onTap, this.highlight = false});
+  const SubscriptionCard({super.key, required this.plan, required this.selected, required this.current, required this.onTap, this.highlight = false, this.professional = false});
   final PlanInfo plan;
   final bool selected;
   final bool current;
   final bool highlight;
   final VoidCallback onTap;
 
+  /// Counselor plans list their own benefits (directory placement, badge, insights).
+  final bool professional;
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final t = context.type;
     final fg = highlight ? OlfaColors.white : OlfaColors.black;
-    final features = <String>[
+    final features = professional
+        ? <String>[
+            switch (plan.directoryBoost) { 2 => l.proPlanTopPriority, 1 => l.proPlanPriority, _ => l.proPlanStandardListing },
+            if (plan.featuredBadge) l.proPlanFeatured,
+            if (plan.profileInsights) l.proPlanInsights,
+            if (plan.code == PlanCode.free) l.proPlanCore,
+          ]
+        : <String>[
       l.planLikesPerDay(plan.dailyLikes),
       l.planStartersPerDay(plan.dailyMessages),
       plan.code == PlanCode.free ? l.planBasicFilters : (plan.code == PlanCode.plus ? l.planExtraFilters : l.planAllFilters),

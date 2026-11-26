@@ -50,6 +50,9 @@ class ApiProfileRepository implements ProfileRepository, PhotoRepository {
         if (d.heightCm != null) 'heightCm': d.heightCm,
         if (d.weightKg != null) 'weightKg': d.weightKg,
         'marriageTimeline': toApiEnum(d.timeline!),
+        if (d.religion != null) 'religion': d.religion,
+        if (d.religion != null) 'sect': d.religion == 'undisclosed' ? null : d.sect,
+        if (d.religion != null && d.religion != 'undisclosed') 'religionConsent': d.religionConsent,
         'bio': d.bio.trim(),
         'interests': d.interests.toList(),
         if (create) 'ageConfirmed': true,
@@ -64,15 +67,57 @@ class ApiProfileRepository implements ProfileRepository, PhotoRepository {
           if (e.response?.statusCode != 409) rethrow; // already created → update instead
           await _dio.patch<void>('/me/profile', data: _profileBody(d, create: false));
         }
-        await _dio.put<void>('/me/preferences', data: {
-          'ageMin': d.prefAgeMin,
-          'ageMax': d.prefAgeMax,
-          'sameCountryOnly': d.prefSameCountry,
-          'maritalStatuses': d.prefMarital.map(toApiEnum).toList(),
-          'wantsChildren': d.prefWantsChildren,
-        });
+        await _dio.put<void>('/me/preferences', data: _prefsBody(d));
         await _dio.post<void>('/me/verification/submit');
       });
+
+  /// Fields the app does not edit (set elsewhere, e.g. advanced search) are
+  /// sent back unchanged so saving the partner preferences never clears them.
+  Map<String, dynamic> _untouchedPrefs = const {};
+
+  Map<String, dynamic> _prefsBody(ProfileDraft d) => {
+        ..._untouchedPrefs,
+        'ageMin': d.prefAgeMin,
+        'ageMax': d.prefAgeMax,
+        'sameCountryOnly': d.prefSameCountry,
+        'maritalStatuses': d.prefMarital.map(toApiEnum).toList(),
+        'wantsChildren': d.prefWantsChildren,
+        'religions': d.prefReligions.toList(),
+        'sects': d.prefSects.where((s) => d.prefReligions.isEmpty || d.prefReligions.contains(s.split('.').first)).toList(),
+      };
+
+  @override
+  Future<ProfileDraft> loadPreferences(ProfileDraft base) => guard(() async {
+        final j = (await _dio.get<Map<String, dynamic>>('/me/preferences')).data!;
+        _untouchedPrefs = {for (final k in const ['countryCodes', 'cities', 'educationLevels', 'occupations']) if (j[k] is List) k: j[k]};
+        final marital = (j['maritalStatuses'] as List? ?? const []).map((x) => fromApiEnum(MaritalStatus.values, x, MaritalStatus.neverMarried)).toSet();
+        return base.copyWith(
+          prefAgeMin: (j['ageMin'] as num?)?.toInt() ?? base.prefAgeMin,
+          prefAgeMax: (j['ageMax'] as num?)?.toInt() ?? base.prefAgeMax,
+          prefSameCountry: j['sameCountryOnly'] == true,
+          prefMarital: marital.isEmpty ? MaritalStatus.values.toSet() : marital,
+          prefWantsChildren: () => j['wantsChildren'] as bool?,
+          prefReligions: (j['religions'] as List? ?? const []).whereType<String>().toSet(),
+          prefSects: (j['sects'] as List? ?? const []).whereType<String>().toSet(),
+        );
+      });
+
+  @override
+  Future<void> savePreferences(ProfileDraft d) => guard(() => _dio.put<void>('/me/preferences', data: _prefsBody(d)));
+
+  @override
+  Future<AccountManagerInfo?> manager() => guard(() async => ApiMappers.manager((await _dio.get<Object?>('/me/manager')).data));
+
+  @override
+  Future<AccountManagerInfo?> setManager(AccountManagerInfo m) => guard(() async => ApiMappers.manager((await _dio.put<Object?>('/me/manager', data: {
+            'managerName': m.managerName.trim(),
+            'relation': toApiEnum(m.relation),
+            'phoneHolder': toApiEnum(m.phoneHolder),
+            'ownerConsent': true,
+          })).data));
+
+  @override
+  Future<void> revokeManager() => guard(() => _dio.delete<void>('/me/manager'));
 
   @override
   Future<VerificationInfo> verification() => guard(() async {
@@ -83,7 +128,15 @@ class ApiProfileRepository implements ProfileRepository, PhotoRepository {
           'REJECTED' => VerificationStatus.rejected,
           _ => VerificationStatus.pending,
         };
-        return VerificationInfo(status: status, reason: req?['rejectReason'] as String?, fixSteps: const []);
+        final selfie = r.data!['selfie'] as Map?;
+        return VerificationInfo(
+          status: status,
+          reason: req?['rejectReason'] as String?,
+          rejectCode: req?['rejectCode'] as String?,
+          selfieRequired: selfie?['required'] == true,
+          selfieStatus: selfie?['status'] as String?,
+          selfieRejectCode: selfie?['rejectCode'] as String?,
+        );
       });
 
   @override
@@ -132,6 +185,48 @@ class DemoProfileRepository implements ProfileRepository, PhotoRepository {
   Future<VerificationInfo> verification() => _b.verificationInfo();
   @override
   Future<void> updateProfile(ProfileDraft draft) => _b.submitForReview();
+
+  ProfileDraft? _prefs;
+  @override
+  Future<ProfileDraft> loadPreferences(ProfileDraft base) async {
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    final p = _prefs;
+    if (p == null) return base;
+    return base.copyWith(
+      prefAgeMin: p.prefAgeMin,
+      prefAgeMax: p.prefAgeMax,
+      prefSameCountry: p.prefSameCountry,
+      prefMarital: p.prefMarital,
+      prefWantsChildren: () => p.prefWantsChildren,
+      prefReligions: p.prefReligions,
+      prefSects: p.prefSects,
+    );
+  }
+
+  @override
+  Future<void> savePreferences(ProfileDraft draft) async {
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    _prefs = draft;
+  }
+
+  AccountManagerInfo? _manager;
+  @override
+  Future<AccountManagerInfo?> manager() async {
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    return _manager;
+  }
+
+  @override
+  Future<AccountManagerInfo?> setManager(AccountManagerInfo info) async {
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    return _manager = AccountManagerInfo(managerName: info.managerName.trim(), relation: info.relation, phoneHolder: info.phoneHolder, ownerConsentAt: DateTime.now());
+  }
+
+  @override
+  Future<void> revokeManager() async {
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    _manager = null;
+  }
   @override
   Future<String> upload({required int position, required Uint8List bytes, required String mimeType}) async => 'demo-photo-${_seq++}';
   @override

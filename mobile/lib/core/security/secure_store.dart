@@ -11,6 +11,7 @@ class SecureStore {
   static const _access = 'olfa.access';
   static const _refresh = 'olfa.refresh';
   static const _device = 'olfa.device';
+  static const _setupDraft = 'olfa.setupDraft';
 
   Future<String?> readAccessToken() => _s.read(key: _access);
   Future<String?> readRefreshToken() => _s.read(key: _refresh);
@@ -20,11 +21,17 @@ class SecureStore {
     await _s.write(key: _refresh, value: refresh);
   }
 
-  /// Clears the session but keeps the install id.
+  /// Clears the session (and any unfinished sign-up answers) but keeps the install id.
   Future<void> clear() async {
     await _s.delete(key: _access);
     await _s.delete(key: _refresh);
+    await _s.delete(key: _setupDraft);
   }
+
+  /// Unfinished sign-up answers (JSON), encrypted like the tokens.
+  Future<String?> readSetupDraft() => _s.read(key: _setupDraft);
+  Future<void> writeSetupDraft(String json) => _s.write(key: _setupDraft, value: json);
+  Future<void> clearSetupDraft() => _s.delete(key: _setupDraft);
 
   /// Stable per-install id, used for device-bound OTP and sessions.
   Future<String> deviceId() async {

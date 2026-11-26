@@ -18,16 +18,20 @@ import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import { ENV, Env } from '../config/env';
+import { restrictionDetails, restrictionOf } from '../domain/restriction';
 import { hashIp } from '../domain/security';
 import { AppError, ErrorCode, fromPgError } from './errors';
 import { PrismaService, RateLimiter } from './infra';
 
 // ───────────── request context ─────────────
 
+export type AccountTypeName = 'MEMBER' | 'PSYCHOLOGIST' | 'FAMILY_COUNSELOR';
 export interface AuthUser {
   id: string;
   sessionId: string;
   status: string;
+  /** null until chosen during sign-up */
+  accountType: AccountTypeName | null;
 }
 export interface AuthAdmin {
   id: string;
@@ -113,8 +117,21 @@ export const Public = () => SetMetadata(IS_PUBLIC, true);
 export const ALLOW_PENDING = 'olfa:allowPending';
 export const AllowPending = () => SetMetadata(ALLOW_PENDING, true);
 
+/**
+ * Restricts a route (or controller) to account types: marriage features are
+ * for MEMBER accounts, the counselor workspace for professionals. Accounts
+ * that have not chosen a type yet are refused too.
+ */
+export const ACCOUNT_TYPES = 'olfa:accountTypes';
+export const AccountTypes = (...types: AccountTypeName[]) => SetMetadata(ACCOUNT_TYPES, types);
+export const MembersOnly = () => AccountTypes('MEMBER');
+export const ProfessionalsOnly = () => AccountTypes('PSYCHOLOGIST', 'FAMILY_COUNSELOR');
+
 export const ADMIN_ROUTE = 'olfa:admin';
 export const PERMISSIONS = 'olfa:permissions';
+export const ADMIN_MFA_SETUP = 'olfa:adminMfaSetup';
+/** Admin route reachable before two-factor sign-in is set up (me, TOTP enrolment). */
+export const AdminMfaSetup = () => SetMetadata(ADMIN_MFA_SETUP, true);
 /** Admin route requiring every listed permission. */
 export const RequirePermissions = (...perms: string[]) =>
   applyDecorators(SetMetadata(ADMIN_ROUTE, true), SetMetadata(PERMISSIONS, perms));
@@ -160,9 +177,11 @@ export class AuthGuard implements CanActivate {
     const meta = <T>(k: string) => this.reflector.getAllAndOverride<T>(k, [ctx.getHandler(), ctx.getClass()]);
 
     if (meta<boolean>(ADMIN_ROUTE)) {
-      await this.authenticateAdmin(req, meta<string[]>(PERMISSIONS) ?? []);
+      await this.authenticateAdmin(req, meta<string[]>(PERMISSIONS) ?? [], meta<boolean>(ADMIN_MFA_SETUP) ?? false);
     } else if (!meta<boolean>(IS_PUBLIC)) {
       await this.authenticateUser(req, meta<boolean>(ALLOW_PENDING) ?? false);
+      const types = meta<AccountTypeName[]>(ACCOUNT_TYPES);
+      if (types && (!req.user!.accountType || !types.includes(req.user!.accountType))) throw new AppError(ErrorCode.WRONG_ACCOUNT_TYPE);
     }
 
     const rl = meta<{ limit: number; windowSeconds: number }>(RATE_LIMIT);
@@ -190,17 +209,28 @@ export class AuthGuard implements CanActivate {
     // Session must still be live (logout / revoke take effect immediately).
     const session = await this.prisma.userSession.findUnique({
       where: { id: payload.sid },
-      select: { revokedAt: true, user: { select: { id: true, status: true, deletedAt: true, frozenAt: true, lastActiveAt: true } } },
+      select: { revokedAt: true, user: { select: { id: true, status: true, deletedAt: true, frozenAt: true, lastActiveAt: true, accountType: true, suspendedUntil: true, restrictionReason: true, restrictedAt: true } } },
     });
     if (!session || session.revokedAt || session.user.deletedAt || session.user.id !== payload.sub) {
       throw new AppError(ErrorCode.UNAUTHORIZED);
     }
-    const status = session.user.status;
-    if (status === 'SUSPENDED' || status === 'DELETED') throw new AppError(ErrorCode.ACCOUNT_NOT_ACTIVE);
+    let status = session.user.status;
+    // Admin restrictions → the app shows the closed-account screen from these details.
+    const r = restrictionOf(session.user);
+    if (r.kind !== 'none') {
+      const appealToken = await this.jwt.signAsync({ sub: payload.sub, typ: 'appeal' }, { secret: this.env.JWT_ACCESS_SECRET, expiresIn: 7200 });
+      throw new AppError(r.kind === 'banned' ? ErrorCode.ACCOUNT_BANNED : ErrorCode.ACCOUNT_SUSPENDED, undefined, { ...restrictionDetails(r), appealToken });
+    }
+    if (status === 'SUSPENDED') {
+      // the suspension date has passed: active again (the daily job does the same in bulk)
+      await this.prisma.user.updateMany({ where: { id: payload.sub, status: 'SUSPENDED' }, data: { status: 'ACTIVE', suspendedUntil: null } });
+      status = 'ACTIVE';
+    }
+    if (status === 'DELETED') throw new AppError(ErrorCode.ACCOUNT_NOT_ACTIVE);
     if (!allowPending && status !== 'ACTIVE' && status !== 'RESTRICTED') throw new AppError(ErrorCode.ACCOUNT_NOT_ACTIVE);
     // A frozen account can only reach account routes (me, reactivate, settings, deletion).
     if (session.user.frozenAt && !allowPending) throw new AppError(ErrorCode.ACCOUNT_FROZEN);
-    req.user = { id: payload.sub, sessionId: payload.sid, status };
+    req.user = { id: payload.sub, sessionId: payload.sid, status, accountType: (session.user.accountType as AccountTypeName | null) ?? null };
     // Presence: at most one write per user per 2 minutes (cheap at scale).
     const seen = session.user.lastActiveAt?.getTime() ?? 0;
     if (!session.user.frozenAt && Date.now() - seen > 120_000) {
@@ -208,14 +238,16 @@ export class AuthGuard implements CanActivate {
     }
   }
 
-  private async authenticateAdmin(req: OlfaRequest, required: string[]) {
-    let payload: { sub: string; typ: string };
+  private async authenticateAdmin(req: OlfaRequest, required: string[], mfaSetup = false) {
+    let payload: { sub: string; typ: string; mfa?: boolean };
     try {
       payload = await this.jwt.verifyAsync(this.bearer(req), { secret: this.env.ADMIN_JWT_SECRET });
     } catch {
       throw new AppError(ErrorCode.UNAUTHORIZED);
     }
     if (payload.typ !== 'admin') throw new AppError(ErrorCode.UNAUTHORIZED);
+    // Without a second factor an admin session can only finish setting it up.
+    if (this.env.ADMIN_REQUIRE_TOTP && !payload.mfa && !mfaSetup) throw new AppError(ErrorCode.FORBIDDEN, 'Two-factor sign-in is required', { totpSetupRequired: true });
     const admin = await this.prisma.adminUser.findUnique({
       where: { id: payload.sub },
       select: { isActive: true, roles: { select: { role: { select: { permissions: { select: { permission: { select: { key: true } } } } } } } } },

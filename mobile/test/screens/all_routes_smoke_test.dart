@@ -8,7 +8,7 @@ import 'package:olfa/core/routing/routes.dart';
 
 import '../helpers.dart';
 
-/// Opens every one of the 26 screens in Arabic and English on small, regular
+/// Opens every one of the 26 screens in Arabic, English and French on small, regular
 /// and tablet sizes, and fails on any exception — including RenderFlex
 /// overflows, which Flutter reports as errors in tests.
 const routes = <String, String>{
@@ -41,7 +41,7 @@ const routes = <String, String>{
 };
 
 void main() {
-  for (final lang in const ['ar', 'en']) {
+  for (final lang in const ['ar', 'en', 'fr']) {
     for (final device in kDevices.entries) {
       testWidgets('all 26 screens render without errors — $lang · ${device.key}', (tester) async {
         tester.view.physicalSize = device.value * 3;

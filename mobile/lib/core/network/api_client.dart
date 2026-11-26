@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../localization/locale_provider.dart';
 import '../security/secure_store.dart';
+import 'api_errors.dart';
 
 /// `--dart-define=API_BASE_URL=https://api.olfa.app` switches every repository
 /// from the demo data source to the real backend. Empty = demo mode.
@@ -31,6 +32,12 @@ class ApiClient {
         handler.next(options);
       },
       onError: (e, handler) async {
+        // Closed by the admin panel → closed-account screen, even outside a repository call.
+        final err = e.response?.data is Map ? (e.response!.data as Map)['error'] : null;
+        if (err is Map && (err['code'] == 'ACCOUNT_BANNED' || err['code'] == 'ACCOUNT_SUSPENDED')) {
+          toFailure(e);
+          return handler.next(e);
+        }
         final retried = e.requestOptions.extra['retried'] == true;
         if (e.response?.statusCode == 401 && !retried && e.requestOptions.extra['auth'] != false) {
           final ok = await _refresh();

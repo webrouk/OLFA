@@ -4,10 +4,11 @@ import '../../../core/errors/failure.dart';
 import '../../../shared/models/models.dart';
 import '../data/auth_repository_impl.dart';
 import '../domain/auth_repository.dart';
+import '../../account/account_type.dart';
 
 class AuthState {
   const AuthState({
-    this.country = const Country('AE', '+971', '🇦🇪', 'الإمارات العربية المتحدة', 'United Arab Emirates', 'AE'),
+    this.country = const Country('AE', '+971', '🇦🇪', 'الإمارات العربية المتحدة', 'United Arab Emirates', 'AE', 'Émirats arabes unis'),
     this.nationalNumber = '',
     this.busy = false,
     this.failure,
@@ -84,6 +85,7 @@ class AuthController extends Notifier<AuthState> {
     state = state.copyWith(busy: true, failure: () => null);
     try {
       final r = await ref.read(authRepositoryProvider).verifyOtp(c, code);
+      ref.read(accountTypeProvider.notifier).set(r.accountType ?? (r.profileComplete ? AccountType.member : null));
       state = state.copyWith(busy: false, result: r);
       return true;
     } on InvalidOtpFailure catch (f) {

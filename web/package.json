@@ -1,0 +1,22 @@
+{
+  "name": "olfa-web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "sukna.online — OLFA public website and admin dashboard",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node build.mjs --check && tsc -p tsconfig.json",
+    "legal": "python3 tools/extract-legal.py"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "esbuild": "^0.28.0",
+    "typescript": "^6.0.0"
+  }
+}

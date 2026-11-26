@@ -6,8 +6,11 @@ import { AppError, ErrorCode } from '../../common/errors';
 import { AuditService, PrismaService, RateLimiter, SettingsService } from '../../common/infra';
 import { checkOtp, generateOtp, hashOtp, newRefreshToken, OTP_POLICY, sha256, toE164 } from '../../domain/security';
 import { isValidTimeZone } from '../../domain/quota-period';
+import { restrictionDetails, restrictionOf } from '../../domain/restriction';
 import { RequestOtpDto, VerifyOtpDto } from './auth.dto';
 import { SMS_PROVIDER, SmsProvider } from './sms.provider';
+import { BansService } from '../integrity/integrity.module';
+import { AppLocaleCode } from '../../domain/locale';
 
 @Injectable()
 export class AuthService {
@@ -19,12 +22,15 @@ export class AuthService {
     private readonly audit: AuditService,
     @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,
     @Inject(ENV) private readonly env: Env,
+    private readonly bans: BansService,
   ) {}
 
   /** Steps 1–3: validate phone, apply abuse limits, store a hashed OTP, send SMS. */
-  async requestOtp(dto: RequestOtpDto, ipHash: string, locale: 'ar' | 'en' = 'ar') {
+  async requestOtp(dto: RequestOtpDto, ipHash: string, locale: AppLocaleCode = 'en') {
     const phone = toE164(dto.dialCode, dto.nationalNumber);
     if (!phone) throw new AppError(ErrorCode.VALIDATION, 'Invalid phone number', { field: 'nationalNumber' });
+    // A permanently banned number gets no code (and no SMS cost).
+    await this.bans.assertNotBanned('PHONE', phone);
 
     const cooldown = await this.settings.get('otp.resendCooldownSeconds', OTP_POLICY.resendCooldownSeconds);
     const ttl = await this.settings.get('otp.ttlSeconds', OTP_POLICY.ttlSeconds);
@@ -52,13 +58,17 @@ export class AuthService {
         expiresAt: new Date(Date.now() + ttl * 1000),
       },
     });
-    const body = locale === 'ar' ? `رمز التحقق في أُلْفَة: ${code}. لا تشاركه مع أحد.` : `Your OLFA code is ${code}. Do not share it.`;
+    const body = {
+      ar: `رمز التحقق في أُلْفَة: ${code}. لا تشاركه مع أحد.`,
+      en: `Your OLFA code is ${code}. Do not share it.`,
+      fr: `Votre code OLFA est ${code}. Ne le partagez avec personne.`,
+    }[locale];
     await this.sms.send(phone, body);
     return { challengeId: challenge.id, expiresInSeconds: ttl, resendAfterSeconds: cooldown };
   }
 
   /** Steps 4–6: verify, create the account if new, open a device session. */
-  async verifyOtp(dto: VerifyOtpDto, meta: { ipHash: string; userAgent?: string }) {
+  async verifyOtp(dto: VerifyOtpDto, meta: { ipHash: string; userAgent?: string; locale?: AppLocaleCode }) {
     const c = await this.prisma.otpChallenge.findUnique({ where: { id: dto.challengeId } });
     if (!c || c.deviceId !== dto.deviceId) throw new AppError(ErrorCode.OTP_INVALID);
 
@@ -83,6 +93,10 @@ export class AuthService {
     if (consumed.count !== 1) throw new AppError(ErrorCode.OTP_INVALID);
 
     const now = new Date();
+    await this.bans.assertNotBanned('PHONE', c.phoneE164);
+    // A device that belonged to a banned account cannot open a NEW account.
+    const known = await this.prisma.user.findFirst({ where: { phoneE164: c.phoneE164, deletedAt: null }, select: { id: true } });
+    if (!known) await this.bans.assertNotBanned('DEVICE', dto.deviceId);
     const country = await this.countryForDial(c.phoneE164);
     const { user, isNew } = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.user.findFirst({ where: { phoneE164: c.phoneE164, deletedAt: null } });
@@ -98,18 +112,22 @@ export class AuthService {
           phoneE164: c.phoneE164,
           phoneCountry: country,
           phoneVerifiedAt: now,
-          locale: dto.locale ?? 'ar',
+          // the app's language (it follows the phone: ar / en / fr, otherwise en)
+          locale: dto.locale ?? meta.locale ?? 'en',
           timezone: dto.timezone && isValidTimeZone(dto.timezone) ? dto.timezone : 'UTC',
         },
       });
       return { user: created, isNew: true };
     });
 
-    if (user.status === 'SUSPENDED') throw new AppError(ErrorCode.ACCOUNT_NOT_ACTIVE);
+    const restricted = await this.restrictionError(user);
+    if (restricted) throw restricted;
+    if (user.status === 'SUSPENDED') await this.prisma.user.update({ where: { id: user.id }, data: { status: 'ACTIVE', suspendedUntil: null } });
     const tokens = await this.openSession(user.id, dto, meta);
     if (isNew) await this.audit.record({ actorType: 'USER', actorId: user.id, action: 'user.register', entityType: 'user', entityId: user.id, ipHash: meta.ipHash });
     const profile = await this.prisma.userProfile.findUnique({ where: { userId: user.id }, select: { userId: true } });
-    return { ...tokens, isNewUser: isNew, accountStatus: user.status, profileComplete: !!profile };
+    const counselor = profile ? null : await this.prisma.counselorProfile.findUnique({ where: { userId: user.id }, select: { userId: true } });
+    return { ...tokens, isNewUser: isNew, accountStatus: user.status === 'SUSPENDED' ? 'ACTIVE' : user.status, accountType: user.accountType, profileComplete: !!profile || !!counselor };
   }
 
   /** Refresh-token rotation with reuse detection (a replayed token revokes the family). */
@@ -117,6 +135,12 @@ export class AuthService {
     const hash = sha256(refreshToken);
     const s = await this.prisma.userSession.findUnique({ where: { refreshTokenHash: hash } });
     if (!s) throw new AppError(ErrorCode.UNAUTHORIZED);
+    if (s.revokedAt && s.revokedReason?.startsWith('admin_')) {
+      // closed by the admin panel: tell the app why (closed-account screen), not a silent sign-out
+      const u = await this.prisma.user.findUnique({ where: { id: s.userId }, select: { id: true, status: true, suspendedUntil: true, restrictionReason: true, restrictedAt: true } });
+      const restricted = u && (await this.restrictionError(u));
+      throw restricted || new AppError(ErrorCode.UNAUTHORIZED);
+    }
     if (s.revokedAt) {
       await this.prisma.userSession.updateMany({
         where: { familyId: s.familyId, revokedAt: null },
@@ -146,6 +170,17 @@ export class AuthService {
       }),
     ]);
     return { accessToken: await this.signAccess(s.userId, created.id), accessTokenExpiresIn: this.env.JWT_ACCESS_TTL_SECONDS, refreshToken: next.token };
+  }
+
+  /**
+   * Banned / suspended → the error the app turns into the closed-account screen. It carries a
+   * short-lived appeal token so the person can still write to support (POST /support/appeal).
+   */
+  private async restrictionError(user: { id: string; status: string; suspendedUntil?: Date | null; restrictionReason?: string | null; restrictedAt?: Date | null }) {
+    const r = restrictionOf(user);
+    if (r.kind === 'none') return null;
+    const appealToken = await this.jwt.signAsync({ sub: user.id, typ: 'appeal' }, { secret: this.env.JWT_ACCESS_SECRET, expiresIn: 7200 });
+    return new AppError(r.kind === 'banned' ? ErrorCode.ACCOUNT_BANNED : ErrorCode.ACCOUNT_SUSPENDED, undefined, { ...restrictionDetails(r), appealToken });
   }
 
   async logout(sessionId: string) {

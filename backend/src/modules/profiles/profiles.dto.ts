@@ -42,6 +42,9 @@ export class CreateProfileDto {
   @ApiPropertyOptional({ minimum: 120, maximum: 230, description: 'cm, optional' }) @IsOptional() @Type(() => Number) @IsInt() @Min(120) @Max(230) heightCm?: number;
   @ApiPropertyOptional({ minimum: 35, maximum: 250, description: 'kg, optional' }) @IsOptional() @Type(() => Number) @IsInt() @Min(35) @Max(250) weightKg?: number;
   @ApiProperty({ enum: MarriageTimeline }) @IsEnum(MarriageTimeline) marriageTimeline: MarriageTimeline;
+  @ApiProperty({ example: 'islam', description: 'Key from shared/reference/religions.tsv ("undisclosed" keeps it private)' }) @IsIn(ref.religions) religion: string;
+  @ApiPropertyOptional({ example: 'sunni', description: 'Must belong to the religion (validated by the API and a DB foreign key)' }) @IsOptional() @IsString() @MaxLength(40) sect?: string | null;
+  @ApiPropertyOptional({ description: 'Explicit consent to store religion (special-category data); required unless "undisclosed"' }) @IsOptional() @IsBoolean() religionConsent?: boolean;
   @ApiProperty() @IsString() @MinLength(20) @MaxLength(500) @Matches(NO_CONTACT, { message: 'contact details are not allowed in bio' }) bio: string;
   @ApiProperty({ type: [String], example: ['reading', 'travel'] })
   @IsArray() @ArrayUnique() @ArrayMaxSize(8) @IsString({ each: true }) interests: string[];
@@ -67,6 +70,13 @@ export class PreferencesDto {
   @ApiPropertyOptional({ enum: EducationLevel, isArray: true }) @IsOptional() @IsArray() @IsEnum(EducationLevel, { each: true }) educationLevels?: EducationLevel[];
   @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @ArrayMaxSize(10) @IsIn(ref.occupations, { each: true }) occupations?: string[];
   @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsBoolean() wantsChildren?: boolean | null;
+  @ApiPropertyOptional({ type: [String], description: 'Accepted religions (empty = any)' }) @IsOptional() @IsArray() @ArrayMaxSize(10) @IsIn(ref.religions, { each: true }) religions?: string[];
+  @ApiPropertyOptional({ type: [String], example: ['islam.sunni'], description: '"religion.sect" (empty = any)' }) @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(71, { each: true }) sects?: string[];
+}
+
+/** Chosen once during sign-up (locked when the profile exists). */
+export class AccountTypeDto {
+  @ApiProperty({ enum: ['MEMBER', 'PSYCHOLOGIST', 'FAMILY_COUNSELOR'] }) @IsIn(['MEMBER', 'PSYCHOLOGIST', 'FAMILY_COUNSELOR']) accountType: 'MEMBER' | 'PSYCHOLOGIST' | 'FAMILY_COUNSELOR';
 }
 
 /** Device location; the server rounds to ~1 km and never returns it. */
@@ -87,7 +97,7 @@ export class PrivacyDto {
 }
 
 export class LocaleDto {
-  @ApiProperty({ enum: ['ar', 'en'] }) @IsIn(['ar', 'en']) locale: 'ar' | 'en';
+  @ApiProperty({ enum: ['ar', 'en', 'fr'] }) @IsIn(['ar', 'en', 'fr']) locale: 'ar' | 'en' | 'fr';
 }
 
 export class FreezeDto {
@@ -96,4 +106,14 @@ export class FreezeDto {
 
 export class DeleteAccountDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(40) reason?: string;
+}
+
+export const MANAGED_RELATIONS = ['FATHER', 'MOTHER', 'BROTHER', 'SISTER', 'GRANDPARENT', 'UNCLE', 'AUNT', 'LEGAL_GUARDIAN', 'RELATIVE', 'FRIEND'] as const;
+
+/** Running the account on the owner's behalf (a parent, a relative, a trusted person). */
+export class ManagerDto {
+  @ApiProperty({ minLength: 2, maxLength: 60 }) @IsString() @Length(2, 60) @Matches(NAME) managerName: string;
+  @ApiProperty({ enum: MANAGED_RELATIONS }) @IsIn(MANAGED_RELATIONS as unknown as string[]) relation: (typeof MANAGED_RELATIONS)[number];
+  @ApiProperty({ enum: ['OWNER', 'MANAGER'], description: "Whose phone number signs in to this account" }) @IsIn(['OWNER', 'MANAGER']) phoneHolder: 'OWNER' | 'MANAGER';
+  @ApiProperty({ description: 'The account owner agreed to the account being managed — required' }) @Equals(true) ownerConsent: true;
 }

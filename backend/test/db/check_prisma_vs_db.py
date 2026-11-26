@@ -35,7 +35,7 @@ TYPE_OK = {
     'String': {'uuid', 'varchar', 'bpchar', 'text'},
     'Int': {'int4', 'int2'}, 'BigInt': {'int8'}, 'Boolean': {'bool'},
     'DateTime': {'timestamptz', 'date'}, 'Json': {'jsonb'},
-    'Float': {'float8'}, 'Decimal': {'numeric'},
+    'Float': {'float8'}, 'Decimal': {'numeric'}, 'Bytes': {'bytea'},
 }
 models = re.findall(r'^model (\w+) \{(.*?)^\}', schema, re.M | re.S)
 mapped_tables = set()
@@ -53,6 +53,8 @@ for name, body in models:
         field, ftype = parts[0], parts[1]
         base = ftype.rstrip('?').rstrip('[]').rstrip('?')
         is_list = ftype.endswith('[]')
+        if base.startswith('Unsupported('):  # e.g. a generated tstzrange column
+            cm = re.search(r'@map\("(\w+)"\)', line); seen.add(cm.group(1) if cm else field); continue
         if base not in TYPE_OK and base not in prisma_enums: continue  # relation field
         if '@relation' in line and base not in TYPE_OK: continue
         cm = re.search(r'@map\("(\w+)"\)', line)

@@ -1,0 +1,7 @@
+/* iOS permission prompts and app name, in the phone's language. Copy each
+   *.lproj folder into ios/Runner/ and add them to the Runner target. */
+"CFBundleDisplayName" = "OLFA";
+"NSMicrophoneUsageDescription" = "OLFA uses the microphone to record voice messages you choose to send.";
+"NSPhotoLibraryUsageDescription" = "OLFA uses your photos for your profile and for photos you send in chats.";
+"NSCameraUsageDescription" = "OLFA uses the camera to take your profile photos, your verification selfie and photos you send in chats.";
+"NSLocationWhenInUseUsageDescription" = "OLFA uses your approximate location to show you the nearest people first. Others only see an approximate distance.";

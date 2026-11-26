@@ -1,9 +1,10 @@
-import { Controller, Get, Global, Injectable, Module } from '@nestjs/common';
+import { Controller, Get, Global, Injectable, Module, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Prisma, PlanCode } from '@prisma/client';
 import { fromPgError } from '../../common/errors';
 import { AllowPending, AuthUser, CurrentUser, Public } from '../../common/http';
-import { PrismaService } from '../../common/infra';
+import { PrismaService, SettingsService } from '../../common/infra';
+import { adsForMember, parseAdsSettings } from '../../domain/ads';
 import { dayWindow, DayWindow, monthWindow } from '../../domain/quota-period';
 
 export interface Entitlements {
@@ -24,6 +25,12 @@ export interface Entitlements {
   monthlyCompliments: number;
   /** Voice notes a member may send in one conversation; -1 = unlimited. */
   voiceNotesPerConversation: number;
+  /** Native ads in Discovery: only ever true on the Free plan. */
+  showAds: boolean;
+  /** Counselor plans: directory placement 0–2, "Featured counselor", profile insights. */
+  directoryBoost: number;
+  featuredBadge: boolean;
+  profileInsights: boolean;
 }
 
 /** Resolves the user's effective plan and its feature values from the DB. */
@@ -56,6 +63,10 @@ export class EntitlementsService {
       visibleConversations: typeof v['visible_conversations'] === 'number' ? (v['visible_conversations'] as number) : 5,
       monthlyCompliments: num('monthly_compliments'),
       voiceNotesPerConversation: typeof v['voice_notes_per_conversation'] === 'number' ? (v['voice_notes_per_conversation'] as number) : 10,
+      showAds: plan === 'FREE' && bool('show_ads'),
+      directoryBoost: Math.max(0, Math.min(2, num('directory_boost'))),
+      featuredBadge: bool('featured_badge'),
+      profileInsights: bool('profile_insights'),
     };
   }
 
@@ -78,7 +89,11 @@ export type CounterKey = 'likes' | 'messages' | 'undos' | 'compliments' | `msg:$
 /** Server-side daily quotas. UTC storage, user-local reset. */
 @Injectable()
 export class QuotaService {
-  constructor(private readonly prisma: PrismaService, private readonly entitlements: EntitlementsService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly entitlements: EntitlementsService,
+    private readonly settings: SettingsService,
+  ) {}
 
   async window(userId: string, now = new Date()): Promise<DayWindow> {
     const u = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
@@ -118,6 +133,7 @@ export class QuotaService {
       this.used(userId, 'compliments', mw),
     ]);
     const c = (used: number, limit: number) => ({ used, limit, remaining: Math.max(0, limit - used) });
+    const ads = adsForMember(e.plan, e.showAds, parseAdsSettings(await this.settings.get('ads.discovery', {})));
     return {
       plan: e.plan,
       planExpiresAt: e.planExpiresAt,
@@ -138,6 +154,8 @@ export class QuotaService {
         voiceNotesPerConversation: e.voiceNotesPerConversation,
         monthlyCompliments: e.monthlyCompliments,
       },
+      // Discovery native ads (Free plan only); the app re-reads this after any plan change.
+      ads,
     };
   }
 }
@@ -163,11 +181,12 @@ export class PlansController {
 
   /** Plans and their (admin-managed) features. Prices come from the stores at purchase time. */
   @Public() @Get('plans')
-  async plans() {
+  async plans(@Query('audience') audience?: string) {
+    // Member plans unless counselor plans are asked for (older apps never ask).
     const plans = await this.prisma.subscriptionPlan.findMany({
-      where: { isActive: true },
+      where: { isActive: true, OR: [{ code: 'FREE' }, { audience: audience === 'PROFESSIONAL' ? 'PROFESSIONAL' : 'MEMBER' }] },
       orderBy: { sortOrder: 'asc' },
-      select: { code: true, nameAr: true, nameEn: true, entitlements: { select: { featureKey: true, value: true } }, products: { where: { isActive: true }, select: { provider: true, productId: true, durationDays: true } } },
+      select: { code: true, nameAr: true, nameEn: true, audience: true, entitlements: { select: { featureKey: true, value: true } }, products: { where: { isActive: true }, select: { provider: true, productId: true, durationDays: true } } },
     });
     return plans.map((p) => ({ ...p, entitlements: Object.fromEntries(p.entitlements.map((e) => [e.featureKey, e.value])) }));
   }

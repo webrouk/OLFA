@@ -146,8 +146,8 @@
   "photoTip1": "Clear, recent face photo",
   "photoTip2": "No group photos or filters",
   "photoTip3": "Modest, appropriate clothing",
-  "selfieTitle": "Selfie verification",
-  "selfieBody": "Adds a \"Real person\" badge.",
+  "selfieTitle": "Verify it's really you",
+  "selfieBody": "Last step: a live selfie showing a hand gesture we pick at random. Our team compares it with your photos so every profile on OLFA belongs to a real person.",
   "selfieLater": "Selfie verification opens with the camera integration in Phase 3.",
   "photoRights": "I confirm these are my own photos and I have the right to use them",
   "photoPolicy": "I agree to the photo & content policy",
@@ -175,6 +175,22 @@
   "navLikes": "Likes",
   "navMatches": "Matches",
   "navMessages": "Messages",
+  "navMenu": "Menu",
+  "@navMenu": {
+    "description": "Bottom bar: the tab that opens the profile page and settings"
+  },
+  "navChat": "Chat",
+  "@navChat": {
+    "description": "Bottom bar: the messages tab"
+  },
+  "navExplore": "Explore",
+  "@navExplore": {
+    "description": "Bottom bar: the discover tab"
+  },
+  "navMarriage": "Marriage",
+  "@navMarriage": {
+    "description": "Bottom bar: the matches tab"
+  },
   "navProfile": "Profile",
   "likesLeftToday": "{count} likes left today",
   "@likesLeftToday": {
@@ -419,7 +435,7 @@
   "catPayment": "Payment",
   "catTechnical": "Technical",
   "contactSupport": "Contact support",
-  "contactSupportBody": "We usually reply within one business day.",
+  "contactSupportBody": "Replies arrive on this page and as a notification.",
   "ticketCreated": "Ticket {number} created. We'll get back to you soon.",
   "@ticketCreated": {
     "placeholders": {
@@ -899,8 +915,6 @@
   "signOutDevice": "Sign out",
   "signOutDeviceBody": "This device will be signed out of OLFA right away.",
   "signedInDevicesSub": "See and sign out devices",
-  "tickIdentity": "Personal details verified",
-  "tickPhoto": "Photo verified",
   "unblock": "Unblock",
   "unblockBody": "They'll be able to find and like you again if your preferences match.",
   "unblockTitle": "Unblock {name}?",
@@ -1025,8 +1039,8 @@
   "proofTwoTicks": "Photo + details verified",
   "proofCounselors": "Licensed counselors",
   "proofPrivate": "Private by design",
-  "photoVerifiedShort": "Photo verified",
-  "detailsVerifiedShort": "Details verified",
+  "photoVerifiedShort": "Selfie verified",
+  "detailsVerifiedShort": "ID verified",
   "subscriptions": "Subscriptions",
   "consultationsShort": "Consultations",
   "consultationPayment": "Consultation",
@@ -1053,5 +1067,993 @@
   "confirmAndSchedule": "Confirm & schedule",
   "paidOn": "Paid",
   "edit": "Edit",
-  "deskFootnote": "Confirming opens a private chat — you can write first. Declining refunds the client in full. Amounts shown are before the platform fee."
+  "deskFootnote": "Confirming opens a private chat — you can write first. Declining refunds the client in full. Amounts shown are before the platform fee.",
+  "accountTypeTitle": "How will you use OLFA?",
+  "accountTypeBody": "Choose your account type. The steps, screens and features adapt to it.",
+  "accountTypeLocked": "You can’t change the account type after your profile is created. Contact support if you chose the wrong one.",
+  "typeMember": "Looking for marriage",
+  "typeMemberBody": "Find a compatible partner with serious intentions.",
+  "typeMemberP1": "Discover, likes and matches",
+  "typeMemberP2": "Partner preferences and filters",
+  "typePsychologist": "Register as a psychologist",
+  "typePsychologistBody": "Offer licensed psychological consultations to members.",
+  "typeFamilyCounselor": "Register as a family counselor",
+  "typeFamilyCounselorBody": "Offer marital and family consultations to members.",
+  "typeProP1": "Your own wallet, withdrawals to your bank",
+  "typeProP2": "Licence review before your profile goes live",
+  "bodyMetricsTitle": "Height and weight",
+  "bodyMetricsNote": "Optional. Shown on your profile and used in filters.",
+  "aboutYouProfessional": "Tell us about your practice",
+  "cityOfPractice": "City of practice",
+  "photosBodyProfessional": "A clear, professional photo of you. It is reviewed before your profile goes live.",
+  "professionalsRegisterNote": "Licensed professionals can register as a psychologist or family counselor when creating an account.",
+  "religion": "Religion",
+  "sect": "Sect / denomination",
+  "sectOptional": "Sect (optional)",
+  "sectsOf": "Sects of {religion}",
+  "@sectsOf": {
+    "placeholders": {
+      "religion": {
+        "type": "String"
+      }
+    }
+  },
+  "religionAny": "Any religion",
+  "religionFilterNote": "Leave the sect empty to include every sect of the chosen religions.",
+  "religionConsent": "I agree that OLFA uses my religion to show me compatible profiles. I can remove it at any time.",
+  "religionConsentRequired": "Please confirm your consent to save your religion.",
+  "acceptedReligions": "Partner’s religion",
+  "walletTitle": "Wallet",
+  "navWallet": "Wallet",
+  "navDesk": "Desk",
+  "walletAvailable": "Available to withdraw",
+  "walletAvailableAmount": "Available: {amount}",
+  "@walletAvailableAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "walletPending": "{amount} pending — released {days} days after each session",
+  "@walletPending": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "walletMinimum": "Minimum withdrawal {amount}",
+  "@walletMinimum": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "walletOnHold": "Withdrawals are paused while an account review is open. Your earnings are safe.",
+  "walletActivity": "Activity",
+  "walletEmpty": "Earnings from completed consultations will appear here.",
+  "availableOn": "Available on {date}",
+  "@availableOn": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "clientsPaid": "Clients paid",
+  "platformFee": "OLFA fee ({percent}%)",
+  "@platformFee": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "yourShare": "Your net earnings",
+  "commissionTitle": "What the 15% fee pays for",
+  "commissionBody": "OLFA keeps {percent}% of each consultation. The rest is yours and reaches your wallet once the client confirms the session and rates it.",
+  "@commissionBody": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "commissionDev": "Developing and running the platform",
+  "commissionMarketing": "Marketing OLFA to new members",
+  "commissionAds": "Advertising campaigns",
+  "commissionPromote": "Promoting your profile to clients",
+  "commissionYourNumbers": "Your numbers · {count} completed sessions",
+  "@commissionYourNumbers": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deskYouReceive": "You receive {amount} after the {percent}% OLFA fee",
+  "@deskYouReceive": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "deskCommissionNote": "Prices are what the client pays. OLFA keeps 15%; your net earnings go to your wallet.",
+  "withdraw": "Withdraw",
+  "requestWithdrawal": "Request withdrawal",
+  "withdrawNote": "Withdrawals are reviewed and sent within 3–5 business days. Bank or transfer fees may apply.",
+  "withdrawAmountError": "Enter an amount between the minimum and your available balance.",
+  "withdrawRequested": "Withdrawal requested",
+  "withdrawalHistory": "Withdrawals",
+  "noWithdrawals": "No withdrawals yet",
+  "payoutTo": "Send to",
+  "payoutMethods": "Payout methods",
+  "payoutMethodsHint": "Bank account (IBAN or SWIFT) or a supported international transfer service.",
+  "noPayoutMethods": "No payout method yet",
+  "addPayoutMethod": "Add payout method",
+  "addPayoutFirst": "Add a payout method first",
+  "payoutIban": "Bank account (IBAN)",
+  "payoutSwift": "Bank account (SWIFT)",
+  "payoutSecurity": "Account details are encrypted and only shown masked. They must be in your own name.",
+  "accountHolder": "Account holder name",
+  "accountNumber": "Account number",
+  "accountEmail": "Account email",
+  "bankNameOptional": "Bank name (optional)",
+  "invalidIban": "Check the IBAN",
+  "invalidBic": "Check the SWIFT/BIC code",
+  "invalidEmail": "Check the email",
+  "defaultLabel": "Default",
+  "makeDefault": "Make default",
+  "ledgerEarning": "Consultation earning",
+  "ledgerReversal": "Refund reversal",
+  "ledgerWithdrawal": "Withdrawal",
+  "ledgerReturn": "Withdrawal returned",
+  "ledgerAdjustment": "Adjustment",
+  "wdRequested": "Requested",
+  "wdProcessing": "Processing",
+  "wdPaid": "Paid",
+  "wdRejected": "Rejected",
+  "wdFailed": "Failed — returned to wallet",
+  "wdCancelled": "Cancelled",
+  "professionalPolicy": "Professional conduct policy",
+  "readProfessionalPolicy": "Read the full policy",
+  "acceptProfessionalPolicy": "I agree to the professional conduct policy",
+  "policySummaryTitle": "Before you register",
+  "policyPoint1": "OLFA keeps {percent}% of each consultation for development, marketing, advertising and promoting your profile.",
+  "@policyPoint1": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "policyPoint2": "All sessions, follow-ups and payments with clients you meet on OLFA stay on OLFA.",
+  "policyPoint3": "Moving clients off the platform to avoid the fee can lead to a permanent ban after a fair review in which you can respond.",
+  "policyPoint4": "Permanently banned professionals can’t register again.",
+  "integrityTitle": "Account review",
+  "integrityWarnedTitle": "Formal warning",
+  "integrityBodyRespond": "Some client feedback suggests sessions may be moving outside OLFA. Please give your account of it by {date}. Withdrawals are paused until the review ends.",
+  "@integrityBodyRespond": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "integrityBodyReview": "Thank you for your response. Our team is reviewing the case and will tell you the outcome.",
+  "integrityRespondTitle": "Your response",
+  "integrityRespondBody": "Explain what happened. You can mention appointments, how clients reached you and anything we should know. A reviewer reads every response.",
+  "yourResponse": "Your response",
+  "responseTooShort": "Please write at least 30 characters.",
+  "sendResponse": "Send response",
+  "reviewRequiredBanner": "Please complete the short questionnaire about your last consultation before booking another.",
+  "reviewsWaiting": "{count, plural, =1{1 consultation to rate} other{{count} consultations to rate}}",
+  "@reviewsWaiting": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewTitle": "Rate your consultation",
+  "reviewHeading": "How was your consultation?",
+  "reviewHeadingNamed": "How was your consultation with {name}?",
+  "@reviewHeadingNamed": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewIntro": "It takes a minute and helps keep the service safe and of high quality.",
+  "reviewConfidential": "Your answers are confidential. The counselor sees only the overall rating, never your name or other answers.",
+  "reviewSessionQuality": "The session",
+  "qOverall": "Overall",
+  "qQuality": "How you were treated",
+  "qCommitment": "Punctuality and commitment",
+  "qEffectiveness": "How useful it was",
+  "qOutcome": "Did you get what you hoped for?",
+  "reviewNextSteps": "Next steps",
+  "qNextSession": "Did you agree on another session?",
+  "nsBookedInApp": "Yes, booked in OLFA",
+  "nsPlanInApp": "Yes, I’ll book it in OLFA",
+  "nsAgreedOutside": "Yes, arranged outside OLFA",
+  "nsNotDiscussed": "We didn’t discuss it",
+  "nsNo": "No",
+  "qNextChannel": "Where would a next session happen?",
+  "ncOlfa": "In OLFA",
+  "ncDirect": "Directly (phone, clinic)",
+  "ncOtherApp": "Another app",
+  "ncUndecided": "Not decided",
+  "reviewSafety": "Safety",
+  "qContactShared": "Were you asked for, or given, personal contact details?",
+  "qContactSharedHint": "Phone, WhatsApp, email or social media",
+  "qOffPlatformPayment": "Were you asked to pay outside OLFA?",
+  "qExternalChannel": "Were you invited to continue on another app or website?",
+  "qExternalChannelHint": "Including a clinic, a booking site or a messaging app",
+  "answerYes": "Yes",
+  "answerNo": "No",
+  "answerUnsure": "Not sure",
+  "reviewCommentHint": "Anything else you’d like to tell us (optional)",
+  "reviewWhyOlfa": "Sessions and payments inside OLFA are protected: refunds, a private chat and support if something goes wrong.",
+  "answerAllQuestions": "Please answer every question.",
+  "submitReview": "Submit",
+  "startReview": "Rate now",
+  "reviewPromptTitle": "Rate your session with {name}",
+  "@reviewPromptTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewPromptBody": "A one-minute questionnaire. You can book again once it’s done.",
+  "errAccountBanned": "This account can’t be used on OLFA.",
+  "errAccountTypeLocked": "The account type can’t be changed after the profile is created.",
+  "errInsufficientBalance": "The amount is more than your available balance.",
+  "errReviewRequired": "Please rate your last consultation first.",
+  "errStoreVerification": "We couldn’t confirm the purchase with the store. You haven’t been charged twice — try Restore purchases.",
+  "errWrongAccountType": "This feature isn’t available for your account type.",
+  "respond": "Respond",
+  "remove": "Remove",
+  "currency": "Currency",
+  "reference": "Reference",
+  "max": "Max",
+  "purchasePending": "Payment pending — your plan starts as soon as the store approves it.",
+  "downgradeScheduled": "{plan} starts at your next renewal. You keep your current plan until then.",
+  "@downgradeScheduled": {
+    "placeholders": {
+      "plan": {
+        "type": "String"
+      }
+    }
+  },
+  "downgradeTo": "Switch to {plan} at renewal",
+  "@downgradeTo": {
+    "placeholders": {
+      "plan": {
+        "type": "String"
+      }
+    }
+  },
+  "changeScheduled": "Change scheduled",
+  "cancelInStore": "Cancel in the store",
+  "storeUnavailable": "The store isn’t available right now. Check that you’re signed in to the App Store / Google Play.",
+  "productUnavailable": "This plan isn’t available in your store region yet.",
+  "purchaseFailed": "The payment didn’t go through. You haven’t been charged.",
+  "nothingToRestore": "No previous subscriptions found for this store account.",
+  "restoring": "Restoring…",
+  "billingIssueBody": "We couldn’t renew your subscription. Update your payment method in the store to keep your plan.",
+  "billingIssueGrace": "Your payment didn’t go through. Your plan stays active until {date} — update your payment method in the store.",
+  "@billingIssueGrace": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "updatePayment": "Update",
+  "planChangesOn": "Your plan changes to {plan} on {date}.",
+  "@planChangesOn": {
+    "placeholders": {
+      "plan": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "planEndsOn": "Auto-renew is off. Your plan ends on {date}.",
+  "@planEndsOn": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "resubscribe": "Turn on",
+  "planChangeRules": "Upgrading starts the new plan now and the store credits unused time. Downgrading takes effect at your next renewal. Cancel any time in the store; you keep your plan until the end of the paid period.",
+  "closedPermanentTitle": "Account closed permanently",
+  "closedPermanentBody": "This account was closed for breaking the community policy. It cannot be reopened, and a new account cannot be created with the same details.",
+  "closedTemporaryTitle": "Account temporarily closed",
+  "closedTemporaryBody": "Your account is closed until {date}. It reopens by itself then — sign in again after that date.",
+  "@closedTemporaryBody": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "closedOpenEndedBody": "Your account is closed while our team reviews it. You can write to support below.",
+  "closedReason": "Reason",
+  "communityPolicy": "Community policy",
+  "appealTitle": "Write to support",
+  "appealHint": "Explain your situation. Our team reads every message and reviews your account.",
+  "appealSent": "Message sent to support",
+  "slotTaken": "This time was just booked. Please choose another one.",
+  "captureBlockedTitle": "Screen recording is on",
+  "captureBlockedBody": "To protect members' photos, OLFA is hidden while the screen is recorded or shared. Stop the recording to continue.",
+  "photosProtectedNote": "Photos are protected: screenshots and screen recordings are blocked.",
+  "selfieCriteriaTitle": "Verification criteria",
+  "critLive": "Taken now with the front camera in the app",
+  "critOneFace": "Only your face in the picture",
+  "critVisible": "Whole face visible and close, eyes open, nothing covering it",
+  "critStraight": "Looking straight at the camera",
+  "critQuality": "Sharp and well lit, no filters or edits",
+  "critGesture": "Showing the requested gesture",
+  "critSamePerson": "The same person as in your profile photos",
+  "critReal": "A real person — not a photo of a screen or a print",
+  "critCheckedAuto": "Checked automatically on your phone",
+  "critCheckedApp": "Ensured by the app (camera only, one-time gesture)",
+  "critCheckedTeam": "Checked by the verification team",
+  "critNotMet": "Not met",
+  "fixLive": "Take a new selfie in the app now — photos from the gallery cannot be used.",
+  "fixOneFace": "Make sure no one else is in the picture, including in the background.",
+  "fixVisible": "Hold the phone at arm's length with your whole face in the frame, eyes open; remove sunglasses, masks or anything covering your face.",
+  "fixStraight": "Hold the phone at eye level and look straight into the camera, head not tilted.",
+  "fixQuality": "Face a window or a light, keep still, and don't use filters or beauty mode.",
+  "fixGesture": "Show the gesture on the screen clearly, next to your face.",
+  "fixSamePerson": "Your profile photos must show you. Replace any photo that is not of you, then take the selfie again.",
+  "fixReal": "Take the selfie of yourself, live — not a photo of a picture or a screen.",
+  "selfiePrivacy": "Your selfie is private: only the verification team sees it, it is never shown on your profile, and it is deleted after the decision.",
+  "selfieFemaleReviewer": "A woman from the team reviews my selfie",
+  "selfieFemaleReviewerHint": "Optional — we honour this request.",
+  "selfieStart": "Start",
+  "selfieGestureTitle": "Show this gesture",
+  "selfieGestureBody": "Hold your hand next to your face and look at the camera.",
+  "selfieGestureHint": "Chosen at random for this selfie only",
+  "gestureThumbUp": "Thumb up",
+  "gestureVictory": "Two fingers (V sign)",
+  "gestureOpenPalm": "Open palm",
+  "gesturePointUp": "Index finger pointing up",
+  "gestureHandOnChin": "Hand under your chin",
+  "selfieExpiresIn": "This gesture is valid for {minutes} min",
+  "@selfieExpiresIn": {
+    "placeholders": {
+      "minutes": {
+        "type": "String"
+      }
+    }
+  },
+  "selfieExpired": "Time is up — you'll get a new gesture.",
+  "selfieTipLight": "Face a window or a light",
+  "selfieTipFace": "Whole face in the frame, no sunglasses or mask",
+  "selfieTipAlone": "Only you in the picture",
+  "selfieOpenCamera": "Open the front camera",
+  "selfieChecking": "Checking your selfie…",
+  "selfieSending": "Sending securely…",
+  "selfieAnalyzeError": "We couldn't read this picture. Please take it again.",
+  "selfiePassedTitle": "Looks good",
+  "selfiePassedBody": "The automatic checks passed. Send it to the verification team — they confirm the gesture and that it's you.",
+  "selfieFailedTitle": "Let's take it again",
+  "selfieFailedBody": "Some criteria were not met:",
+  "selfieSend": "Send for verification",
+  "selfieRetake": "Retake the selfie",
+  "selfieRetakeCta": "Take a new selfie",
+  "selfieDemoNote": "Preview: nothing is uploaded.",
+  "selfieStatusPending": "Selfie received — the team is comparing it with your photos.",
+  "selfieStatusApproved": "Selfie verified — real person.",
+  "selfieStatusRejected": "The team asked for a new selfie.",
+  "selfieStatusMissing": "A verification selfie is needed.",
+  "selfieNextNote": "Next: a quick verification selfie. It stays private and is only used to confirm the photos are you.",
+  "catOther": "Other",
+  "ticketOpen": "Open",
+  "ticketAwaitingYou": "Replied — awaiting you",
+  "ticketResolved": "Resolved",
+  "ticketClosed": "Closed",
+  "newRequest": "New request",
+  "myRequests": "My requests",
+  "faqTitle": "Frequently asked questions",
+  "askSupport": "Ask support",
+  "subject": "Subject",
+  "errorSubjectShort": "Please add a short subject.",
+  "attachFile": "Attach",
+  "attachHint": "Images or PDF · up to 3 · 10 MB each",
+  "attachPhoto": "Photo from gallery",
+  "attachCamera": "Take a photo",
+  "attachPdf": "PDF file",
+  "supportMaxFiles": "Up to {count} files per message",
+  "@supportMaxFiles": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "supportFileTooLarge": "This file is larger than 10 MB.",
+  "supportPrivacy": "Only the OLFA support team can see your request and files. Never send passwords or card numbers.",
+  "supportThreadNote": "Replies from the support team appear on this page and as a notification.",
+  "supportTeam": "OLFA support",
+  "sending": "Sending…",
+  "closeRequest": "Mark as solved",
+  "closeRequestTitle": "Close this request?",
+  "closeRequestBody": "You can open a new request at any time.",
+  "requestClosedNote": "This request is closed.",
+  "escrowReviewNote": "Your payment is held safely. It reaches the counselor only after you confirm the consultation took place and rate it.",
+  "qSessionHappened": "Did the consultation take place?",
+  "sessionHappenedYes": "Yes, it took place",
+  "sessionHappenedNo": "No, it didn't happen",
+  "notHappenedReason": "What happened?",
+  "notHappenedHint": "e.g. the counselor did not join, the call kept failing…",
+  "notHappenedNote": "The fee stays held. Our support team reviews what happened and refunds you if the consultation did not take place.",
+  "reportNotHappened": "Report to support",
+  "notHappenedSent": "Thanks — support will review it. Your payment stays held meanwhile.",
+  "walletHeld": "Held",
+  "walletUnderReview": "Under review",
+  "walletSoon": "Available soon",
+  "walletSoonDays": "within {days} days",
+  "@walletSoonDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "walletSessionsCount": "{count, plural, =1{1 session} other{{count} sessions}}",
+  "@walletSessionsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "walletBreakdownA11y": "Available {available}, held until clients confirm {held}, under review {review}",
+  "@walletBreakdownA11y": {
+    "placeholders": {
+      "available": {
+        "type": "String"
+      },
+      "held": {
+        "type": "String"
+      },
+      "review": {
+        "type": "String"
+      }
+    }
+  },
+  "escrowHowTitle": "How fees reach your wallet",
+  "escrowStep1Title": "The client pays — the fee is held",
+  "escrowStep1Body": "OLFA keeps the payment safe; neither side can lose it.",
+  "escrowStep2Title": "The consultation takes place",
+  "escrowStep2Body": "At the confirmed time, in OLFA.",
+  "escrowStep3Title": "The client confirms and rates",
+  "escrowStep3Body": "If the client reports it did not happen, support reviews it before any decision.",
+  "escrowStep4Title": "Your share is released",
+  "escrowStep4Body": "Your share after OLFA's commission becomes withdrawable.",
+  "escrowNoAutoRelease": "Fees are released only by the client's confirmation and rating, or by a support decision.",
+  "escrowAutoRelease": "If a client does not respond, the fee is released automatically {days} days after the session.",
+  "@escrowAutoRelease": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "chooseTime": "Choose a time",
+  "noSlots": "No free times in the coming days. Please check again later.",
+  "slotsTimezoneNote": "Times are shown in your phone's time zone.",
+  "confirmPickedTime": "The client chose this time",
+  "proposeOtherTime": "Propose another time",
+  "clientPicked": "Client's choice",
+  "bookingsPaused": "Paused",
+  "myHours": "My hours",
+  "ratingsAndReviews": "Ratings & reviews",
+  "noRatingsYet": "No ratings yet",
+  "noRatingsBody": "Clients rate you after each completed consultation.",
+  "hoursNotSet": "Not set — add your hours",
+  "hoursDaysCount": "{count, plural, =1{1 day a week} other{{count} days a week}}",
+  "@hoursDaysCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "acceptingBookings": "Accepting bookings",
+  "acceptingBookingsOn": "Clients can book your free times.",
+  "acceptingBookingsOff": "Paused — no new bookings. Existing ones stay.",
+  "bookingsOpened": "Bookings are open",
+  "bookingsPausedToast": "Bookings paused",
+  "weeklyHours": "Weekly hours",
+  "timezoneLabel": "Time zone: {tz}",
+  "@timezoneLabel": {
+    "placeholders": {
+      "tz": {
+        "type": "String"
+      }
+    }
+  },
+  "unavailable": "Unavailable",
+  "more": "More",
+  "addPeriod": "Add a period",
+  "copyToAllDays": "Copy to every day",
+  "periodStart": "Starts at",
+  "periodEnd": "Ends at",
+  "periodEndAfterStart": "The end must be after the start.",
+  "hoursOverlap": "This period overlaps another one on the same day.",
+  "saveHours": "Save hours",
+  "bookingRules": "Booking rules",
+  "ruleBuffer": "Break between sessions",
+  "ruleNotice": "Minimum notice",
+  "ruleHorizon": "Book up to",
+  "hoursShort": "{h} h",
+  "@hoursShort": {
+    "placeholders": {
+      "h": {
+        "type": "int"
+      }
+    }
+  },
+  "daysShort": "{d} days",
+  "@daysShort": {
+    "placeholders": {
+      "d": {
+        "type": "int"
+      }
+    }
+  },
+  "saveRules": "Save rules",
+  "timeOff": "Time off",
+  "timeOffPick": "Choose the days you're away",
+  "noTimeOff": "No time off planned.",
+  "scheduleNote": "Clients only see times inside your hours that are free, after the break and the minimum notice. Two clients can never book the same time.",
+  "replyToReview": "Reply publicly",
+  "replyToReviewHint": "Shown under the review on your profile. Contact details are not allowed.",
+  "yourReply": "Your reply",
+  "publishReply": "Publish reply",
+  "reply": "Reply",
+  "editReply": "Edit reply",
+  "latestReviews": "Latest reviews",
+  "escrowHeldTag": "Fee held — waiting for the client's rating",
+  "escrowReleasedTag": "Released to your wallet",
+  "escrowDisputedTag": "Under review by support",
+  "escrowRefundedTag": "Refunded to the client",
+  "recordVoiceHint": "Hold to record, release to send — or tap to record hands-free",
+  "slideToCancel": "Slide to cancel",
+  "voiceTooShort": "Hold a little longer to record a voice message.",
+  "deleteRecording": "Delete recording",
+  "listenBeforeSending": "Listen before sending",
+  "stopAndListen": "Stop and listen",
+  "msgQueued": "Waiting for network",
+  "msgQueuedNote": "Saved on your phone — it sends by itself when you're back online",
+  "msgSent": "Sent",
+  "msgDelivered": "Delivered",
+  "msgRead": "Read",
+  "deleteUnsent": "Delete (not sent)",
+  "adSponsored": "Sponsored",
+  "adRemove": "Remove ads",
+  "adContinue": "Continue",
+  "filters": "Filters",
+  "counselorsFound": "{count, plural, =0{No counselors} =1{1 counselor} other{{count} counselors}}",
+  "@counselorsFound": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clearFilters": "Clear filters",
+  "startingFrom": "Starting from",
+  "services": "Services",
+  "noOfferingsYet": "No prices set yet.",
+  "navBadgeCount": "{count, plural, =1{1 new} other{{count} new}}",
+  "@navBadgeCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "discardChangesTitle": "Discard your changes?",
+  "discardChangesBody": "Your changes haven’t been saved.",
+  "discard": "Discard",
+  "viewAsOthers": "See your profile as others do",
+  "sectionAboutMe": "My profile",
+  "sectionSubscription": "Subscription",
+  "sectionAccount": "Account",
+  "draftRestored": "We kept your answers — continue where you left off.",
+  "filtersCount": "{count, plural, =1{1 filter} other{{count} filters}}",
+  "@filtersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "infoSectionBasics": "The basics",
+  "infoSectionBackground": "Background",
+  "infoSectionIntentions": "About you and marriage",
+  "completeHighlighted": "Please complete the highlighted fields.",
+  "verifiedFull": "Selfie and ID verified",
+  "verifiedSelfieOnly": "Selfie verified · ID not yet verified",
+  "verifiedIdOnly": "ID verified · selfie not yet verified",
+  "compatTitle": "Compatibility questions",
+  "compatShort": "Compatibility",
+  "compatIntro": "A few questions about money, the future, family roles, lifestyle and marriage. You each answer on your own; the result appears in this chat only when you both finish.",
+  "compatStart": "Start",
+  "compatContinue": "Continue",
+  "compatView": "View",
+  "compatMyProgress": "You: {answered}/{total}",
+  "@compatMyProgress": {
+    "placeholders": {
+      "answered": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "compatPeerNotStarted": "{name} hasn't started",
+  "@compatPeerNotStarted": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "compatPeerAnswering": "{name} is answering",
+  "@compatPeerAnswering": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "compatPeerDone": "{name} finished",
+  "@compatPeerDone": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "compatWaiting": "Done. The result appears in the chat when {name} finishes.",
+  "@compatWaiting": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "compatPrivate": "Your answers are never shown to the other person, only the shared result.",
+  "compatResultTitle": "Your compatibility",
+  "compatAgreed": "{count, plural, =0{No identical answers} =1{Same answer on 1 question} other{Same answer on {count} questions}}",
+  "@compatAgreed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "compatTalkAbout": "{count, plural, =1{1 topic worth talking about} other{{count} topics worth talking about}}",
+  "@compatTalkAbout": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "compatDomainFinance": "Money",
+  "compatDomainFuture": "Future plans",
+  "compatDomainFamily": "Family roles",
+  "compatDomainLifestyle": "Lifestyle",
+  "compatDomainMarriage": "Marriage expectations",
+  "compatResultPreview": "Compatibility result",
+  "compatOff": "Compatibility questions are not available right now.",
+  "compatQuestionOf": "Question {index} of {total}",
+  "@compatQuestionOf": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "consultDeletesBanner": "{days, plural, =0{This chat is deleted for both of you today.} =1{This chat is deleted for both of you tomorrow ({date}).} other{This chat is deleted for both of you on {date}, in {days} days.}} A new message restarts the {retention} days.",
+  "@consultDeletesBanner": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      },
+      "date": {
+        "type": "String"
+      },
+      "retention": {
+        "type": "int"
+      }
+    }
+  },
+  "consultDaysLeft": "{days, plural, =0{Deleted today} =1{Deleted tomorrow} other{Deleted in {days} days}}",
+  "@consultDaysLeft": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "consultActive": "Active",
+  "consultEnded": "Ended",
+  "consultArchived": "Archive",
+  "consultSearchHint": "Search by name or message",
+  "consultFilterStatus": "Session status",
+  "consultEmptyActive": "No active consultations",
+  "consultEmptyActiveBody": "Confirmed sessions appear here with their chat.",
+  "consultEmptyEnded": "No ended consultations",
+  "consultEmptyEndedBody": "After a session ends, its chat stays here for 30 days, then it is deleted for both sides.",
+  "consultEmptyArchive": "Nothing archived",
+  "consultEmptyArchiveBody": "Archive a consultation chat to keep your list tidy. Archived chats follow the same 30-day rule.",
+  "consultRetentionNote": "Consultation chats are deleted for both sides 30 days after the session ends or after the last message.",
+  "consultArchiveAction": "Archive",
+  "consultRestoreAction": "Move back",
+  "consultSessionOn": "Session {date}",
+  "@consultSessionOn": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "paySheetTitle": "Complete payment",
+  "payMethodTitle": "Payment method",
+  "payMethodCard": "Card, Apple Pay or Google Pay",
+  "payMethodCardSub": "Secure checkout. OLFA never sees your card number.",
+  "payNowAmount": "Pay {amount}",
+  "@payNowAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "payProcessing": "Processing your payment…",
+  "paySuccessTitle": "Payment received",
+  "paySuccessBody": "Your request has been sent. The counselor will confirm the time, and the chat will appear in Messages.",
+  "payFailedTitle": "Payment didn't go through",
+  "payCancelledTitle": "Payment cancelled",
+  "payKeptUntil": "Your booking and its time are kept until {time}. You can try again.",
+  "@payKeptUntil": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "payViewConsultations": "My consultations",
+  "payCompleteAction": "Complete payment",
+  "payWindowClosed": "The payment window has closed. Please book again.",
+  "continueToPayment": "Continue to payment",
+  "accountForTitle": "Who is this account for?",
+  "accountForMe": "For me",
+  "accountForMeSub": "I'll run my own profile.",
+  "accountForSomeone": "For a family member",
+  "accountForSomeoneSub": "A parent, sibling or trusted person creates and runs the account for its owner, with the owner's agreement.",
+  "managerSectionTitle": "About you, the manager",
+  "managerNameLabel": "Your name",
+  "managerRelationLabel": "Your relation to the account owner",
+  "managerPhoneQ": "Whose phone number signs in to this account?",
+  "managerPhoneOwner": "The owner's number",
+  "managerPhoneManager": "My number",
+  "managerConsent": "The account owner knows about this account and agrees that I manage it.",
+  "managerOwnerNote": "The profile, photos and details you add describe the owner, not you.",
+  "managerPublicNote": "Others only see your relation (for example \"Managed by: Father\"). Your name stays private.",
+  "managedBy": "Managed by: {relation}",
+  "@managedBy": {
+    "placeholders": {
+      "relation": {
+        "type": "String"
+      }
+    }
+  },
+  "managedByBody": "A family member runs this account on the owner's behalf. The profile describes the owner.",
+  "accountManagement": "Account management",
+  "accountManagementSelf": "You run this account yourself.",
+  "accountManagementAdd": "A family member manages it",
+  "managerRevoke": "Stop the management arrangement",
+  "managerRevokeBody": "The \"Managed by\" notice disappears from the profile at once. The account and its data stay as they are.",
+  "managerConsentRequired": "The owner's agreement is required.",
+  "relFather": "Father",
+  "relMother": "Mother",
+  "relBrother": "Brother",
+  "relSister": "Sister",
+  "relGrandparent": "Grandparent",
+  "relUncle": "Uncle",
+  "relAunt": "Aunt",
+  "relLegalGuardian": "Legal guardian",
+  "relRelative": "Another relative",
+  "relFriend": "Trusted friend",
+  "profileSectionBasics": "The basics",
+  "profileSectionAbout": "About",
+  "profileSectionBackground": "Background",
+  "profileSectionMarriage": "Marriage & family",
+  "profileSectionInterests": "Interests",
+  "profileSectionTrust": "Trust & verification",
+  "photoOf": "Photo {index} of {total}",
+  "@photoOf": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "profileSectionPhotos": "Photos",
+  "navRequests": "Requests",
+  "@navRequests": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "navChats": "Chats",
+  "@navChats": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "navPerformance": "Performance",
+  "@navPerformance": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "screenProPerformance": "Performance & visibility",
+  "@screenProPerformance": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "screenProPlans": "Counselor plans",
+  "@screenProPlans": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "proPlansBody": "Counselor accounts never show ads. Pick a plan to raise your profile in the counselor directory and see how it is doing.",
+  "@proPlansBody": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "proPlansTileSub": "Higher in the directory, a Featured badge and profile insights",
+  "@proPlansTileSub": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "proPlanTopPriority": "Top placement in the counselor directory",
+  "@proPlanTopPriority": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "proPlanPriority": "Priority placement in the counselor directory",
+  "@proPlanPriority": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "proPlanStandardListing": "Standard placement in the directory, by rating",
+  "@proPlanStandardListing": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "proPlanFeatured": "A “Featured counselor” badge on your card and profile",
+  "@proPlanFeatured": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "proPlanInsights": "Profile insights: views, visitors and requests over 30 days",
+  "@proPlanInsights": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "proPlanCore": "Requests, sessions, chats and wallet in full",
+  "@proPlanCore": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "last30Days": "Last 30 days",
+  "@last30Days": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "growTitle": "What helps clients choose you",
+  "@growTitle": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "growProfile": "Complete your profile, services and prices",
+  "@growProfile": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "growProfileSub": "A clear bio and services in your languages",
+  "@growProfileSub": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "growHours": "Publish your hours",
+  "@growHours": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "growHoursSub": "Clients book open times directly",
+  "@growHoursSub": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "growReply": "Confirm requests quickly",
+  "@growReply": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "growReplySub": "Quick replies build trust",
+  "@growReplySub": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "insightsPrivacyNote": "We never show who visited your profile; each member counts once a day.",
+  "@insightsPrivacyNote": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "visibilityTop": "Your profile appears at the top of the counselor directory.",
+  "@visibilityTop": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "visibilityPriority": "Your profile appears ahead of standard profiles.",
+  "@visibilityPriority": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "visibilityStandard": "Your profile appears in the directory by rating.",
+  "@visibilityStandard": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "featuredCounselor": "Featured counselor",
+  "@featuredCounselor": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "seeProPlans": "See counselor plans",
+  "@seeProPlans": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "manageProPlan": "Manage plan",
+  "@manageProPlan": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "statViews": "Profile views",
+  "@statViews": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "statVisitors": "Unique visitors",
+  "@statVisitors": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "statRequests": "Paid requests",
+  "@statRequests": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "statConversion": "Visitors who requested",
+  "@statConversion": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "insightsLockedTitle": "See how your profile is doing",
+  "@insightsLockedTitle": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "insightsLockedBody": "With counselor Plus or Premium you see views, visitors and requests, and your profile is placed higher.",
+  "@insightsLockedBody": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "yourProPlan": "Your plan: {plan}",
+  "@yourProPlan": {
+    "placeholders": {
+      "plan": {
+        "type": "String"
+      }
+    }
+  }
 }

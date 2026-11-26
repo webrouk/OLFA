@@ -1,0 +1,5 @@
+"CFBundleDisplayName" = "OLFA";
+"NSMicrophoneUsageDescription" = "OLFA utilise le micro pour enregistrer les messages vocaux que vous choisissez d’envoyer.";
+"NSPhotoLibraryUsageDescription" = "OLFA utilise vos photos pour votre profil et pour les photos que vous envoyez dans les conversations.";
+"NSCameraUsageDescription" = "OLFA utilise l’appareil photo pour prendre vos photos de profil, votre selfie de vérification et les photos que vous envoyez dans les conversations.";
+"NSLocationWhenInUseUsageDescription" = "OLFA utilise votre position approximative pour vous montrer d’abord les personnes les plus proches. Les autres ne voient qu’une distance approximative.";

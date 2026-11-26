@@ -5,9 +5,10 @@ import { join } from 'node:path';
 import { ENV, Env } from '../../config/env';
 import { AppError, ErrorCode } from '../../common/errors';
 import { PrismaService, SettingsService } from '../../common/infra';
-import { compatibility, DEFAULT_WEIGHTS, Member, mutuallyCompatible, parseWeights, rankCandidates, Weights } from '../../domain/matching';
+import { compatibility, DEFAULT_WEIGHTS, Member, mutuallyCompatible, parseWeights, rankCandidates, religionAccepted, Weights } from '../../domain/matching';
 import { dayWindow } from '../../domain/quota-period';
 import { ageOn } from '../../domain/security';
+import { isQualifiedSect } from '../../domain/reference';
 import { discoveryScope, publicDistanceKm, sortNearest } from '../../domain/proximity';
 import { privacyOf } from '../../domain/privacy';
 import { profileInclude, toPublicProfile } from '../profiles/profile.mapper';
@@ -27,6 +28,9 @@ export interface DiscoveryFilters {
   educations?: EducationLevel[];
   occupation?: string;
   nationality?: string;
+  /** Free for every plan: religion and, under it, sects ("religion.sect"). */
+  religions?: string[];
+  sects?: string[];
   /** Height / weight ranges; members who left them empty are excluded only when a range is set. */
   heightMin?: number;
   heightMax?: number;
@@ -82,6 +86,10 @@ type CandidateRow = {
   nationality: string | null;
   height_cm: number | null;
   weight_kg: number | null;
+  religion: string | null;
+  sect: string | null;
+  pref_religions: string[];
+  pref_sects: string[];
   show_location: boolean;
   distance_km: number | null;
 };
@@ -128,6 +136,8 @@ export class MatchingService {
         wantsChildren: p.wantsChildren,
         smoking: p.smoking,
         willingToRelocate: p.willingToRelocate,
+        religion: p.religion,
+        sect: p.sect,
       },
       prefs: {
         ageMin: pr.ageMin,
@@ -139,6 +149,8 @@ export class MatchingService {
         educationLevels: pr.educationLevels,
         occupations: pr.occupations,
         wantsChildren: pr.wantsChildren,
+        religions: pr.religions,
+        sects: pr.sects,
       },
     };
   }
@@ -157,6 +169,9 @@ export class MatchingService {
   async discover(viewerId: string, f: DiscoveryFilters) {
     const viewer = await this.member(viewerId);
     if (!viewer) throw new AppError(ErrorCode.VALIDATION, 'Complete your profile first');
+    if ((f.sects ?? []).some((x) => !isQualifiedSect(x) || ((f.religions?.length ?? 0) > 0 && !f.religions!.includes(x.split('.')[0])))) {
+      throw new AppError(ErrorCode.VALIDATION, 'Each sect must belong to one of the chosen religions');
+    }
 
     const ent = await this.entitlements.forUser(viewerId);
     const basic = new Set((await this.prisma.interest.findMany({ where: { isBasic: true }, select: { key: true } })).map((i) => i.key));
@@ -216,6 +231,7 @@ export class MatchingService {
       .filter((r) => !f.occupation || r.occupation === f.occupation)
       .filter((r) => inRange(r.height_cm, f.heightMin, f.heightMax) && inRange(r.weight_kg, f.weightMin, f.weightMax))
       .filter((r) => !f.nationality || r.nationality === f.nationality)
+      .filter((r) => religionAccepted(f.religions ?? [], f.sects ?? [], r.religion, r.sect))
       .map((r) => ({
         profile: {
           id: r.id,
@@ -232,6 +248,8 @@ export class MatchingService {
           wantsChildren: r.wants_children,
           smoking: r.smoking,
           willingToRelocate: r.willing_to_relocate,
+          religion: r.religion,
+          sect: r.sect,
         },
         prefs: {
           ageMin: r.age_min,
@@ -243,6 +261,8 @@ export class MatchingService {
           educationLevels: r.education_levels,
           occupations: r.occupations,
           wantsChildren: r.pref_wants_children,
+          religions: r.pref_religions,
+          sects: r.pref_sects,
         },
       }));
 

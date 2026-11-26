@@ -1,0 +1,25 @@
+# Religion and the sects shown under it. Row kinds:
+#   R <tab> key <tab> english <tab> arabic          (religion)
+#   S <tab> religion_key.sect_key <tab> english <tab> arabic   (sect of the religion above)
+# "undisclosed" lets a member keep it private; such profiles are excluded only
+# when someone filters by religion.
+R	islam	Islam	الإسلام
+S	islam.sunni	Sunni	سنّي
+S	islam.shia	Shia	شيعي
+S	islam.ibadi	Ibadi	إباضي
+S	islam.other	Other / prefer not to say	أخرى / أفضّل عدم التحديد
+R	christianity	Christianity	المسيحية
+S	christianity.coptic_orthodox	Coptic Orthodox	قبطي أرثوذكسي
+S	christianity.greek_orthodox	Greek Orthodox	روم أرثوذكس
+S	christianity.syriac_orthodox	Syriac Orthodox	سرياني أرثوذكسي
+S	christianity.armenian_orthodox	Armenian Orthodox	أرمني أرثوذكسي
+S	christianity.catholic	Catholic	كاثوليكي
+S	christianity.maronite	Maronite	ماروني
+S	christianity.melkite	Melkite Greek Catholic	روم كاثوليك
+S	christianity.protestant	Protestant	بروتستانتي
+S	christianity.evangelical	Evangelical	إنجيلي
+S	christianity.other	Other / prefer not to say	أخرى / أفضّل عدم التحديد
+R	druze	Druze	الدرزية
+R	judaism	Judaism	اليهودية
+R	other	Other	ديانة أخرى
+R	undisclosed	Prefer not to say	أفضّل عدم الإفصاح

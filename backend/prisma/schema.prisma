@@ -20,6 +20,7 @@ enum AccountStatus {
   SUSPENDED
   RESTRICTED
   DELETED
+  BANNED
 
   @@map("account_status")
 }
@@ -61,6 +62,7 @@ enum MarriageTimeline {
 enum AppLocale {
   ar
   en
+  fr
 
   @@map("app_locale")
 }
@@ -108,21 +110,47 @@ enum MatchStatus {
   @@map("match_status")
 }
 
+/// COMPAT = the compatibility result card (compat_results.message_id points to it)
 enum MessageType {
   TEXT
   SYSTEM
   IMAGE
   VOICE
+  COMPAT
 
   @@map("message_type")
 }
 
+/// PRO_* are counselor plans (licensed professionals only; DB trigger P0076).
 enum PlanCode {
   FREE
   PLUS
   PREMIUM
+  PRO_PLUS
+  PRO_PREMIUM
 
   @@map("plan_code")
+}
+
+enum PlanAudience {
+  MEMBER
+  PROFESSIONAL
+
+  @@map("plan_audience")
+}
+
+/// One row per member per day who opened a counselor's profile (insights for
+/// counselor plans; kept 90 days; who looked is never shown).
+model CounselorProfileView {
+  counselorId String           @map("counselor_id") @db.Uuid
+  viewerId    String           @map("viewer_id") @db.Uuid
+  day         DateTime         @default(dbgenerated("((now() AT TIME ZONE 'utc'::text))::date")) @db.Date
+  counselor   CounselorProfile @relation(fields: [counselorId], references: [userId], onDelete: Cascade)
+  viewer      User             @relation("CounselorProfileViews", fields: [viewerId], references: [id], onDelete: Cascade)
+
+  @@id([counselorId, day, viewerId])
+  @@index([day], map: "counselor_profile_views_day_idx")
+  @@map("counselor_profile_views")
 }
 
 enum SubscriptionStatus {
@@ -133,6 +161,9 @@ enum SubscriptionStatus {
   EXPIRED
   REFUNDED
   REVOKED
+  ON_HOLD
+  PAUSED
+  PENDING
 
   @@map("subscription_status")
 }
@@ -182,6 +213,12 @@ enum NotificationType {
   REMATCH_REQUEST
   REMATCH_ACCEPTED
   NEW_COMPLIMENT
+  INTEGRITY_CASE
+  WITHDRAWAL_UPDATE
+  REVIEW_REQUIRED
+  SUPPORT_REPLY
+  ESCROW_RELEASED
+  ACCOUNT_RESTRICTED
 
   @@map("notification_type")
 }
@@ -255,6 +292,7 @@ enum ModerationActionType {
   APPROVE_COUNSELOR
   REJECT_COUNSELOR
   SUSPEND_COUNSELOR
+  BAN
 
   @@map("moderation_action_type")
 }
@@ -267,7 +305,7 @@ model User {
   phoneCountry        String        @map("phone_country") @db.Char(2)
   phoneVerifiedAt     DateTime?     @map("phone_verified_at") @db.Timestamptz
   status              AccountStatus @default(PENDING_VERIFICATION)
-  locale              AppLocale     @default(ar)
+  locale              AppLocale     @default(en)
   timezone            String        @default("UTC") @db.VarChar(64)
   ageConfirmedAt      DateTime?     @map("age_confirmed_at") @db.Timestamptz
   termsVersion        String?       @map("terms_version") @db.VarChar(20)
@@ -275,7 +313,13 @@ model User {
   lastActiveAt        DateTime?     @map("last_active_at") @db.Timestamptz
   deletionRequestedAt DateTime?     @map("deletion_requested_at") @db.Timestamptz
   frozenAt            DateTime?     @map("frozen_at") @db.Timestamptz
+  /// SUSPENDED with a date = temporary; BANNED = permanent (shown on the closed-account screen).
+  suspendedUntil      DateTime?     @map("suspended_until") @db.Timestamptz
+  restrictionReason   String?       @map("restriction_reason") @db.VarChar(300)
+  restrictedAt        DateTime?     @map("restricted_at") @db.Timestamptz
   freezeReason        String?       @map("freeze_reason") @db.VarChar(40)
+  /// Chosen once at sign-up; locked when a profile exists (DB trigger).
+  accountType         AccountType?  @map("account_type")
   privacy             UserPrivacySettings?
   deletedAt           DateTime?     @map("deleted_at") @db.Timestamptz
   createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz
@@ -320,6 +364,8 @@ model User {
   reviewsWritten       ConsultationReview[]
   rematchRequests      RematchRequest[]
 
+  selfieChallenges SelfieChallenge[]
+  counselorProfileViews CounselorProfileView[] @relation("CounselorProfileViews")
   @@map("users")
 }
 
@@ -347,6 +393,10 @@ model UserProfile {
   createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt         DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   nationality       String?          @db.Char(2)
+  /// Key from shared/reference/religions.tsv; stored only with explicit consent.
+  religion          String?          @db.VarChar(30)
+  sect              String?          @db.VarChar(40)
+  religionConsentAt DateTime?        @map("religion_consent_at") @db.Timestamptz
   latitude          Float? // rounded to 2 decimals (~1 km), never exposed
   longitude         Float?
   locationCountry   String?          @map("location_country") @db.Char(2)
@@ -393,6 +443,9 @@ model UserPreference {
   educationLevels EducationLevel[] @default([]) @map("education_levels")
   occupations     String[]         @default([])
   wantsChildren   Boolean?         @map("wants_children")
+  /// Accepted religions (empty = any) and sects as "religion.sect".
+  religions       String[]         @default([]) @db.VarChar(30)
+  sects           String[]         @default([]) @db.VarChar(71)
   updatedAt       DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -448,6 +501,9 @@ model VerificationRequest {
   reviewedBy   String?            @map("reviewed_by") @db.Uuid
   submittedAt  DateTime           @default(now()) @map("submitted_at") @db.Timestamptz
   reviewedAt   DateTime?          @map("reviewed_at") @db.Timestamptz
+  /// Selfie (LIVENESS): the gesture asked for, and whether a woman from the team should review it.
+  challengeGesture     String?    @map("challenge_gesture") @db.VarChar(20)
+  preferFemaleReviewer Boolean    @default(false) @map("prefer_female_reviewer")
   user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   reviewer     AdminUser?         @relation(fields: [reviewedBy], references: [id])
 
@@ -538,6 +594,8 @@ model Conversation {
   startedBy     String               @map("started_by") @db.Uuid
   createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz
   lastMessageAt DateTime?            @map("last_message_at") @db.Timestamptz
+  /// Sequence of the latest message (messages are numbered 1, 2, 3 … per conversation by the DB).
+  lastSeq       BigInt               @default(0) @map("last_seq")
   kind          ConversationKind     @default(MATCH)
   consultationId String?             @unique @map("consultation_id") @db.Uuid
   match         Match?               @relation(fields: [matchId], references: [id], onDelete: Cascade)
@@ -556,6 +614,9 @@ model ConversationMember {
   userId         String       @map("user_id") @db.Uuid
   joinedAt       DateTime     @default(now()) @map("joined_at") @db.Timestamptz
   lastReadAt     DateTime?    @map("last_read_at") @db.Timestamptz
+  /// "Read / received up to message N" (only move forward).
+  lastReadSeq      BigInt     @default(0) @map("last_read_seq")
+  lastDeliveredSeq BigInt     @default(0) @map("last_delivered_seq")
   muted          Boolean      @default(false)
   folder            ConversationFolder @default(INBOX)
   archivedAt        DateTime?    @map("archived_at") @db.Timestamptz
@@ -574,6 +635,8 @@ model Message {
   conversationId  String           @map("conversation_id") @db.Uuid
   senderId        String           @map("sender_id") @db.Uuid
   clientMessageId String           @map("client_message_id") @db.Uuid
+  /// Position in the conversation, assigned by the database (strict order, no gaps).
+  seq             BigInt           @default(dbgenerated("0"))
   type            MessageType      @default(TEXT)
   body            String           @default("") @db.VarChar(2000)
   flagged         Boolean          @default(false)
@@ -586,6 +649,7 @@ model Message {
   attachments     MessageAttachment[]
 
   @@unique([conversationId, senderId, clientMessageId])
+  @@unique([conversationId, seq], map: "messages_conversation_seq_key")
   @@index([conversationId, createdAt(sort: Desc)], map: "messages_conv_idx")
   @@map("messages")
 }
@@ -611,6 +675,8 @@ model SubscriptionPlan {
   nameEn        String               @map("name_en") @db.VarChar(40)
   isActive      Boolean              @default(true) @map("is_active")
   sortOrder     Int                  @default(0) @map("sort_order") @db.SmallInt
+  /// Who can subscribe: members or licensed professionals (PRO_* codes).
+  audience      PlanAudience         @default(MEMBER)
   updatedAt     DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   entitlements  FeatureEntitlement[]
   products      PlanProduct[]
@@ -655,6 +721,13 @@ model UserSubscription {
   expiresAt             DateTime           @map("expires_at") @db.Timestamptz
   autoRenew             Boolean            @default(true) @map("auto_renew")
   cancelledAt           DateTime?          @map("cancelled_at") @db.Timestamptz
+  /// Product that takes over at the next renewal (scheduled downgrade).
+  pendingProductId      String?            @map("pending_product_id") @db.VarChar(120)
+  graceUntil            DateTime?          @map("grace_until") @db.Timestamptz
+  sandbox               Boolean            @default(false)
+  replacedBy            String?            @map("replaced_by") @db.Uuid
+  lastVerifiedAt        DateTime?          @map("last_verified_at") @db.Timestamptz
+  latestTransactionId   String?            @map("latest_transaction_id") @db.VarChar(200)
   createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz
   updatedAt             DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -753,6 +826,10 @@ model AdminUser {
   name                 String                @db.VarChar(80)
   passwordHash         String                @map("password_hash")
   totpSecretEnc        String?               @map("totp_secret_enc")
+  /// Two-factor sign-in confirmed (set after the first valid code).
+  totpConfirmedAt      DateTime?             @map("totp_confirmed_at") @db.Timestamptz
+  /// Last accepted 30-second step (replay protection).
+  totpLastStep         BigInt?               @map("totp_last_step")
   isActive             Boolean               @default(true) @map("is_active")
   lastLoginAt          DateTime?             @map("last_login_at") @db.Timestamptz
   createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz
@@ -890,9 +967,13 @@ model SupportTicket {
   assignedTo String?         @map("assigned_to") @db.Uuid
   createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz
   updatedAt  DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  lastMessageAt   DateTime   @default(now()) @map("last_message_at") @db.Timestamptz
+  userLastReadAt  DateTime?  @map("user_last_read_at") @db.Timestamptz
+  staffLastReadAt DateTime?  @map("staff_last_read_at") @db.Timestamptz
   user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   assignee   AdminUser?      @relation(fields: [assignedTo], references: [id])
   messages   TicketMessage[]
+  attachments TicketAttachment[]
 
   @@index([status, category, createdAt], map: "support_tickets_queue_idx")
   @@map("support_tickets")
@@ -903,9 +984,10 @@ model TicketMessage {
   ticketId   String        @map("ticket_id") @db.Uuid
   authorType ActorType     @map("author_type")
   authorId   String        @map("author_id") @db.Uuid
-  body       String        @db.VarChar(4000)
+  body       String        @default("") @db.VarChar(4000)
   createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz
   ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  attachments TicketAttachment[]
 
   @@map("ticket_messages")
 }
@@ -1043,6 +1125,13 @@ model CounselorProfile {
   ratingAvg        Decimal               @default(0) @map("rating_avg") @db.Decimal(3, 2)
   ratingCount      Int                   @default(0) @map("rating_count")
   rejectReason     String?               @map("reject_reason") @db.VarChar(300)
+  gender           Gender?
+  countryCode      String?               @map("country_code") @db.Char(2)
+  city             String?               @db.VarChar(80)
+  latitude         Float? // rounded (~1 km), never exposed
+  longitude        Float?
+  policyVersion    String?               @map("policy_version") @db.VarChar(20)
+  policyAcceptedAt DateTime?             @map("policy_accepted_at") @db.Timestamptz
   reviewedBy       String?               @map("reviewed_by") @db.Uuid
   reviewedAt       DateTime?             @map("reviewed_at") @db.Timestamptz
   createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz
@@ -1052,6 +1141,15 @@ model CounselorProfile {
   offerings        CounselorOffering[]
   consultations    Consultation[]
   reviews          ConsultationReview[]
+  payoutMethods    PayoutMethod[]
+  withdrawals      Withdrawal[]
+  walletEntries    WalletEntry[]
+  integritySignals CounselorIntegritySignal[]
+  integrityCases   CounselorIntegrityCase[]
+  profileViews     CounselorProfileView[]
+  schedule         CounselorSchedule?
+  availability     CounselorAvailability[]
+  timeOff          CounselorTimeOff[]
 
   @@index([status, kind, ratingAvg(sort: Desc)], map: "counselor_profiles_listing_idx")
   @@map("counselor_profiles")
@@ -1097,6 +1195,16 @@ model Consultation {
   confirmedAt     DateTime?           @map("confirmed_at") @db.Timestamptz
   completedAt     DateTime?           @map("completed_at") @db.Timestamptz
   cancelledAt     DateTime?           @map("cancelled_at") @db.Timestamptz
+  /// Commission snapshot taken when the client pays (DB trigger).
+  platformFeePercent Int?             @map("platform_fee_percent") @db.SmallInt
+  platformFeeMinor   Int?             @map("platform_fee_minor")
+  counselorNetMinor  Int?             @map("counselor_net_minor")
+  /// HELD from payment until the client confirms the session and rates it (DB triggers).
+  escrowStatus       EscrowStatus?    @map("escrow_status")
+  escrowReleasedAt   DateTime?        @map("escrow_released_at") @db.Timestamptz
+  disputeReason      String?          @map("dispute_reason") @db.VarChar(500)
+  /// Generated: [scheduled_at or preferred_time, + duration) — no double booking (exclusion constraint).
+  slot               Unsupported("tstzrange")?
   createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   client          User                @relation("ConsultationClient", fields: [clientId], references: [id], onDelete: Cascade)
@@ -1106,6 +1214,8 @@ model Consultation {
   payments        Payment[]           @relation("ConsultationPayments")
   conversation    Conversation?
   review          ConsultationReview?
+  walletEntries   WalletEntry[]
+  integritySignals CounselorIntegritySignal[]
 
   @@index([clientId, createdAt(sort: Desc)], map: "consultations_client_idx")
   @@index([counselorId, status, createdAt(sort: Desc)], map: "consultations_counselor_idx")
@@ -1117,9 +1227,24 @@ model ConsultationReview {
   consultationId String           @unique @map("consultation_id") @db.Uuid
   clientId       String           @map("client_id") @db.Uuid
   counselorId    String           @map("counselor_id") @db.Uuid
-  rating         Int              @db.SmallInt
+  rating         Int?              @db.SmallInt
   comment        String?          @db.VarChar(1000)
   hidden         Boolean          @default(false)
+  /// Mandatory questionnaire (v1). Direct + indirect anti-circumvention answers.
+  questionnaireVersion Int?       @map("questionnaire_version") @db.SmallInt
+  quality        Int?             @db.SmallInt
+  commitment     Int?             @db.SmallInt
+  effectiveness  Int?             @db.SmallInt
+  outcome        Int?             @db.SmallInt
+  nextSession    String?          @map("next_session") @db.VarChar(20)
+  nextChannel    String?          @map("next_channel") @db.VarChar(12)
+  contactShared  String?          @map("contact_shared") @db.VarChar(6)
+  offPlatformPayment String?      @map("off_platform_payment") @db.VarChar(6)
+  externalChannel String?         @map("external_channel") @db.VarChar(6)
+  /// "Did the session take place?" — yes releases the escrow, no opens a dispute.
+  sessionHappened Boolean?         @map("session_happened")
+  counselorReply  String?          @map("counselor_reply") @db.VarChar(1000)
+  counselorRepliedAt DateTime?     @map("counselor_replied_at") @db.Timestamptz
   createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz
   consultation   Consultation     @relation(fields: [consultationId], references: [id], onDelete: Cascade)
   client         User             @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -1209,4 +1334,423 @@ model StorageGarbage {
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   @@map("storage_garbage")
+}
+
+// ───────────── Account types, religion, wallet, integrity (migration 20261114180000) ─────────────
+
+enum AccountType {
+  MEMBER
+  PSYCHOLOGIST
+  FAMILY_COUNSELOR
+
+  @@map("account_type")
+}
+
+model Religion {
+  key       String  @id @db.VarChar(30)
+  nameEn    String  @map("name_en") @db.VarChar(60)
+  nameAr    String  @map("name_ar") @db.VarChar(60)
+  sortOrder Int     @default(0) @map("sort_order") @db.SmallInt
+  sects     Sect[]
+
+  @@map("religions")
+}
+
+model Sect {
+  religionKey String   @map("religion_key") @db.VarChar(30)
+  key         String   @db.VarChar(40)
+  nameEn      String   @map("name_en") @db.VarChar(60)
+  nameAr      String   @map("name_ar") @db.VarChar(60)
+  sortOrder   Int      @default(0) @map("sort_order") @db.SmallInt
+  religion    Religion @relation(fields: [religionKey], references: [key])
+
+  @@id([religionKey, key])
+  @@map("sects")
+}
+
+enum WalletEntryKind {
+  EARNING
+  EARNING_REVERSAL
+  WITHDRAWAL
+  WITHDRAWAL_RETURN
+  ADJUSTMENT
+
+  @@map("wallet_entry_kind")
+}
+
+enum PayoutMethodKind {
+  BANK_IBAN
+  BANK_SWIFT
+  WISE
+  PAYPAL
+  PAYONEER
+
+  @@map("payout_method_kind")
+}
+
+enum WithdrawalStatus {
+  REQUESTED
+  PROCESSING
+  PAID
+  REJECTED
+  FAILED
+  CANCELLED
+
+  @@map("withdrawal_status")
+}
+
+/// Payout destination. Details are sealed (AES-256-GCM); only the mask is readable.
+model PayoutMethod {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  counselorId String           @map("counselor_id") @db.Uuid
+  kind        PayoutMethodKind
+  holderName  String           @map("holder_name") @db.VarChar(120)
+  countryCode String           @map("country_code") @db.Char(2)
+  currency    String           @db.Char(3)
+  detailsEnc  Bytes            @map("details_enc")
+  detailsMask String           @map("details_mask") @db.VarChar(60)
+  fingerprint String           @db.Char(64)
+  isDefault   Boolean          @default(false) @map("is_default")
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  deletedAt   DateTime?        @map("deleted_at") @db.Timestamptz
+  counselor   CounselorProfile @relation(fields: [counselorId], references: [userId], onDelete: Cascade)
+  withdrawals Withdrawal[]
+
+  @@map("payout_methods")
+}
+
+/// Ledger debit is written with the request (DB trigger); failures return the funds.
+model Withdrawal {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  counselorId    String           @map("counselor_id") @db.Uuid
+  payoutMethodId String           @map("payout_method_id") @db.Uuid
+  amountMinor    Int              @map("amount_minor")
+  currency       String           @db.Char(3)
+  status         WithdrawalStatus @default(REQUESTED)
+  providerRef    String?          @map("provider_ref") @db.VarChar(120)
+  failureReason  String?          @map("failure_reason") @db.VarChar(300)
+  processedBy    String?          @map("processed_by") @db.Uuid
+  requestedAt    DateTime         @default(now()) @map("requested_at") @db.Timestamptz
+  processedAt    DateTime?        @map("processed_at") @db.Timestamptz
+  updatedAt      DateTime         @default(now()) @map("updated_at") @db.Timestamptz
+  counselor      CounselorProfile @relation(fields: [counselorId], references: [userId])
+  payoutMethod   PayoutMethod     @relation(fields: [payoutMethodId], references: [id])
+  entries        WalletEntry[]
+
+  @@map("withdrawals")
+}
+
+/// Append-only counselor ledger (earnings net of the platform fee, withdrawals).
+model WalletEntry {
+  id             BigInt           @id @default(autoincrement())
+  counselorId    String           @map("counselor_id") @db.Uuid
+  currency       String           @db.Char(3)
+  kind           WalletEntryKind
+  amountMinor    Int              @map("amount_minor")
+  consultationId String?          @map("consultation_id") @db.Uuid
+  withdrawalId   String?          @map("withdrawal_id") @db.Uuid
+  availableAt    DateTime         @default(now()) @map("available_at") @db.Timestamptz
+  memo           String?          @db.VarChar(200)
+  createdBy      String?          @map("created_by") @db.Uuid
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  counselor      CounselorProfile @relation(fields: [counselorId], references: [userId])
+  consultation   Consultation?    @relation(fields: [consultationId], references: [id])
+  withdrawal     Withdrawal?      @relation(fields: [withdrawalId], references: [id])
+
+  @@index([counselorId, currency, createdAt(sort: Desc)], map: "wallet_entries_counselor_idx")
+  @@map("wallet_entries")
+}
+
+model CounselorIntegritySignal {
+  id             BigInt           @id @default(autoincrement())
+  counselorId    String           @map("counselor_id") @db.Uuid
+  clientId       String?          @map("client_id") @db.Uuid
+  consultationId String?          @map("consultation_id") @db.Uuid
+  kind           String           @db.VarChar(40)
+  weight         Int              @db.SmallInt
+  details        Json             @default("{}")
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  counselor      CounselorProfile @relation(fields: [counselorId], references: [userId], onDelete: Cascade)
+  consultation   Consultation?    @relation(fields: [consultationId], references: [id])
+
+  @@index([counselorId, createdAt(sort: Desc)], map: "counselor_integrity_signals_idx")
+  @@map("counselor_integrity_signals")
+}
+
+enum IntegrityCaseStatus {
+  OPEN
+  AWAITING_RESPONSE
+  UNDER_REVIEW
+  CLEARED
+  WARNED
+  SUSPENDED
+  BANNED
+
+  @@map("integrity_case_status")
+}
+
+/// Human review of a counselor; the counselor is notified and can respond before a decision.
+model CounselorIntegrityCase {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  counselorId       String              @map("counselor_id") @db.Uuid
+  status            IntegrityCaseStatus @default(OPEN)
+  score             Int                 @db.SmallInt
+  reasons           String[]            @default([])
+  openedAt          DateTime            @default(now()) @map("opened_at") @db.Timestamptz
+  notifiedAt        DateTime?           @map("notified_at") @db.Timestamptz
+  responseDueAt     DateTime?           @map("response_due_at") @db.Timestamptz
+  counselorResponse String?             @map("counselor_response") @db.VarChar(3000)
+  respondedAt       DateTime?           @map("responded_at") @db.Timestamptz
+  decidedBy         String?             @map("decided_by") @db.Uuid
+  decidedAt         DateTime?           @map("decided_at") @db.Timestamptz
+  decisionReason    String?             @map("decision_reason") @db.VarChar(1000)
+  counselor         CounselorProfile    @relation(fields: [counselorId], references: [userId], onDelete: Cascade)
+  bans              BannedIdentity[]
+
+  @@map("counselor_integrity_cases")
+}
+
+enum BanIdentityKind {
+  PHONE
+  DEVICE
+  LICENSE
+  PAYOUT
+
+  @@map("ban_identity_kind")
+}
+
+/// HMAC-SHA256 of an identifier of a permanently banned account (re-registration block).
+model BannedIdentity {
+  id        String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kind      BanIdentityKind
+  valueHash String                  @map("value_hash") @db.Char(64)
+  userId    String?                 @map("user_id") @db.Uuid
+  caseId    String?                 @map("case_id") @db.Uuid
+  reason    String                  @db.VarChar(300)
+  createdBy String?                 @map("created_by") @db.Uuid
+  createdAt DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  liftedAt  DateTime?               @map("lifted_at") @db.Timestamptz
+  liftedBy  String?                 @map("lifted_by") @db.Uuid
+  case      CounselorIntegrityCase? @relation(fields: [caseId], references: [id])
+
+  @@map("banned_identities")
+}
+
+// ───────────── Escrow, scheduling, support attachments, FAQ (migration 20261124160000) ─────────────
+
+enum EscrowStatus {
+  HELD
+  RELEASED
+  DISPUTED
+  REFUNDED
+
+  @@map("escrow_status")
+}
+
+enum AttachmentStatus {
+  PENDING
+  READY
+
+  @@map("attachment_status")
+}
+
+model CounselorSchedule {
+  counselorId    String           @id @map("counselor_id") @db.Uuid
+  timezone       String           @default("Asia/Dubai") @db.VarChar(64)
+  bufferMinutes  Int              @default(10) @map("buffer_minutes") @db.SmallInt
+  minNoticeHours Int              @default(12) @map("min_notice_hours") @db.SmallInt
+  maxDaysAhead   Int              @default(30) @map("max_days_ahead") @db.SmallInt
+  accepting      Boolean          @default(true)
+  updatedAt      DateTime         @default(now()) @map("updated_at") @db.Timestamptz
+  counselor      CounselorProfile @relation(fields: [counselorId], references: [userId], onDelete: Cascade)
+
+  @@map("counselor_schedules")
+}
+
+/// Weekly window in the counselor's time zone; weekday 1 = Monday … 7 = Sunday. No overlaps (exclusion constraint).
+model CounselorAvailability {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  counselorId String           @map("counselor_id") @db.Uuid
+  weekday     Int              @db.SmallInt
+  startMinute Int              @map("start_minute") @db.SmallInt
+  endMinute   Int              @map("end_minute") @db.SmallInt
+  counselor   CounselorProfile @relation(fields: [counselorId], references: [userId], onDelete: Cascade)
+
+  @@map("counselor_availability")
+}
+
+model CounselorTimeOff {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  counselorId String           @map("counselor_id") @db.Uuid
+  startsAt    DateTime         @map("starts_at") @db.Timestamptz
+  endsAt      DateTime         @map("ends_at") @db.Timestamptz
+  note        String?          @db.VarChar(120)
+  counselor   CounselorProfile @relation(fields: [counselorId], references: [userId], onDelete: Cascade)
+
+  @@index([counselorId, endsAt], map: "counselor_time_off_idx")
+  @@map("counselor_time_off")
+}
+
+/// Image or PDF on a support message (≤ 10 MB, ≤ 3 per message). Private storage, signed URLs.
+model TicketAttachment {
+  id         String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId   String?          @map("ticket_id") @db.Uuid
+  messageId  String?          @map("message_id") @db.Uuid
+  uploaderId String           @map("uploader_id") @db.Uuid
+  storageKey String           @unique @map("storage_key") @db.VarChar(200)
+  fileName   String           @map("file_name") @db.VarChar(120)
+  mime       String           @db.VarChar(80)
+  bytes      Int
+  status     AttachmentStatus @default(PENDING)
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  ticket     SupportTicket?   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  message    TicketMessage?   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId], map: "ticket_attachments_message_idx")
+  @@map("ticket_attachments")
+}
+
+/// FAQ shown in Help, in Arabic, English and French ({ar,en,fr} JSON).
+model FaqEntry {
+  id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  category  TicketCategory @default(OTHER)
+  question  Json
+  answer    Json
+  sortOrder Int            @default(0) @map("sort_order") @db.SmallInt
+  published Boolean        @default(true)
+  updatedAt DateTime       @default(now()) @map("updated_at") @db.Timestamptz
+
+  @@map("faq_entries")
+}
+
+/// One-time selfie capture (random gesture + private upload slot, 10 minutes). Criteria: src/domain/selfie.ts.
+model SelfieChallenge {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  gesture    String    @db.VarChar(20)
+  storageKey String    @unique @map("storage_key") @db.VarChar(200)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz
+  usedAt     DateTime? @map("used_at") @db.Timestamptz
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)], map: "selfie_challenges_user_idx")
+  @@map("selfie_challenges")
+}
+
+// ───────────────────────── managed accounts ─────────────────────────
+
+enum ManagedRelation {
+  FATHER
+  MOTHER
+  BROTHER
+  SISTER
+  GRANDPARENT
+  UNCLE
+  AUNT
+  LEGAL_GUARDIAN
+  RELATIVE
+  FRIEND
+
+  @@map("managed_relation")
+}
+
+enum ManagedPhoneHolder {
+  OWNER
+  MANAGER
+
+  @@map("managed_phone_holder")
+}
+
+/// An account run on the owner's behalf (a parent, a relative, or someone the
+/// owner trusts). The profile stays the owner's; only the relation is public.
+model AccountManager {
+  userId         String             @id @map("user_id") @db.Uuid
+  managerName    String             @map("manager_name") @db.VarChar(60)
+  relation       ManagedRelation
+  phoneHolder    ManagedPhoneHolder @default(MANAGER) @map("phone_holder")
+  ownerConsentAt DateTime           @map("owner_consent_at") @db.Timestamptz
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime           @default(now()) @map("updated_at") @db.Timestamptz
+  revokedAt      DateTime?          @map("revoked_at") @db.Timestamptz
+  revokedBy      String?            @map("revoked_by") @db.VarChar(10)
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("account_managers")
+}
+
+// ───────────────────────── in-chat compatibility ─────────────────────────
+
+enum CompatDomain {
+  FINANCE
+  FUTURE
+  FAMILY_ROLES
+  LIFESTYLE
+  MARRIAGE
+
+  @@map("compat_domain")
+}
+
+enum CompatAudience {
+  ALL
+  MALE
+  FEMALE
+
+  @@map("compat_audience")
+}
+
+model CompatQuestion {
+  id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// answers are compared per topic (a men's and a women's version share one)
+  topic     String         @db.VarChar(40)
+  domain    CompatDomain
+  audience  CompatAudience @default(ALL)
+  prompt    Json
+  options   Json
+  weight    Int            @default(3) @db.SmallInt
+  scoring   String         @default("SCALE") @db.VarChar(5)
+  active    Boolean        @default(true)
+  sortOrder Int            @default(0) @map("sort_order")
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime       @default(now()) @map("updated_at") @db.Timestamptz
+  answers   CompatAnswer[]
+
+  @@unique([topic, audience])
+  @@map("compat_questions")
+}
+
+model CompatSession {
+  conversationId  String         @id @map("conversation_id") @db.Uuid
+  startedBy       String         @map("started_by") @db.Uuid
+  maleQuestions   String[]       @map("male_questions") @db.Uuid
+  femaleQuestions String[]       @map("female_questions") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  answers         CompatAnswer[]
+  result          CompatResult?
+
+  @@map("compat_sessions")
+}
+
+model CompatAnswer {
+  conversationId String         @map("conversation_id") @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  questionId     String         @map("question_id") @db.Uuid
+  optionKey      String         @map("option_key") @db.VarChar(20)
+  answeredAt     DateTime       @default(now()) @map("answered_at") @db.Timestamptz
+  session        CompatSession  @relation(fields: [conversationId], references: [conversationId], onDelete: Cascade)
+  question       CompatQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@id([conversationId, userId, questionId])
+  @@map("compat_answers")
+}
+
+model CompatResult {
+  conversationId String        @id @map("conversation_id") @db.Uuid
+  score          Int           @db.SmallInt
+  breakdown      Json
+  messageId      String?       @map("message_id") @db.Uuid
+  computedAt     DateTime      @default(now()) @map("computed_at") @db.Timestamptz
+  session        CompatSession @relation(fields: [conversationId], references: [conversationId], onDelete: Cascade)
+
+  @@map("compat_results")
 }

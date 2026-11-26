@@ -51,3 +51,20 @@ class ValidationFailure extends Failure {
 class ServerFailure extends Failure {
   const ServerFailure([super.code = 'server']);
 }
+
+/// The account was closed by the admin panel (see [AccountRestriction]).
+class AccountRestrictedFailure extends Failure {
+  const AccountRestrictedFailure({required this.permanent}) : super('account_restricted');
+  final bool permanent;
+}
+
+/// The chosen consultation time was just taken, or is no longer offered.
+class SlotUnavailableFailure extends Failure {
+  const SlotUnavailableFailure() : super('slot_unavailable');
+}
+
+/// The selfie did not pass the automatic checks; [failed] = criteria to fix (server codes).
+class SelfieChecksFailure extends Failure {
+  const SelfieChecksFailure(this.failed) : super('selfie_checks_failed');
+  final List<String> failed;
+}

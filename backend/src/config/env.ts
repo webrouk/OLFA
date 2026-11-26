@@ -12,6 +12,10 @@ const schema = z.object({
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().default(900),
   REFRESH_TTL_DAYS: z.coerce.number().int().default(60),
   ADMIN_JWT_SECRET: z.string().min(32),
+  /// base64 of 32 bytes — seals admin TOTP secrets. Required for the admin dashboard in production.
+  ADMIN_TOTP_KEY: z.string().refine((v) => Buffer.from(v, 'base64').length === 32, 'must be base64 of 32 bytes').optional(),
+  /// Admins must use two-factor sign-in (default on).
+  ADMIN_REQUIRE_TOTP: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
   OTP_HMAC_SECRET: z.string().min(32),
   IP_HASH_PEPPER: z.string().min(16),
 
@@ -36,6 +40,24 @@ const schema = z.object({
   PAYMENT_PROVIDER: z.enum(['stripe', 'test']).default('stripe'),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+
+  // Identifiers of permanently banned accounts are stored only as HMACs with this secret.
+  IDENTITY_HMAC_SECRET: z.string().min(32).optional(),
+  // Counselor payout details are sealed with AES-256-GCM: base64 of 32 random bytes.
+  PAYOUT_ENC_KEY: z.string().refine((v) => Buffer.from(v, 'base64').length === 32, 'must be base64 of 32 bytes').optional(),
+
+  // App Store (subscriptions). The root certificate is Apple Root CA - G3,
+  // downloaded from https://www.apple.com/certificateauthority/ (DER or PEM file).
+  APPLE_BUNDLE_ID: z.string().optional(),
+  APPLE_ROOT_CA_PATH: z.string().optional(),
+  APPLE_ALLOW_SANDBOX: z.enum(['true', 'false']).default('false'), // TestFlight / review builds
+  APPLE_ISSUER_ID: z.string().optional(), // App Store Server API (optional: refresh on restore)
+  APPLE_KEY_ID: z.string().optional(),
+  APPLE_PRIVATE_KEY: z.string().optional(), // .p8 PEM, from the secret manager
+  // Google Play (subscriptions)
+  GOOGLE_PACKAGE_NAME: z.string().optional(),
+  GOOGLE_SERVICE_ACCOUNT_JSON: z.string().optional(), // service account with "View financial data / Manage orders"
+  GOOGLE_RTDN_TOKEN: z.string().min(24).optional(), // shared secret in the Pub/Sub push URL
 });
 
 export type Env = z.infer<typeof schema>;

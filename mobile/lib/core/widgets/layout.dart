@@ -273,3 +273,30 @@ class OlfaTag extends StatelessWidget {
 }
 
 enum OlfaTagStyle { neutral, accent, dark, primary, onImage }
+
+/// Keeps every page readable on tablets and wide windows: up to
+/// [OlfaBreakpoints.readable] wide, centred on the grey surface. Phones are
+/// unaffected (the page fills the screen as before).
+class AdaptivePage extends StatelessWidget {
+  const AdaptivePage({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, c) {
+      if (c.maxWidth <= OlfaBreakpoints.readable + 40) return child;
+      return ColoredBox(
+        color: OlfaColors.gray,
+        child: Center(
+          child: SizedBox(
+            width: OlfaBreakpoints.readable,
+            child: DecoratedBox(
+              decoration: const BoxDecoration(color: OlfaColors.white, border: BorderDirectional(start: BorderSide(color: OlfaColors.gray), end: BorderSide(color: OlfaColors.gray))),
+              child: ClipRect(child: child),
+            ),
+          ),
+        ),
+      );
+    });
+  }
+}

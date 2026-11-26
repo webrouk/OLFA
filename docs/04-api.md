@@ -2,6 +2,15 @@
 
 Base URL `https://<host>/v1`. JSON only. Interactive OpenAPI/Swagger at `/docs` (non-production), raw spec at `/docs/openapi.json`.
 
+## Languages
+
+The app and the API speak Arabic (`ar`), English (`en`) and French (`fr`). The app opens in the
+phone's language when it is one of these (any region) and in English otherwise; the user can
+override it in Settings. The app sends that language as `Accept-Language` on every request.
+The server applies the same rule (`src/domain/locale.ts`): SMS codes and new accounts take the
+request's language, push notifications use the saved `users.locale` (`PUT /me/locale {locale: ar|en|fr}`),
+and anything unknown falls back to English.
+
 ## Conventions
 
 - **Auth**: `Authorization: Bearer <accessToken>` (JWT, 15 min). Refresh with `POST /auth/refresh` — tokens rotate; replaying an old refresh token revokes the whole device family.
@@ -95,9 +104,81 @@ Realtime — Socket.IO namespace **`/chat`**, connect with `{ auth: { token: <ac
 
 Messages consume quota per `chat.messagesConsumeCredit` (`start_only` default; or `every_message`) and a per-conversation anti-spam limit (`chat.continuationDailyLimit`). Blocked pairs cannot exchange messages.
 
+### Photos, voice notes, phone safety, search (Nov 2026)
+
+| method | path | notes |
+|---|---|---|
+| POST | `/conversations/:id/attachments {kind: IMAGE\|VOICE, mime, bytes, durationMs?, waveform?}` | returns a presigned S3 POST (private bucket). Photos ≤ 3 per message, compressed on device (≤2048 px, q86, EXIF stripped) and re-sanitised by the `chat-image` worker job. Voice ≤ 60 s, AAC-LC. |
+| POST | `/conversations/:id/messages {clientMessageId, body?, attachmentIds?}` | `body` may be empty when attachments exist. DB trigger `olfa_attachment_guard` rejects >3 photos, more than one voice, or mixing (SQLSTATE P0020). |
+| GET | `/conversations/:id/voice-quota` | `{used, limit}` — entitlement `voice_notes_per_conversation`: Free 10, Plus 30, Premium unlimited (-1). |
+| GET | `/conversations/search?q=` | one field: partner names and message text, photo captions included. Arabic-aware via `olfa_fold()` (أ/إ/آ = ا, ة = ه, ى = ي, ؤ = و, ئ = ي, harakat/tatweel ignored, Arabic digits = 0-9) on trigram expression indexes; returns `{conversations[], messages[]}`. |
+
+`GET /conversations` returns each row's `unread` (one grouped query) and `lastMessage {body, type, senderId, mine}`. `POST /conversations/:id/read` is called when a chat opens and when a message arrives while it is open; the `message:read` event goes to the reader's own devices (to clear badges — clients must not treat it as the peer reading) and to the peer only when both keep read receipts on. `typing` is only relayed where a message could be sent (not unmatched or closed chats).
+
+Messages carry `containsPhone` (server-side detection, Arabic-Indic digits included). Clients show a safety note to both sides; the sender is warned before sending. Attachment URLs are short-lived signed GETs. Read receipts respect the reader's privacy setting (reciprocal).
+
 ## Safety & notifications
 
-`GET/POST /blocks`, `DELETE /blocks/:userId`, `POST /reports {userId, reason, targetType?, targetId?, details?, block?}` (prioritised queue), `GET /notifications`, `POST /notifications/read-all`.
+`GET/POST /blocks`, `DELETE /blocks/:userId`, `POST /reports {userId, reason, targetType?, targetId?, details?, block?}` (prioritised queue; `targetType: MESSAGE` stores a snapshot of the reported message for moderators), `GET /notifications`, `GET /notifications/unread-count`, `POST /notifications/:id/read`, `POST /notifications/read-all`, `DELETE /notifications/:id`.
+
+Push sounds: APNs `sound` and Android channels `olfa_messages` / `olfa_matches` / `olfa_general` use OLFA's own tones (`message.wav`, `match.wav`, `notification.wav`).
+
+## Account, privacy & payments
+
+| method | path | notes |
+|---|---|---|
+| GET/PUT | `/me/privacy` | visibility, incognito (Premium), online status and read receipts (both reciprocal), blur photos, show city — enforced by the server in discovery, presence and receipts. |
+| GET | `/auth/sessions` · DELETE `/auth/sessions/:id` | signed-in devices (one session per device). |
+| POST | `/me/freeze` · `/me/unfreeze` | hides the account everywhere; data, matches, chats and the store subscription are kept. |
+| GET | `/me/export` | JSON copy of the user's data. |
+| GET | `/me/payments?cursor=` | subscriptions and consultation payments/refunds, newest first. |
+| POST | `/likes {toUserId, compliment?}` | compliment ≤ 300 chars; entitlement `monthly_compliments`: Free 3, Plus 10, Premium 20. |
+
+Discovery filters accept `heightMin/heightMax` (cm) and `weightMin/weightMax` (kg).
+
+## Account types (Nov 2026)
+
+`PUT /me/account-type {type: MEMBER|PSYCHOLOGIST|FAMILY_COUNSELOR}` — chosen once at sign-up, after the gender step (which now also takes `heightCm` / `weightKg`). A DB trigger locks it once a profile exists (`account_type_locked`). Members get discovery, likes, matches, preferences and plans; professionals get the counselor desk, wallet and client chats. Member-only routes answer `wrong_account_type` to professionals and vice versa; professionals never appear in discovery and can't be liked.
+
+Sign-up order — member: gender + height/weight → account type → about you (incl. religion & sect) → partner preferences → location → photos. Professional: gender + height/weight → account type → about your practice (licence, services, policy acceptance) → location → photo.
+
+## Religion & sect
+
+Reference keys come from `shared/reference/religions.tsv` (`GET /reference` includes them). Profile: `religion`, `sect` (must belong to the religion; consent required, `undisclosed` allowed). Preferences: `religions[]`, `sects[]` (`religion.sect`; a sect is only accepted under a chosen religion). Discovery filters: `religions=islam,christianity&sects=christianity.maronite` — a religion with no sect selected matches all of its sects; `undisclosed` profiles are excluded only when a religion filter is set.
+
+## Professional wallet
+
+| method | path | notes |
+|---|---|---|
+| GET | `/wallet` | balances per currency: available, pending (released `wallet.holdDays` after each completed session, default 7), minimum withdrawal, gross / fee / net totals, `payoutsOnHold` while an integrity case is open. |
+| GET | `/wallet/entries?cursor=` | immutable ledger: EARNING (gross, fee, net), EARNING_REVERSAL (refund), WITHDRAWAL, WITHDRAWAL_RETURN, ADJUSTMENT. |
+| GET/POST/DELETE | `/wallet/payout-methods` | IBAN, SWIFT, Wise, PayPal, Payoneer. Details AES-256-GCM encrypted (`PAYOUT_ENC_KEY`), only a mask is returned; fingerprints of banned accounts are refused. |
+| GET/POST | `/wallet/withdrawals` · POST `/wallet/withdrawals/:id/cancel` | one open request per currency; the DB refuses a debit above the available balance. |
+
+The fee is snapshotted on each consultation (`consultations.platformFeePercent`, default 15). The earning is written by a DB trigger when a consultation completes, and reversed on refund.
+
+Admin: `GET /admin/withdrawals`, `POST /admin/withdrawals/:id/processing|paid|reject|failed` (failed/rejected return the money), `POST /admin/wallets/:counselorId/adjust`.
+
+## Post-consultation questionnaire & integrity
+
+`GET /consultations/pending-review` · `POST /consultations/:id/review` — mandatory before the member can book again (DB trigger, `review_required`). It asks for 5 ratings (overall, treatment, commitment, effectiveness, outcome), whether another session was agreed and where, and three safety questions: contact details shared, payment asked outside OLFA, invitation to another app. Answers are confidential; the counselor sees only the overall rating.
+
+Direct and indirect answers, plus phone numbers detected in consultation chats, become `counselor_integrity_signals`. Each (client, kind) counts once; a case opens when the 90-day score reaches 12 from at least 2 different clients. The counselor is notified, withdrawals pause, and they respond through `GET /counselors/me/integrity` and `POST /counselors/me/integrity/:id/respond`. A human decides via `POST /admin/integrity/cases/:id/decide {decision: CLEAR|WARN|SUSPEND|BAN, reason}`.
+
+A permanent ban stores HMAC fingerprints (`IDENTITY_HMAC_SECRET`) of the phone, devices, licence and payout accounts in `banned_identities`. OTP requests, new accounts on a banned device, counselor applications with a banned licence and banned payout accounts are refused (`account_banned`).
+
+## Store subscriptions
+
+| method | path | notes |
+|---|---|---|
+| GET | `/subscriptions/products` | store product ids per plan and provider. |
+| GET | `/subscriptions/me` | plan, the `accountToken` to attach to purchases, and the store state: status (ACTIVE, GRACE_PERIOD, BILLING_RETRY, ON_HOLD, PAUSED, PENDING, EXPIRED, REFUNDED, REVOKED), autoRenew, expiresAt, graceUntil, pendingPlan (downgrade at renewal), billingIssue, manageUrl. |
+| POST | `/subscriptions/apple {signedTransaction, signedRenewalInfo?}` | StoreKit 2 JWS verified against Apple Root CA G3, then the App Store Server API. |
+| POST | `/subscriptions/google {productId, purchaseToken}` | Play Developer API `subscriptionsv2`; acknowledged by the server. |
+| POST | `/subscriptions/restore {apple[], google[]}` | re-attaches purchases; a receipt owned by another account is not transferred. |
+| POST | `/subscriptions/apple/notifications` · `/subscriptions/google/rtdn?token=` | App Store Server Notifications v2 and Google RTDN: renewals, grace period, billing retry, on hold, pause, plan changes, refunds, revocations. |
+
+The app finishes a store transaction only after the server accepts it, so an interrupted purchase is re-delivered on the next launch. Upgrades start immediately (Google: time proration); downgrades start at renewal (Google: deferred; Apple: subscription group). Cancelling is done in the store; the app links there.
 
 ## Admin (RBAC)
 
@@ -116,3 +197,83 @@ Admin JWTs are separate (`POST /admin/auth/login`). Every admin route declares t
 ## Health
 
 `GET /health/live`, `GET /health/ready` (DB + Redis).
+
+## Verification selfie (first sign-up, after the photos)
+
+Criteria and review flow: [VERIFICATION.md](VERIFICATION.md).
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/v1/me/verification/selfie/challenge` | One-time capture: `{challengeId, gesture, expiresAt (10 min), criteria, limits, upload}` (presigned POST, image/jpeg ≤ 6 MB, private bucket) |
+| POST | `/v1/me/verification/selfie` | `{challengeId, deviceChecks{faces, faceRatio, yaw, roll, leftEyeOpen?, rightEyeOpen?}, preferFemaleReviewer?}` → automatic checks → `LIVENESS` request for the team. `422 SELFIE_CHECKS_FAILED {failed:[criteria]}` |
+| POST | `/v1/me/verification/submit` | `422 SELFIE_REQUIRED` until a selfie is waiting or approved |
+| GET | `/v1/me/verification` | adds `selfie {required, status, rejectCode, submittedAt}` |
+| GET | `/v1/admin/verification/queue` | profile reviews and stand-alone selfies, with `type` and `preferFemaleReviewer` |
+| GET | `/v1/admin/verification/:id` | adds `selfie {url (signed, 5 min), gesture, checks, preferFemaleReviewer, criteria}` |
+
+## Escrow, schedules, support, account closure (migration 20261124160000)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/v1/counselors/:id/slots?offeringId=` | Bookable start times (UTC) from the counselor's weekly hours, time off, bookings + buffer, notice and horizon |
+| POST | `/v1/consultations` | `slot` required when the counselor publishes a schedule; `409 SLOT_TAKEN`, `422 SLOT_UNAVAILABLE` |
+| POST | `/v1/consultations/:id/review` | `sessionHappened` — yes (questionnaire) releases the held fee; no (`disputeReason`) opens a dispute |
+| GET/PUT | `/v1/counselors/me/schedule` · PUT `/availability` · POST/DELETE `/time-off` | Controlled from the counselor's account |
+| GET | `/v1/counselors/me/reviews` · PUT `/reviews/:consultationId/reply` | Rating breakdown + public reply |
+| GET | `/v1/admin/consultations/disputes` · POST `/:id/escrow {decision: RELEASE|REFUND, reason}` | Support decides disputed fees |
+| GET | `/v1/support/faq?lang=` | Public, ar/en/fr |
+| POST | `/v1/support/attachments` | Image/PDF ≤ 10 MB, presigned private upload |
+| POST/GET | `/v1/support/tickets` · GET `/tickets/:id` · POST `/tickets/:id/messages` · POST `/tickets/:id/close` · GET `/unread` | In-page thread; staff replies arrive by socket `support:message` + push |
+| POST | `/v1/support/appeal` | Closed accounts: `Authorization: Bearer <appealToken>` from the sign-in error |
+| POST | `/v1/admin/users/:id/restrict {action: ban|suspend, until?, reason}` · `/unrestrict` | Permanent or temporary closure; sessions revoked |
+| … | `/v1/admin/support/*` | Queue, thread, reply, status, FAQ CRUD |
+
+Errors `403 ACCOUNT_BANNED` / `ACCOUNT_SUSPENDED` carry `{permanent, until, reason, since, appealToken}`. The app shows the closed-account screen from them.
+
+## Discovery ads (native, Free plan only) — see docs/ADS.md
+
+- `GET /v1/me/entitlements` adds `ads`:
+  - Off: `{enabled:false, reason:'paid_plan'|'plan_off'|'switched_off'|'not_configured'}`.
+  - On: `{enabled:true, placement:'discovery', firstAfter, interval, maxPerSession, preloadAhead, personalized, maxAdContentRating, units:{android, ios}}`.
+  - Paid plans always get `enabled:false`.
+- `GET /v1/admin/ads` and `PUT /v1/admin/ads` (permission `settings.manage`):
+  - Body: `{enabled, freePlanShowsAds, firstAfter (1–50), interval (3–50), maxPerSession (0–50), preloadAhead (1–3), personalized, maxAdContentRating: G|PG|T|MA, units:{android, ios}}`.
+  - Unit ids must look like `ca-app-pub-<16 digits>/<10 digits>`, or be empty.
+  - Switching ads on needs at least one unit id. The change is audited (`settings.ads`).
+- `PUT /v1/admin/plans/:code/entitlements` accepts `show_ads` for FREE only. A paid plan → 400, and the DB refuses it too (P0060).
+
+## Consultation chats: retention, counselor inbox (migration 20261126090000)
+- An ended consultation (completed, cancelled, declined, refunded or expired) keeps its chat for `consultations.chatRetentionDays` (30) after **the later of** the end and the last message. Any new message from either side restarts the 30 days. Then `olfa_run_retention()` deletes the conversation, its messages and attachments **for both people** (`deleted_consultation`); the consultation record itself stays (payments, reviews, disputes). Both get one warning `consultations.chatWarnBeforeDays` (3) days before.
+- The chat stays writable until that date (DB trigger `olfa_message_guard`); past it the API answers 404 and the list no longer shows it, even before the hourly sweep.
+- `GET /v1/conversations?section=CONSULTATION&consult=ACTIVE|ENDED|ARCHIVE&q=` — counselor inbox tabs and search (name or last message, Arabic spelling folded). Rows carry `consultState`, `folder`, `expiresAt` (deletion date) and, on the counselor side, the client's first name (`consultation.client.displayName`). Archive/restore use the existing `POST :id/archive|restore`.
+- `GET /v1/conversations/:id/messages` returns `retention: { expiresAt, retentionDays }` for consultation chats (null `expiresAt` while the consultation runs).
+
+## Payment retry
+- `POST /v1/consultations/:id/payment` — a new payment attempt for a booking still `AWAITING_PAYMENT` inside its window (declined card or closed payment sheet). Same booking, time and note; earlier unfinished attempts are marked FAILED. Response = the booking response (`payment.clientSecret`).
+
+## Managed accounts
+- `GET /v1/me/manager` → `{ managerName, relation, phoneHolder, ownerConsentAt, since } | null`
+- `PUT /v1/me/manager` `{ managerName, relation: FATHER|MOTHER|BROTHER|SISTER|GRANDPARENT|UNCLE|AUNT|LEGAL_GUARDIAN|RELATIVE|FRIEND, phoneHolder: OWNER|MANAGER, ownerConsent: true }` — members only; consent is required every time (DTO `Equals(true)` + `owner_consent_at NOT NULL`).
+- `DELETE /v1/me/manager` — ends the arrangement (row kept with `revoked_at`, audit-logged).
+- Public profiles carry `managedBy: { relation } | null` — never the manager's name. The owner's `/me` carries the full `manager`.
+- Admin: `GET /v1/admin/users/:id` includes `accountManager`; `POST /v1/admin/users/:id/manager/revoke { reason }` (users.manage).
+
+## In-chat compatibility questions
+- `GET /v1/conversations/:id/compat` → `{ enabled, status: NOT_STARTED|IN_PROGRESS|RESULT, me: {answered,total,completed}, peer: {started,completed}, questions: [{id, domain, prompt{ar,en,fr}, options[{key,label}], answer}], result }` — my questions and answers only; the other person's progress, never their answers.
+- `POST /v1/conversations/:id/compat/start` — either person; the question set (by gender) is fixed at this moment.
+- `PUT /v1/conversations/:id/compat/answers { answers: [{questionId, optionKey}] }` — saved as chosen, changeable until the result exists. When **both** have answered everything the server computes the score once and adds a `COMPAT` message to the thread (`message.compat = { score, domains[{domain,score,topics}], agreed, talkAbout[] }`); realtime `message:new` + `compat:updated`.
+- Scoring (`src/domain/compat.ts`): answers compared per topic; SCALE agreement = 1 − |a − b| / range, MATCH = same value; weighted mean, 0–100; per-domain scores.
+- DB guarantees: answers only from members, only for questions in their own set, only existing options, frozen once the result exists (P0074); no result row unless both finished (P0075); answered questions keep their options (P0073).
+- Admin (`settings.manage`): `GET|POST /v1/admin/compat/questions`, `PUT /v1/admin/compat/questions/:id`, `POST /v1/admin/compat/questions/:id/active {active}`, `PUT /v1/admin/compat/enabled {active}`; `GET /v1/admin/compat/stats` (users.read) — totals only.
+
+## Counselor plans, directory placement, insights (migrations 20261127080000, 20261127090000)
+Licensed professionals have their own account area: no Discovery, likes, member search or member plans (app redirect + `@MembersOnly` on the server), and never ads (ads only run in Discovery).
+- **Plans:** `PRO_PLUS` and `PRO_PREMIUM` (`subscription_plans.audience = PROFESSIONAL`); `FREE` is everyone's base. A member can't hold a counselor plan and a counselor can't hold a member plan: `WRONG_ACCOUNT_TYPE` from `POST /v1/subscriptions/{apple|google}`, and DB trigger P0076.
+- **Features** (admin-editable, DB trigger P0077): `directory_boost` 0/1/2 (FREE = 0), `featured_badge`, `profile_insights` (FREE = off). Defaults: Plus → boost 1 + insights; Premium → boost 2 + badge + insights.
+- `GET /v1/plans?audience=PROFESSIONAL` → Free + counselor plans. Without the parameter → member plans (older apps are unchanged).
+- `GET /v1/subscriptions/products` → only the products the signed-in account can buy (each with `audience`).
+- `/v1/subscriptions/me|apple|google|restore` are open to counselors (each account type buys only its own plans).
+- `GET /v1/counselors` order: boost (Premium, Plus, Free), then rating, number of ratings, id. Items carry `featured`; `nextCursor` is opaque (an old-style cursor restarts from the top).
+- `GET /v1/counselors/:id` → also `featured`; a member opening it counts one profile view per day (`counselor_profile_views`, kept 90 days, viewer never exposed).
+- `GET /v1/counselors/me/insights` (professionals) → `{ available: false, plan }` on Free, otherwise `{ available: true, plan, featured, boost, days: 30, views, uniqueVisitors, requests, conversion }` (conversion = paid requests ÷ unique visitors, 0–1).
+- Admin: `GET /v1/admin/plans` (with `audience`), `PUT /v1/admin/plans/:code/entitlements` refuses counselor features on member plans and member features on counselor plans. Dashboard page: Plans & features.

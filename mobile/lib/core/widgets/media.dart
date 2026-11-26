@@ -28,8 +28,11 @@ class PhotoPlaceholder extends StatelessWidget {
 /// decode size matched to the widget, so full-resolution originals are never
 /// decoded into memory for small views.
 class OlfaImage extends StatelessWidget {
-  const OlfaImage({super.key, required this.url, this.fit = BoxFit.cover, this.blur = false});
+  const OlfaImage({super.key, required this.url, this.fit = BoxFit.cover, this.blur = false, this.placeholderUrl});
   final String? url;
+
+  /// A smaller, usually already cached variant shown while [url] loads.
+  final String? placeholderUrl;
   final BoxFit fit;
   final bool blur;
 
@@ -49,7 +52,9 @@ class OlfaImage extends StatelessWidget {
             fit: fit,
             memCacheWidth: w,
             fadeInDuration: const Duration(milliseconds: 180),
-            placeholder: (_, __) => const OlfaSkeleton(height: double.infinity, radius: 0),
+            placeholder: (_, __) => placeholderUrl == null || placeholderUrl == u
+                ? const OlfaSkeleton(height: double.infinity, radius: 0)
+                : CachedNetworkImage(imageUrl: placeholderUrl!, fit: fit, memCacheWidth: w, fadeInDuration: Duration.zero, placeholder: (_, __) => const OlfaSkeleton(height: double.infinity, radius: 0), errorWidget: (_, __, ___) => const PhotoPlaceholder()),
             errorWidget: (_, __, ___) => const PhotoPlaceholder(),
           );
         },

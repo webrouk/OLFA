@@ -5,8 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/localization/generated/app_localizations.dart';
 import '../core/localization/locale_provider.dart';
 import '../core/routing/app_router.dart';
+import '../core/security/screen_protection.dart';
 import '../core/theme/olfa_theme.dart';
 import '../features/messaging/application/incoming_sounds.dart';
+import '../features/messaging/data/outbox.dart';
+import '../features/subscriptions/application/entitlements_controller.dart';
 
 class OlfaApp extends ConsumerWidget {
   const OlfaApp({super.key});
@@ -16,6 +19,8 @@ class OlfaApp extends ConsumerWidget {
     final locale = ref.watch(localeProvider);
     final router = ref.watch(routerProvider);
     ref.watch(incomingSoundsProvider); // message tone while the app is open
+    ref.watch(storeListenerProvider); // store renewals / Ask to Buy / interrupted purchases → server
+    ref.watch(outboxProvider); // offline messages: resume sending at start-up, on reconnect and on resume
     return MaterialApp.router(
       title: 'OLFA',
       debugShowCheckedModeBanner: false,
@@ -34,7 +39,7 @@ class OlfaApp extends ConsumerWidget {
         final mq = MediaQuery.of(context);
         return MediaQuery(
           data: mq.copyWith(textScaler: mq.textScaler.clamp(minScaleFactor: 0.9, maxScaleFactor: 1.3)),
-          child: child!,
+          child: CaptureShield(child: child!),
         );
       },
     );

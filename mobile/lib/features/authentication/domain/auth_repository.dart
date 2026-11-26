@@ -8,10 +8,13 @@ class OtpChallenge {
 }
 
 class AuthResult {
-  const AuthResult({required this.isNewUser, required this.accountStatus, required this.profileComplete});
+  const AuthResult({required this.isNewUser, required this.accountStatus, required this.profileComplete, this.accountType});
   final bool isNewUser;
   final String accountStatus; // PENDING_VERIFICATION | ACTIVE | REJECTED | …
   final bool profileComplete;
+
+  /// Null until chosen during sign-up.
+  final AccountType? accountType;
 }
 
 abstract interface class AuthRepository {

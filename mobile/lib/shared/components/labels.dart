@@ -29,12 +29,21 @@ extension DomainLabels on AppLocalizations {
 
   String planLabel(PlanCode p) => switch (p) {
         PlanCode.free => planFree,
-        PlanCode.plus => 'Plus',
-        PlanCode.premium => 'Premium',
+        PlanCode.plus || PlanCode.proPlus => 'Plus',
+        PlanCode.premium || PlanCode.proPremium => 'Premium',
       };
 }
 
 String langOf(BuildContext context) => Localizations.localeOf(context).languageCode;
+
+/// A language's own name (shown the same in every UI language, as iOS and
+/// Android do) and its name in the current UI language.
+const kNativeLanguageNames = {'ar': 'العربية', 'en': 'English', 'fr': 'Français'};
+String languageNameIn(String uiLang, String code) => switch (uiLang) {
+      'ar' => const {'ar': 'العربية', 'en': 'الإنجليزية', 'fr': 'الفرنسية'}[code]!,
+      'fr' => const {'ar': 'Arabe', 'en': 'Anglais', 'fr': 'Français'}[code]!,
+      _ => const {'ar': 'Arabic', 'en': 'English', 'fr': 'French'}[code]!,
+    };
 
 String interestLabel(BuildContext context, String key) => interestByKey(key)?.label(langOf(context)) ?? key;
 
@@ -49,3 +58,17 @@ String shortTime(BuildContext context, DateTime t) {
   if (now.difference(t).inDays < 7) return DateFormat.E(locale).format(t);
   return DateFormat.yMd(locale).format(t);
 }
+
+/// Who runs a managed account ("Managed by: Father").
+String relationLabel(AppLocalizations l, ManagedRelation r) => switch (r) {
+      ManagedRelation.father => l.relFather,
+      ManagedRelation.mother => l.relMother,
+      ManagedRelation.brother => l.relBrother,
+      ManagedRelation.sister => l.relSister,
+      ManagedRelation.grandparent => l.relGrandparent,
+      ManagedRelation.uncle => l.relUncle,
+      ManagedRelation.aunt => l.relAunt,
+      ManagedRelation.legalGuardian => l.relLegalGuardian,
+      ManagedRelation.relative => l.relRelative,
+      ManagedRelation.friend => l.relFriend,
+    };

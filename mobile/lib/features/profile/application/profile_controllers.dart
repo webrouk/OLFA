@@ -1,4 +1,9 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/security/secure_store.dart';
 
 import '../../../shared/models/models.dart';
 import '../../../shared/services/demo_backend.dart';
@@ -9,8 +14,55 @@ import '../domain/profile_draft.dart';
 
 /// Holds the in-progress profile across setup screens 7–10.
 class ProfileDraftController extends Notifier<ProfileDraft> {
+  Timer? _saveTimer;
+  bool _touched = false;
+
+  /// Sign-up answers are kept on the device until the profile is submitted;
+  /// editing an existing profile is never written there.
+  bool _persist = true;
+
   @override
-  ProfileDraft build() => const ProfileDraft();
+  ProfileDraft build() {
+    ref.onDispose(() => _saveTimer?.cancel());
+    Future.microtask(_restore);
+    return const ProfileDraft();
+  }
+
+  Future<void> _restore() async {
+    try {
+      final raw = await ref.read(secureStoreProvider).readSetupDraft();
+      if (raw == null || _touched || !_persist) return;
+      final d = ProfileDraftCodec.decode(Map<String, Object?>.from(jsonDecode(raw) as Map));
+      if (d == null || _touched) return;
+      super.state = d;
+      ref.read(draftRestoredProvider.notifier).state++;
+    } catch (_) {
+      // unreadable → start fresh
+    }
+  }
+
+  @override
+  set state(ProfileDraft value) {
+    super.state = value;
+    _touched = true;
+    if (!_persist) return;
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 400), () {
+      ref.read(secureStoreProvider).writeSetupDraft(jsonEncode(ProfileDraftCodec.encode(state))).ignore();
+    });
+  }
+
+  /// Opens the editor on the saved profile (not a sign-up: nothing is stored on the device).
+  void loadForEditing(UserProfile me) {
+    _stopPersisting();
+    state = ProfileDraft.fromProfile(me);
+  }
+
+  void _stopPersisting() {
+    _persist = false;
+    _saveTimer?.cancel();
+    ref.read(secureStoreProvider).clearSetupDraft().ignore();
+  }
 
   void update(ProfileDraft Function(ProfileDraft d) f) => state = f(state);
 
@@ -53,11 +105,23 @@ class ProfileDraftController extends Notifier<ProfileDraft> {
 
   Future<void> submit() async {
     await ref.read(profileRepositoryProvider).submitForReview(state);
+    _stopPersisting(); // submitted: the server has it now
+    ref.invalidate(verificationProvider);
+  }
+
+  /// Professionals: the application went out on the "about you" step and
+  /// each photo is uploaded when picked; the counselor review covers both.
+  Future<void> submitProfessionalPhotos() async {
+    _stopPersisting();
     ref.invalidate(verificationProvider);
   }
 }
 
 final profileDraftProvider = NotifierProvider<ProfileDraftController, ProfileDraft>(ProfileDraftController.new);
+
+/// Bumped when unfinished sign-up answers were restored from the device, so
+/// the setup forms rebuild their text fields with them and say so once.
+final draftRestoredProvider = StateProvider<int>((_) => 0);
 
 final verificationProvider = FutureProvider<VerificationInfo>((ref) => ref.watch(profileRepositoryProvider).verification());
 

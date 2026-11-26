@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/localization/generated/app_localizations.dart';
+import '../../../core/routing/navigation.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theme/olfa_colors.dart';
 import '../../../core/theme/olfa_spacing.dart';
@@ -12,7 +13,10 @@ import '../../../shared/components/labels.dart';
 import '../../../shared/components/reference_pickers.dart';
 import '../../../shared/models/models.dart';
 import '../application/profile_controllers.dart';
+import '../data/profile_repository_impl.dart';
 import '../domain/profile_draft.dart';
+import '../../verification/domain/selfie_criteria.dart';
+import '../../verification/presentation/selfie_screen.dart' show criterionFix;
 
 String? _err(AppLocalizations l, String? key) => switch (key) {
       null => null,
@@ -25,7 +29,12 @@ String? _err(AppLocalizations l, String? key) => switch (key) {
       _ => l.errorValidation,
     };
 
-/// 7 — Gender selection (step 1/4)
+/// Sign-up steps: members 6 (gender, account type, about you, partner,
+/// location, photos); professionals 5 (no partner preferences).
+/// Steps shown in the progress bar; the last one is the verification selfie (after the photos).
+int setupTotal(ProfileDraft d) => d.accountType?.isProfessional ?? false ? 6 : 7;
+
+/// 7 — Gender, with optional height and weight on the same page (step 1)
 class GenderScreen extends ConsumerWidget {
   const GenderScreen({super.key});
 
@@ -63,13 +72,24 @@ class GenderScreen extends ConsumerWidget {
       );
     }
 
+    final d = ref.watch(profileDraftProvider);
     return FormPage(
-      header: const SetupProgress(step: 1),
-      action: PrimaryButton(label: l.continueLabel, onPressed: g == null ? null : () => context.push(Routes.profileInfo)),
+      header: SetupProgress(step: 1, total: setupTotal(d)),
+      action: PrimaryButton(label: l.continueLabel, onPressed: g == null ? null : () => context.pushOnce(Routes.accountType)),
       children: [
         PageHeading(l.genderTitle, body: l.genderBody),
         Row(children: [card(Gender.male, l.man, Icons.male_rounded), const SizedBox(width: 12), card(Gender.female, l.woman, Icons.female_rounded)]),
         const SizedBox(height: 22),
+        Text(l.bodyMetricsTitle, style: context.type.inputLabel.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        Text(l.bodyMetricsNote, style: context.type.caption),
+        const SizedBox(height: 10),
+        BodyMetricsFields(
+          heightCm: d.heightCm,
+          weightKg: d.weightKg,
+          onHeight: (v) => ctrl.update((x) => x.copyWith(heightCm: () => v)),
+          onWeight: (v) => ctrl.update((x) => x.copyWith(weightKg: () => v)),
+        ),
         InfoBanner(text: l.genderNote),
       ],
     );
@@ -87,12 +107,25 @@ class ProfileInfoScreen extends ConsumerStatefulWidget {
 class _ProfileInfoScreenState extends ConsumerState<ProfileInfoScreen> {
   bool _submitted = false;
 
+  /// One anchor per field, in screen order, to scroll to the first one that needs attention.
+  final _anchors = {for (final k in const ['name', 'city', 'marital', 'education', 'job', 'religion', 'timeline', 'bio', 'interests']) k: GlobalKey()};
+
+  Widget _at(String key, Widget child) => KeyedSubtree(key: _anchors[key], child: child);
+
+  void _showFirstError(Map<String, String?> errors) {
+    final first = _anchors.entries.where((e) => errors[e.key] != null).map((e) => e.value.currentContext).whereType<BuildContext>().firstOrNull;
+    if (first != null) Scrollable.ensureVisible(first, alignment: 0.15, duration: motion(context, const Duration(milliseconds: 300)));
+    showToast(context, AppLocalizations.of(context).completeHighlighted);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final d = ref.watch(profileDraftProvider);
     final ctrl = ref.read(profileDraftProvider.notifier);
     final lang = langOf(context);
+    // answers restored from the device: rebuild the text fields with them
+    final restored = ref.watch(draftRestoredProvider);
 
     final errors = <String, String?>{
       'name': ProfileValidators.name(d.name),
@@ -103,6 +136,7 @@ class _ProfileInfoScreenState extends ConsumerState<ProfileInfoScreen> {
       'timeline': ProfileValidators.required(d.timeline),
       'bio': ProfileValidators.bio(d.bio),
       'interests': d.interests.isEmpty ? 'required' : null,
+      'religion': d.religion == null ? 'required' : (!d.religionValid ? 'consent' : null),
     };
     String? e(String k) => _submitted ? _err(l, errors[k]) : null;
     final valid = errors.values.every((v) => v == null);
@@ -115,17 +149,25 @@ class _ProfileInfoScreenState extends ConsumerState<ProfileInfoScreen> {
     }
 
     return FormPage(
-      header: const SetupProgress(step: 2),
+      header: widget.editMode ? null : SetupProgress(step: 3, total: setupTotal(d)),
       action: PrimaryButton(
         label: l.continueLabel,
         onPressed: () {
           setState(() => _submitted = true);
-          if (valid) context.push(Routes.preferences);
+          if (valid) {
+            context.pushOnce(Routes.preferences);
+          } else {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _showFirstError(errors);
+            });
+          }
         },
       ),
       children: [
         PageHeading(l.infoTitle),
-        OlfaTextField(label: l.displayName, hint: l.displayNameHint, initialValue: d.name, error: e('name'), autofillHints: const [AutofillHints.givenName], onChanged: (v) => ctrl.update((x) => x.copyWith(name: v))),
+        if (restored > 0 && !widget.editMode) ...[InfoBanner(icon: Icons.restore_rounded, accent: true, text: l.draftRestored), const SizedBox(height: 16)],
+        SectionLabel(l.infoSectionBasics, top: 0),
+        _at('name', OlfaTextField(key: ValueKey('name$restored'), label: l.displayName, hint: l.displayNameHint, initialValue: d.name, error: e('name'), autofillHints: const [AutofillHints.givenName], onChanged: (v) => ctrl.update((x) => x.copyWith(name: v)))),
         CountryField(label: l.countryOfResidence, value: d.countryIso, onChanged: (v) => ctrl.update((x) => v == null ? x : x.withCountry(v))),
         NationalityField(
           label: l.nationality,
@@ -134,12 +176,13 @@ class _ProfileInfoScreenState extends ConsumerState<ProfileInfoScreen> {
           helper: d.nationalityEdited ? null : l.nationalityAutoHint,
           onChanged: (v) => ctrl.update((x) => x.copyWith(nationality: v, nationalityEdited: true)),
         ),
-        OlfaTextField(label: l.city, initialValue: d.city, error: e('city'), onChanged: (v) => ctrl.update((x) => x.copyWith(city: v))),
-        Text(l.maritalStatus, style: context.type.inputLabel),
+        _at('city', OlfaTextField(key: ValueKey('city$restored'), label: l.city, initialValue: d.city, error: e('city'), onChanged: (v) => ctrl.update((x) => x.copyWith(city: v)))),
+        SectionLabel(l.infoSectionBackground, top: 6),
+        _at('marital', Text(l.maritalStatus, style: context.type.inputLabel)),
         const SizedBox(height: 8),
         ChoiceWrap<MaritalStatus>(options: MaritalStatus.values, label: l.maritalLabel, isSelected: (m) => d.maritalStatus == m, onTap: (m) => ctrl.update((x) => x.copyWith(maritalStatus: m))),
         fieldError('marital'),
-        Text(l.education, style: context.type.inputLabel),
+        _at('education', Text(l.education, style: context.type.inputLabel)),
         const SizedBox(height: 8),
         DropdownButtonFormField<Education>(
           value: d.education,
@@ -150,19 +193,34 @@ class _ProfileInfoScreenState extends ConsumerState<ProfileInfoScreen> {
           onChanged: (v) => ctrl.update((x) => x.copyWith(education: v)),
         ),
         const SizedBox(height: 18),
+        KeyedSubtree(key: _anchors['job'], child: const SizedBox.shrink()),
         OccupationField(label: l.occupation, value: d.occupation.isEmpty ? null : d.occupation, error: e('job'), onChanged: (v) => ctrl.update((x) => x.copyWith(occupation: v ?? ''))),
-        BodyMetricsFields(
-          heightCm: d.heightCm,
-          weightKg: d.weightKg,
-          onHeight: (v) => ctrl.update((x) => x.copyWith(heightCm: () => v)),
-          onWeight: (v) => ctrl.update((x) => x.copyWith(weightKg: () => v)),
+        KeyedSubtree(key: _anchors['religion'], child: const SizedBox.shrink()),
+        ReligionSectFields(
+          religion: d.religion,
+          sect: d.sect,
+          consent: d.religionConsent,
+          error: switch (e('religion')) { null => null, _ when d.religion != null => l.religionConsentRequired, final m => m },
+          onReligion: (v) => ctrl.update((x) => x.withReligion(v)),
+          onSect: (v) => ctrl.update((x) => x.copyWith(sect: () => v)),
+          onConsent: (v) => ctrl.update((x) => x.copyWith(religionConsent: v)),
         ),
-        Text(l.marriageTimeline, style: context.type.inputLabel),
+        if (widget.editMode)
+          BodyMetricsFields(
+            heightCm: d.heightCm,
+            weightKg: d.weightKg,
+            onHeight: (v) => ctrl.update((x) => x.copyWith(heightCm: () => v)),
+            onWeight: (v) => ctrl.update((x) => x.copyWith(weightKg: () => v)),
+          ),
+        SectionLabel(l.infoSectionIntentions, top: 6),
+        _at('timeline', Text(l.marriageTimeline, style: context.type.inputLabel)),
         const SizedBox(height: 8),
         ChoiceWrap<MarriageTimeline>(options: MarriageTimeline.values, label: l.timelineLabel, isSelected: (t) => d.timeline == t, onTap: (t) => ctrl.update((x) => x.copyWith(timeline: t))),
         fieldError('timeline'),
-        OlfaTextField(label: l.bio, hint: l.bioHint, initialValue: d.bio, maxLines: 4, maxLength: ProfileDraft.bioMax, counter: true, error: e('bio'), onChanged: (v) => ctrl.update((x) => x.copyWith(bio: v))),
+        KeyedSubtree(key: _anchors['bio'], child: const SizedBox.shrink()),
+        OlfaTextField(key: ValueKey('bio$restored'), label: l.bio, hint: l.bioHint, initialValue: d.bio, maxLines: 4, maxLength: ProfileDraft.bioMax, counter: true, error: e('bio'), onChanged: (v) => ctrl.update((x) => x.copyWith(bio: v))),
         Row(
+          key: _anchors['interests'],
           children: [
             Expanded(child: Text(l.interests, style: context.type.inputLabel)),
             Text(l.interestsCount(d.interests.length, ProfileDraft.maxInterests), style: context.type.caption),
@@ -176,7 +234,8 @@ class _ProfileInfoScreenState extends ConsumerState<ProfileInfoScreen> {
   }
 }
 
-/// 9 — Partner preferences (step 3/4)
+/// 9 — Partner preferences during sign-up (the fields are shared with the
+/// "Partner preferences" page in My profile).
 class PreferencesScreen extends ConsumerWidget {
   const PreferencesScreen({super.key});
 
@@ -186,39 +245,173 @@ class PreferencesScreen extends ConsumerWidget {
     final d = ref.watch(profileDraftProvider);
     final ctrl = ref.read(profileDraftProvider.notifier);
     return FormPage(
-      header: const SetupProgress(step: 3),
-      action: PrimaryButton(label: l.continueLabel, onPressed: () => context.push(Routes.location)),
+      header: SetupProgress(step: 4, total: setupTotal(d)),
+      action: PrimaryButton(label: l.continueLabel, onPressed: () => context.pushOnce(Routes.location)),
       children: [
         PageHeading(l.prefsTitle, body: l.prefsBody),
-        Text(l.ageRange, style: context.type.inputLabel),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(child: OlfaStepper(semanticLabel: l.ageMin, value: d.prefAgeMin, max: d.prefAgeMax, onChanged: (v) => ctrl.update((x) => x.copyWith(prefAgeMin: v)))),
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 10), child: Text(l.to, style: context.type.caption)),
-            Expanded(child: OlfaStepper(semanticLabel: l.ageMax, value: d.prefAgeMax, min: d.prefAgeMin, onChanged: (v) => ctrl.update((x) => x.copyWith(prefAgeMax: v)))),
-          ],
-        ),
-        const SizedBox(height: 22),
-        Text(l.country, style: context.type.inputLabel),
-        const SizedBox(height: 8),
-        ChoiceWrap<bool>(options: const [true, false], label: (b) => b ? l.sameCountry : l.anyCountry, isSelected: (b) => d.prefSameCountry == b, onTap: (b) => ctrl.update((x) => x.copyWith(prefSameCountry: b))),
-        const SizedBox(height: 22),
-        Text(l.acceptedMarital, style: context.type.inputLabel),
-        const SizedBox(height: 8),
-        ChoiceWrap<MaritalStatus>(options: MaritalStatus.values, label: l.maritalLabel, isSelected: d.prefMarital.contains, onTap: ctrl.togglePrefMarital),
-        const SizedBox(height: 22),
-        Text(l.children, style: context.type.inputLabel),
-        const SizedBox(height: 8),
-        ChoiceWrap<bool?>(
-          options: const [true, null],
-          label: (b) => b == true ? l.wantsChildren : l.noPreference,
-          isSelected: (b) => d.prefWantsChildren == b,
-          onTap: (b) => ctrl.update((x) => x.copyWith(prefWantsChildren: () => b)),
-        ),
-        const SizedBox(height: 24),
-        InfoBanner(text: l.mutualNote, icon: Icons.people_alt_outlined, accent: true),
+        PartnerPreferencesFields(draft: d, onChanged: (next) => ctrl.update((_) => next)),
       ],
+    );
+  }
+}
+
+/// Age range, country, marital status, children and religion — one widget for
+/// sign-up and for editing later, so both always offer the same choices.
+class PartnerPreferencesFields extends StatelessWidget {
+  const PartnerPreferencesFields({super.key, required this.draft, required this.onChanged});
+  final ProfileDraft draft;
+  final ValueChanged<ProfileDraft> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final d = draft;
+    void set(ProfileDraft Function(ProfileDraft x) f) => onChanged(f(d));
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text(l.ageRange, style: context.type.inputLabel),
+      const SizedBox(height: 8),
+      Row(
+        children: [
+          Expanded(child: OlfaStepper(semanticLabel: l.ageMin, value: d.prefAgeMin, max: d.prefAgeMax, onChanged: (v) => set((x) => x.copyWith(prefAgeMin: v)))),
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 10), child: Text(l.to, style: context.type.caption)),
+          Expanded(child: OlfaStepper(semanticLabel: l.ageMax, value: d.prefAgeMax, min: d.prefAgeMin, onChanged: (v) => set((x) => x.copyWith(prefAgeMax: v)))),
+        ],
+      ),
+      const SizedBox(height: 22),
+      Text(l.country, style: context.type.inputLabel),
+      const SizedBox(height: 8),
+      ChoiceWrap<bool>(options: const [true, false], label: (b) => b ? l.sameCountry : l.anyCountry, isSelected: (b) => d.prefSameCountry == b, onTap: (b) => set((x) => x.copyWith(prefSameCountry: b))),
+      const SizedBox(height: 22),
+      Text(l.acceptedMarital, style: context.type.inputLabel),
+      const SizedBox(height: 8),
+      ChoiceWrap<MaritalStatus>(
+        options: MaritalStatus.values,
+        label: l.maritalLabel,
+        isSelected: d.prefMarital.contains,
+        // at least one stays selected
+        onTap: (m) {
+          final next = {...d.prefMarital};
+          if (next.contains(m)) {
+            if (next.length > 1) next.remove(m);
+          } else {
+            next.add(m);
+          }
+          set((x) => x.copyWith(prefMarital: next));
+        },
+      ),
+      const SizedBox(height: 22),
+      Text(l.children, style: context.type.inputLabel),
+      const SizedBox(height: 8),
+      ChoiceWrap<bool?>(
+        options: const [true, null],
+        label: (b) => b == true ? l.wantsChildren : l.noPreference,
+        isSelected: (b) => d.prefWantsChildren == b,
+        onTap: (b) => set((x) => x.copyWith(prefWantsChildren: () => b)),
+      ),
+      const SizedBox(height: 22),
+      Text(l.acceptedReligions, style: context.type.inputLabel),
+      const SizedBox(height: 8),
+      ReligionFilter(
+        religions: d.prefReligions,
+        sects: d.prefSects,
+        onChanged: (r, s) => set((x) => x.copyWith(prefReligions: r, prefSects: s)),
+      ),
+      const SizedBox(height: 24),
+      InfoBanner(text: l.mutualNote, icon: Icons.people_alt_outlined, accent: true),
+    ]);
+  }
+}
+
+/// My profile → Partner preferences: loads the saved preferences from the
+/// server, saves them on their own (no new review) and warns before leaving
+/// with unsaved changes. Not part of the sign-up flow.
+class EditPartnerPreferencesScreen extends ConsumerStatefulWidget {
+  const EditPartnerPreferencesScreen({super.key});
+  @override
+  ConsumerState<EditPartnerPreferencesScreen> createState() => _EditPartnerPreferencesScreenState();
+}
+
+class _EditPartnerPreferencesScreenState extends ConsumerState<EditPartnerPreferencesScreen> {
+  ProfileDraft? _saved;
+  ProfileDraft? _draft;
+  Object? _error;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _error = null);
+    try {
+      final d = await ref.read(profileRepositoryProvider).loadPreferences(const ProfileDraft());
+      if (!mounted) return;
+      setState(() => _saved = _draft = d);
+    } catch (e) {
+      if (mounted) setState(() => _error = e);
+    }
+  }
+
+  bool get _dirty => _draft != null && _saved != null && !_samePrefs(_draft!, _saved!);
+
+  static bool _samePrefs(ProfileDraft a, ProfileDraft b) =>
+      a.prefAgeMin == b.prefAgeMin &&
+      a.prefAgeMax == b.prefAgeMax &&
+      a.prefSameCountry == b.prefSameCountry &&
+      a.prefWantsChildren == b.prefWantsChildren &&
+      a.prefMarital.length == b.prefMarital.length &&
+      a.prefMarital.containsAll(b.prefMarital) &&
+      a.prefReligions.length == b.prefReligions.length &&
+      a.prefReligions.containsAll(b.prefReligions) &&
+      a.prefSects.length == b.prefSects.length &&
+      a.prefSects.containsAll(b.prefSects);
+
+  Future<void> _save() async {
+    final l = AppLocalizations.of(context);
+    setState(() => _saving = true);
+    try {
+      await ref.read(profileRepositoryProvider).savePreferences(_draft!);
+      if (!mounted) return;
+      setState(() => _saved = _draft);
+      showToast(context, l.saved);
+      context.pop();
+    } catch (e) {
+      if (mounted) showToast(context, failureMessage(context, e));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final d = _draft;
+    return PopScope(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final leave = await showConfirmation(context, title: l.discardChangesTitle, body: l.discardChangesBody, confirmLabel: l.discard, icon: Icons.edit_off_rounded);
+        if (leave && mounted) {
+          setState(() => _draft = _saved);
+          context.pop();
+        }
+      },
+      child: d == null
+          ? Scaffold(
+              appBar: AppBar(title: Text(l.prefsTitleShort)),
+              body: _error != null ? ErrorState(error: _error!, onRetry: _load) : const LoadingSkeleton(),
+            )
+          : FormPage(
+              title: l.prefsTitleShort,
+              action: PrimaryButton(label: l.save, loading: _saving, onPressed: _dirty ? _save : null),
+              children: [
+                Text(l.prefsBody, style: context.type.bodySmall.copyWith(color: OlfaColors.textMuted)),
+                const SizedBox(height: 18),
+                PartnerPreferencesFields(draft: d, onChanged: (next) => setState(() => _draft = next)),
+              ],
+            ),
     );
   }
 }
@@ -231,20 +424,8 @@ class PhotosScreen extends ConsumerStatefulWidget {
 }
 
 class _PhotosScreenState extends ConsumerState<PhotosScreen> {
-  bool _busy = false;
-
-  Future<void> _submit() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      await ref.read(profileDraftProvider.notifier).submit();
-      if (mounted) context.go(Routes.verification);
-    } catch (e) {
-      if (mounted) showToast(context, failureMessage(context, e));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
+  // Next: the verification selfie, which then sends the profile for review.
+  void _submit() => context.pushOnce(Routes.selfie);
 
   @override
   Widget build(BuildContext context) {
@@ -252,10 +433,10 @@ class _PhotosScreenState extends ConsumerState<PhotosScreen> {
     final d = ref.watch(profileDraftProvider);
     final ctrl = ref.read(profileDraftProvider.notifier);
     return FormPage(
-      header: const SetupProgress(step: 4),
-      action: PrimaryButton(label: l.submitForReview, loading: _busy, onPressed: d.photosReady ? _submit : null),
+      header: SetupProgress(step: setupTotal(d) - 1, total: setupTotal(d)),
+      action: PrimaryButton(label: l.continueLabel, onPressed: (d.accountType?.isProfessional ?? false ? d.professionalPhotosReady : d.photosReady) ? _submit : null),
       children: [
-        PageHeading(l.photosTitle, body: l.photosBody),
+        PageHeading(l.photosTitle, body: d.accountType?.isProfessional ?? false ? l.photosBodyProfessional : l.photosBody),
         PhotoGrid(slots: d.photoSlots, onToggle: ctrl.togglePhoto),
         const SizedBox(height: 18),
         for (final tip in [l.photoTip1, l.photoTip2, l.photoTip3])
@@ -264,16 +445,7 @@ class _PhotosScreenState extends ConsumerState<PhotosScreen> {
             child: Row(children: [const Icon(Icons.check_rounded, color: OlfaColors.primary, size: 18), const SizedBox(width: 10), Expanded(child: Text(tip, style: context.type.bodyMedium))]),
           ),
         const SizedBox(height: 10),
-        TileGroup(children: [
-          OlfaListTile(
-            icon: Icons.camera_alt_outlined,
-            accent: true,
-            title: l.selfieTitle,
-            subtitle: l.selfieBody,
-            trailing: OlfaTag(l.optional),
-            onTap: () => showToast(context, l.selfieLater),
-          ),
-        ]),
+        InfoBanner(text: l.selfieNextNote, icon: Icons.photo_camera_front_outlined, accent: true),
         const SizedBox(height: 14),
         OlfaCheck(value: d.photoRightsConfirmed, onChanged: (v) => ctrl.update((x) => x.copyWith(photoRightsConfirmed: v)), label: l.photoRights),
         OlfaCheck(value: d.policyAccepted, onChanged: (v) => ctrl.update((x) => x.copyWith(policyAccepted: v)), label: l.photoPolicy),
@@ -388,6 +560,17 @@ class VerificationScreen extends ConsumerWidget {
                 VerificationStatus.approved => (Icons.check_rounded, l.verifApprovedTitle, l.verifApprovedBody),
               };
               final approved = v.status == VerificationStatus.approved;
+              // selfie reasons → the matching criterion's "how to fix"
+              final selfieFix = switch (v.rejectCode ?? v.selfieRejectCode) {
+                'selfie_no_face' || 'selfie_face_covered' => [criterionFix(l, SelfieCriterion.visible)],
+                'selfie_multiple_faces' => [criterionFix(l, SelfieCriterion.oneFace)],
+                'selfie_blurry' || 'selfie_dark' => [criterionFix(l, SelfieCriterion.quality)],
+                'selfie_gesture_wrong' => [criterionFix(l, SelfieCriterion.gesture)],
+                'selfie_not_match' => [criterionFix(l, SelfieCriterion.samePerson)],
+                'selfie_not_live' => [criterionFix(l, SelfieCriterion.live), criterionFix(l, SelfieCriterion.real)],
+                _ => const <String>[],
+              };
+              final steps = [...v.fixSteps, ...selfieFix];
               return Column(
                 children: [
                   Expanded(
@@ -436,12 +619,12 @@ class VerificationScreen extends ConsumerWidget {
                                 const SizedBox(height: 14),
                                 Text(l.howToFix, style: t.caption),
                                 const SizedBox(height: 8),
-                                for (var i = 0; i < v.fixSteps.length; i++)
+                                for (var i = 0; i < steps.length; i++)
                                   Padding(
                                     padding: const EdgeInsets.only(bottom: 8),
                                     child: Row(
                                       crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [OlfaTag('${i + 1}', style: OlfaTagStyle.accent), const SizedBox(width: 10), Expanded(child: Text(v.fixSteps[i], style: t.bodyMedium))],
+                                      children: [OlfaTag('${i + 1}', style: OlfaTagStyle.accent), const SizedBox(width: 10), Expanded(child: Text(steps[i], style: t.bodyMedium))],
                                     ),
                                   ),
                               ],
@@ -449,6 +632,19 @@ class VerificationScreen extends ConsumerWidget {
                           )
                         else
                           _Timeline(status: v.status),
+                        if (v.selfieStatus != null || v.selfieRequired) ...[
+                          const SizedBox(height: 12),
+                          InfoBanner(
+                            icon: Icons.photo_camera_front_outlined,
+                            accent: v.needsSelfie,
+                            text: switch (v.selfieStatus) {
+                              'APPROVED' => l.selfieStatusApproved,
+                              'PENDING' => l.selfieStatusPending,
+                              'REJECTED' => l.selfieStatusRejected,
+                              _ => l.selfieStatusMissing,
+                            },
+                          ),
+                        ],
                         if (approved) ...[
                           const SizedBox(height: 8),
                           InfoBanner(text: '${l.photosReviewed} — ${l.notIdentityNote}', icon: Icons.verified_rounded),
@@ -460,8 +656,10 @@ class VerificationScreen extends ConsumerWidget {
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
                     child: switch (v.status) {
                       VerificationStatus.approved => PrimaryButton(label: l.startDiscovering, onPressed: () => context.go(Routes.discover)),
-                      VerificationStatus.rejected => PrimaryButton(label: l.fixAndResubmit, onPressed: () => context.push(Routes.photos)),
-                      VerificationStatus.pending => SecondaryButton(label: l.editProfile, onPressed: () => context.push(Routes.editProfile)),
+                      // the team asked for a new selfie → retake (the profile goes back to review by itself)
+                      _ when v.needsSelfie => PrimaryButton(label: l.selfieRetakeCta, icon: Icons.photo_camera_front_rounded, onPressed: () => context.pushOnce(Routes.selfieRetake)),
+                      VerificationStatus.rejected => PrimaryButton(label: l.fixAndResubmit, onPressed: () => context.pushOnce(Routes.photos)),
+                      VerificationStatus.pending => SecondaryButton(label: l.editProfile, onPressed: () => context.pushOnce(Routes.editProfile)),
                     },
                   ),
                 ],

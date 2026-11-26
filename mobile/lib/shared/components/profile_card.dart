@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/localization/bidi_text.dart';
 import '../../core/localization/generated/app_localizations.dart';
 import '../../core/theme/olfa_colors.dart';
 import '../../core/theme/olfa_spacing.dart';
@@ -41,7 +42,7 @@ class _ProfileCardState extends State<ProfileCard> {
 
     return Semantics(
       container: true,
-      label: '${p.name}, ${p.age}',
+      label: nameAge(context, p.name, p.age),
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
@@ -107,7 +108,7 @@ class _ProfileCardState extends State<ProfileCard> {
                       children: [
                         Flexible(child: Text('${p.name}  ${p.age}', style: t.h2, maxLines: 1, overflow: TextOverflow.ellipsis)),
                         const SizedBox(width: 8),
-                        VerificationTicks(profile: p, size: 20),
+                        VerificationMark(profile: p, size: 20),
                         const Spacer(),
                         if (p.underReview) OlfaTag(l.newUnderReview, icon: Icons.hourglass_top_rounded),
                       ],

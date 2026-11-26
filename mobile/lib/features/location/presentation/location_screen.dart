@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart' show Geolocator;
 
 import '../../../core/errors/failure.dart';
 import '../../../core/localization/generated/app_localizations.dart';
+import '../../../core/routing/navigation.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theme/olfa_colors.dart';
 import '../../../core/theme/olfa_spacing.dart';
@@ -14,6 +15,7 @@ import '../../../shared/components/labels.dart';
 import '../../../shared/models/models.dart';
 import '../../profile/application/profile_controllers.dart';
 import '../data/location_service.dart';
+import '../../../shared/utils/text_fold.dart';
 
 /// Setup step — approximate location so discovery can show the nearest
 /// people first, then the user's own country. Optional ("Later").
@@ -55,7 +57,7 @@ class _LocationScreenState extends ConsumerState<LocationScreen> {
     }
   }
 
-  void _next() => context.push(Routes.photos);
+  void _next() => context.pushOnce(Routes.photos);
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +67,10 @@ class _LocationScreenState extends ConsumerState<LocationScreen> {
     final lang = langOf(context);
     final c = countryOrNull(loc?.countryIso);
     return FormPage(
-      header: const SetupProgress(step: 3),
+      header: Builder(builder: (_) {
+        final pro = ref.watch(profileDraftProvider).accountType?.isProfessional ?? false;
+        return SetupProgress(step: pro ? 4 : 5, total: pro ? 5 : 6);
+      }),
       action: loc != null
           ? PrimaryButton(label: l.continueLabel, onPressed: _next)
           : Column(mainAxisSize: MainAxisSize.min, children: [
@@ -97,7 +102,7 @@ class _LocationScreenState extends ConsumerState<LocationScreen> {
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(l.locationFound, style: t.caption),
-                  Text([if (loc.city != null) loc.city!, if (c != null) '${c.flag} ${c.label(lang)}'].join('، '), style: t.h3),
+                  Text([if (loc.city != null) loc.city!, if (c != null) '${c.flag} ${c.label(lang)}'].join(listSeparator(lang)), style: t.h3),
                 ]),
               ),
               const Icon(Icons.check_rounded, color: OlfaColors.primary),

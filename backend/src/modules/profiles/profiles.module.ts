@@ -2,15 +2,15 @@ import { Body, Controller, Delete, Get, HttpCode, Inject, Injectable, Module, Pa
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
 import { ENV, Env } from '../../config/env';
-import { AppError, ErrorCode } from '../../common/errors';
-import { AllowPending, AuthUser, CurrentUser, Public, RateLimit } from '../../common/http';
+import { AppError, ErrorCode, fromPgError } from '../../common/errors';
+import { AllowPending, AuthUser, CurrentUser, MembersOnly, Public, RateLimit } from '../../common/http';
 import { AuditService, PrismaService, SettingsService } from '../../common/infra';
 import { ageOn, profileCompleteness } from '../../domain/security';
 import { profileInclude, toOwnProfile, toPublicProfile } from './profile.mapper';
-import { CreateProfileDto, DeleteAccountDto, FreezeDto, LocaleDto, PreferencesDto, PrivacyDto, UpdateProfileDto, LocationDto } from './profiles.dto';
+import { AccountTypeDto, CreateProfileDto, DeleteAccountDto, FreezeDto, LocaleDto, ManagerDto, PreferencesDto, PrivacyDto, UpdateProfileDto, LocationDto } from './profiles.dto';
 import { privacyOf } from '../../domain/privacy';
 import { EntitlementsService } from '../quotas/quotas.module';
-import { defaultNationality } from '../../domain/reference';
+import { defaultNationality, isQualifiedSect, isSectOf } from '../../domain/reference';
 import { roundCoord } from '../../domain/proximity';
 
 @Injectable()
@@ -25,8 +25,63 @@ export class ProfilesService {
 
   async me(userId: string) {
     const u = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, include: profileInclude });
+    if (!u.profile) return { id: u.id, accountType: u.accountType, status: u.status, profile: null, preferences: null };
     const prefs = await this.prisma.userPreference.findUnique({ where: { userId } });
-    return { ...toOwnProfile(u, this.env.CDN_BASE_URL), preferences: prefs };
+    return { ...toOwnProfile(u, this.env.CDN_BASE_URL), accountType: u.accountType, preferences: prefs };
+  }
+
+  /** Who runs this account on the owner's behalf (null = the owner runs it). */
+  async manager(userId: string) {
+    const m = await this.prisma.accountManager.findUnique({ where: { userId } });
+    return m && !m.revokedAt ? { managerName: m.managerName, relation: m.relation, phoneHolder: m.phoneHolder, ownerConsentAt: m.ownerConsentAt, since: m.createdAt } : null;
+  }
+
+  /** Set or change the manager. The owner's consent is required every time (DTO + NOT NULL column). */
+  async setManager(userId: string, dto: ManagerDto) {
+    const before = await this.manager(userId);
+    const data = { managerName: dto.managerName.trim(), relation: dto.relation, phoneHolder: dto.phoneHolder, ownerConsentAt: new Date(), revokedAt: null, revokedBy: null };
+    try {
+      await this.prisma.accountManager.upsert({ where: { userId }, create: { userId, ...data }, update: data });
+    } catch (e) {
+      throw fromPgError(e) ?? e;
+    }
+    await this.audit.record({ actorType: 'USER', actorId: userId, action: before ? 'account.manager_changed' : 'account.manager_added', entityType: 'user', entityId: userId, before, after: { relation: dto.relation, phoneHolder: dto.phoneHolder } });
+    return this.manager(userId);
+  }
+
+  /** End the arrangement: the public notice disappears at once. The history row stays (audit). */
+  async revokeManager(userId: string) {
+    const r = await this.prisma.accountManager.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date(), revokedBy: 'ACCOUNT' } });
+    if (r.count) await this.audit.record({ actorType: 'USER', actorId: userId, action: 'account.manager_revoked', entityType: 'user', entityId: userId });
+  }
+
+  /**
+   * Sign-up step after gender: marriage member, psychologist or family
+   * counselor. Can be changed until a profile is created, then it is locked
+   * (DB trigger) — a professional and a member are separate accounts.
+   */
+  async setAccountType(userId: string, dto: AccountTypeDto) {
+    await this.prisma.user.update({ where: { id: userId }, data: { accountType: dto.accountType } }).catch((e: unknown) => {
+      throw fromPgError(e) ?? e;
+    });
+    await this.audit.record({ actorType: 'USER', actorId: userId, action: 'account.type', entityType: 'user', entityId: userId, after: { accountType: dto.accountType } });
+    return { accountType: dto.accountType };
+  }
+
+  private religionFields(dto: { religion?: string; sect?: string | null; religionConsent?: boolean }, current?: { religionConsentAt: Date | null }) {
+    if (dto.religion === undefined) {
+      if (dto.sect !== undefined) throw new AppError(ErrorCode.VALIDATION, 'Send the religion with the sect');
+      return {};
+    }
+    const sect = dto.sect ?? null;
+    if (sect && !isSectOf(dto.religion, sect)) throw new AppError(ErrorCode.VALIDATION, 'The sect does not belong to the chosen religion');
+    const needsConsent = dto.religion !== 'undisclosed';
+    if (needsConsent && !dto.religionConsent && !current?.religionConsentAt) throw new AppError(ErrorCode.VALIDATION, 'Consent is required to save your religion');
+    return {
+      religion: dto.religion,
+      sect: dto.religion === 'undisclosed' ? null : sect,
+      religionConsentAt: needsConsent ? current?.religionConsentAt ?? new Date() : null,
+    };
   }
 
   async create(userId: string, dto: CreateProfileDto) {
@@ -34,6 +89,9 @@ export class ProfilesService {
     const birth = new Date(`${dto.birthDate}T00:00:00Z`);
     if (ageOn(birth, new Date()) < minAge) throw new AppError(ErrorCode.UNDERAGE);
     const interestIds = await this.interestIds(dto.interests);
+    const religion = this.religionFields(dto);
+    const acct = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { accountType: true } });
+    if (acct.accountType && acct.accountType !== 'MEMBER') throw new AppError(ErrorCode.FORBIDDEN, 'Professional accounts complete the professional profile instead');
 
     await this.prisma.$transaction(async (tx) => {
       const exists = await tx.userProfile.findUnique({ where: { userId }, select: { userId: true } });
@@ -55,6 +113,7 @@ export class ProfilesService {
           occupation: dto.occupation,
           heightCm: dto.heightCm ?? null,
           weightKg: dto.weightKg ?? null,
+          ...religion,
           marriageTimeline: dto.marriageTimeline,
           smoking: dto.smoking,
           willingToRelocate: dto.willingToRelocate,
@@ -95,6 +154,7 @@ export class ProfilesService {
       smoking: dto.smoking,
       willingToRelocate: dto.willingToRelocate,
       bio: dto.bio?.trim(),
+      ...this.religionFields(dto, current),
       // A name change waits for review when the account is already live.
       displayName: nameChanged && !reReview ? dto.displayName!.trim() : undefined,
     };
@@ -118,8 +178,20 @@ export class ProfilesService {
     return this.me(userId);
   }
 
+  async preferences(userId: string) {
+    const p = await this.prisma.userPreference.findUnique({ where: { userId } });
+    return (
+      p ?? { userId, ageMin: 18, ageMax: 60, sameCountryOnly: false, countryCodes: [], cities: [], maritalStatuses: [], educationLevels: [], occupations: [], wantsChildren: null, religions: [], sects: [], updatedAt: null }
+    );
+  }
+
   async setPreferences(userId: string, dto: PreferencesDto) {
     if (dto.ageMin > dto.ageMax) throw new AppError(ErrorCode.VALIDATION, 'ageMin must be <= ageMax');
+    const religions = dto.religions ?? [];
+    const sects = dto.sects ?? [];
+    if (sects.some((x) => !isQualifiedSect(x) || (religions.length > 0 && !religions.includes(x.split('.')[0])))) {
+      throw new AppError(ErrorCode.VALIDATION, 'Each sect must belong to one of the accepted religions');
+    }
     const data = {
       ageMin: dto.ageMin,
       ageMax: dto.ageMax,
@@ -130,6 +202,8 @@ export class ProfilesService {
       educationLevels: dto.educationLevels ?? [],
       occupations: dto.occupations ?? [],
       wantsChildren: dto.wantsChildren ?? null,
+      religions,
+      sects,
     };
     // Preference changes invalidate cached scores for this viewer.
     await this.prisma.$transaction([
@@ -143,6 +217,12 @@ export class ProfilesService {
   /** Stores an approximate location (2 decimals ≈ 1 km) for "nearest first". */
   async setLocation(userId: string, dto: LocationDto) {
     const lat = roundCoord(dto.latitude), lng = roundCoord(dto.longitude);
+    const acct = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { accountType: true } });
+    if (acct.accountType === 'PSYCHOLOGIST' || acct.accountType === 'FAMILY_COUNSELOR') {
+      // professionals: used to show counselors near the client and their country
+      await this.prisma.counselorProfile.update({ where: { userId }, data: { latitude: lat, longitude: lng, countryCode: dto.countryCode ?? undefined } });
+      return { locationCountry: dto.countryCode ?? null };
+    }
     await this.prisma.userProfile.update({
       where: { userId },
       data: { latitude: lat, longitude: lng, locationCountry: dto.countryCode ?? undefined, locationUpdatedAt: new Date() },
@@ -185,7 +265,7 @@ export class ProfilesService {
   }
 
   /** Push notifications and SMS use the same language as the app. */
-  async setLocale(userId: string, locale: 'ar' | 'en') {
+  async setLocale(userId: string, locale: 'ar' | 'en' | 'fr') {
     await this.prisma.user.update({ where: { id: userId }, data: { locale } });
     return { locale };
   }
@@ -274,7 +354,12 @@ export class ProfilesController {
     return this.profiles.me(u.id);
   }
 
-  @AllowPending() @RateLimit(10, 3600) @Post('me/profile')
+  @AllowPending() @RateLimit(20, 3600) @Put('me/account-type') @HttpCode(200)
+  setAccountType(@CurrentUser() u: AuthUser, @Body() dto: AccountTypeDto) {
+    return this.profiles.setAccountType(u.id, dto);
+  }
+
+  @AllowPending() @MembersOnly() @RateLimit(10, 3600) @Post('me/profile')
   create(@CurrentUser() u: AuthUser, @Body() dto: CreateProfileDto) {
     return this.profiles.create(u.id, dto);
   }
@@ -284,9 +369,31 @@ export class ProfilesController {
     return this.profiles.update(u.id, dto);
   }
 
-  @AllowPending() @Put('me/preferences') @HttpCode(200)
+  /** Saved partner preferences (defaults when none yet) — the app's "Partner preferences" page edits these. */
+  @AllowPending() @MembersOnly() @Get('me/preferences')
+  getPreferences(@CurrentUser() u: AuthUser) {
+    return this.profiles.preferences(u.id);
+  }
+
+  @AllowPending() @MembersOnly() @Put('me/preferences') @HttpCode(200)
   preferences(@CurrentUser() u: AuthUser, @Body() dto: PreferencesDto) {
     return this.profiles.setPreferences(u.id, dto);
+  }
+
+  /** Account managed on someone's behalf (parent, relative, trusted person) — members only. */
+  @AllowPending() @MembersOnly() @Get('me/manager')
+  getManager(@CurrentUser() u: AuthUser) {
+    return this.profiles.manager(u.id);
+  }
+
+  @AllowPending() @MembersOnly() @RateLimit(10, 86400) @Put('me/manager') @HttpCode(200)
+  setManager(@CurrentUser() u: AuthUser, @Body() dto: ManagerDto) {
+    return this.profiles.setManager(u.id, dto);
+  }
+
+  @AllowPending() @MembersOnly() @Delete('me/manager') @HttpCode(204)
+  revokeManager(@CurrentUser() u: AuthUser) {
+    return this.profiles.revokeManager(u.id);
   }
 
   @AllowPending() @Get('me/privacy')
@@ -325,7 +432,7 @@ export class ProfilesController {
     return this.profiles.setLocation(u.id, dto);
   }
 
-  @RateLimit(300, 3600) @Get('profiles/:id')
+  @MembersOnly() @RateLimit(300, 3600) @Get('profiles/:id')
   profile(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.profiles.publicProfile(u.id, id);
   }

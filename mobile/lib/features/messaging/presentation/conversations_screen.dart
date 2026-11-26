@@ -13,10 +13,12 @@ import '../../../core/theme/olfa_typography.dart';
 import '../../../core/widgets/olfa_widgets.dart';
 import '../../../shared/components/labels.dart';
 import '../../../shared/models/models.dart';
+import '../../../shared/utils/text_fold.dart';
 import '../../settings/presentation/report_sheet.dart';
 import '../application/chat_controller.dart';
 import '../data/messaging_repository_impl.dart';
 import '../../../shared/components/verification_ticks.dart';
+import '../../../core/routing/navigation.dart';
 
 /// 18 — Messages: search, Archive and Unmatched shortcuts, the plan's
 /// visible-conversation meter, consultation chats, expiry chips and the
@@ -85,13 +87,13 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
                 icon: Icons.inventory_2_outlined,
                 label: l.screenArchive,
                 count: counts?.count(ConversationSection.archive) ?? 0,
-                onTap: () => context.push(Routes.archive),
+                onTap: () => context.pushOnce(Routes.archive),
               ),
               _HeaderShortcut(
                 icon: Icons.link_off_rounded,
                 label: l.screenUnmatched,
                 count: counts?.count(ConversationSection.unmatched) ?? 0,
-                onTap: () => context.push(Routes.unmatched),
+                onTap: () => context.pushOnce(Routes.unmatched),
               ),
             ]),
           ),
@@ -100,12 +102,12 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
               value: ix,
               onRetry: () => ref.invalidate(conversationIndexProvider),
               data: (ix) {
-                final consult = ix.section(ConversationSection.consultation);
+                // archived consultation chats live in the Archive screen
+                final consult = ix.section(ConversationSection.consultation).where((c) => c.consultState != ConsultChatState.archived).toList();
                 final inbox = ix.section(ConversationSection.inbox);
                 final locked = ix.lockedIn(ConversationSection.inbox);
                 final typed = _search.text.trim();
-                if (typed.length >= 2) return _SearchResults(query: _q.isEmpty ? typed : _q, index: ix);
-                final shown = [...consult, ...inbox];
+                if (typed.length >= 2) return _SearchResults(query: _q.isEmpty ? typed : _q, typed: typed, index: ix);
                 if (consult.isEmpty && inbox.isEmpty && locked.isEmpty) {
                   return EmptyState(
                     icon: Icons.chat_bubble_outline_rounded,
@@ -114,14 +116,21 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
                     action: PrimaryButton(label: l.screenMatches, expand: false, onPressed: () => context.go(Routes.matches)),
                   );
                 }
+                // Lazy list: only the rows on screen are built, however long the inbox.
+                // Consultation chats and member chats are labelled when both exist.
+                final both = consult.isNotEmpty && inbox.isNotEmpty;
                 return RefreshIndicator(
                   color: OlfaColors.primary,
                   onRefresh: () => ref.refresh(conversationIndexProvider.future),
-                  child: ListView(
+                  child: CustomScrollView(slivers: [
+                    SliverToBoxAdapter(child: _PlanMeter(index: ix)),
+                    if (both) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: SectionLabel(l.screenConsultations, top: 8))),
+                    SliverList.builder(itemCount: consult.length, itemBuilder: (_, i) => ConversationTile(key: ValueKey(consult[i].id), conversation: consult[i])),
+                    if (both) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: SectionLabel(l.screenConversations, top: 12))),
+                    SliverList.builder(itemCount: inbox.length, itemBuilder: (_, i) => ConversationTile(key: ValueKey(inbox[i].id), conversation: inbox[i])),
+                    SliverPadding(
                     padding: EdgeInsets.only(bottom: OlfaSize.navBarClearance(context)),
-                    children: [
-                      _PlanMeter(index: ix),
-                      for (final c in shown) ConversationTile(conversation: c),
+                    sliver: SliverList.list(children: [
                       if (locked.isNotEmpty) ...[
                         Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: SectionLabel(l.lockedConversationsTitle)),
                         for (final _ in locked.take(4)) const LockedConversationTile(),
@@ -139,8 +148,9 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
                         padding: const EdgeInsets.fromLTRB(28, 16, 28, 20),
                         child: Text(l.retentionNote, textAlign: TextAlign.center, style: context.type.caption),
                       ),
-                    ],
-                  ),
+                    ]),
+                    ),
+                  ]),
                 );
               },
             ),
@@ -199,16 +209,24 @@ class _SectionScreen extends ConsumerWidget {
         value: ref.watch(conversationIndexProvider),
         onRetry: () => ref.invalidate(conversationIndexProvider),
         data: (ix) {
-          final rows = ix.section(section);
+          final rows = [
+            ...ix.section(section),
+            // archived consultation chats (same 30-day rule) sit with the archived member chats
+            if (section == ConversationSection.archive) ...ix.section(ConversationSection.consultation).where((c) => c.consultState == ConsultChatState.archived),
+          ];
           final locked = ix.lockedIn(section);
           if (rows.isEmpty && locked.isEmpty) return EmptyState(icon: icon, title: emptyTitle, body: emptyBody);
-          return ListView(
-            padding: const EdgeInsets.only(bottom: 24),
-            children: [
-              Padding(padding: const EdgeInsets.fromLTRB(20, 4, 20, 10), child: InfoBanner(icon: icon, text: note)),
-              for (final c in rows) ConversationTile(conversation: c),
-              for (final _ in locked) const LockedConversationTile(),
-            ],
+          return RefreshIndicator(
+            color: OlfaColors.primary,
+            onRefresh: () => ref.refresh(conversationIndexProvider.future),
+            child: CustomScrollView(slivers: [
+              SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(20, 4, 20, 10), child: InfoBanner(icon: icon, text: note))),
+              SliverList.builder(itemCount: rows.length, itemBuilder: (_, i) => ConversationTile(key: ValueKey(rows[i].id), conversation: rows[i])),
+              SliverPadding(
+                padding: EdgeInsets.only(bottom: 24 + MediaQuery.paddingOf(context).bottom),
+                sliver: SliverList.builder(itemCount: locked.length, itemBuilder: (_, __) => const LockedConversationTile()),
+              ),
+            ]),
           );
         },
       ),
@@ -235,12 +253,7 @@ class _HeaderShortcut extends StatelessWidget {
           PositionedDirectional(
             top: -3,
             end: -3,
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 20),
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-              decoration: BoxDecoration(color: OlfaColors.primary, borderRadius: OlfaRadius.all(10), border: Border.all(color: OlfaColors.white, width: 2)),
-              child: Text('$count', textAlign: TextAlign.center, style: const TextStyle(color: OlfaColors.white, fontSize: 10.5, fontWeight: FontWeight.w700, fontFamily: 'Montserrat')),
-            ),
+            child: CountBadge(count: count),
           ),
       ]),
     );
@@ -292,22 +305,27 @@ class ConversationTile extends ConsumerWidget {
     final t = context.type;
     final c = conversation;
     final unread = c.unread > 0 && !c.isUnmatched;
-    final days = c.expiresAt == null ? null : c.expiresAt!.difference(DateTime.now()).inDays.clamp(0, 99).toInt();
+    final days = c.expiresAt == null ? null : daysUntil(c.expiresAt!).clamp(0, 99).toInt();
+    // ended consultation chats always show their countdown; member chats only near the end
+    final showCountdown = days != null && (c.isConsultation || c.expiringSoon);
     final subtitle = switch (c.section) {
       ConversationSection.unmatched => switch (c.rematch?.status) {
           RematchStatus.pending => c.rematch!.byMe ? l.rematchWaiting(c.title) : l.rematchIncoming(c.title),
           RematchStatus.declined => l.rematchDeclined,
           _ => (c.unmatchedByMe ?? false) ? l.unmatchedByYou : l.unmatchedByThem(c.title),
         },
-      _ => switch (c.lastMessageKind) {
-          MessageKind.voice => '🎙 ${l.voiceMessageShort}',
-          MessageKind.image when (c.lastMessage ?? '').isEmpty => '📷 ${l.photoMessageShort}',
-          _ => c.lastMessage ?? (c.isConsultation ? l.consultationChatNote : l.saySalam),
-        },
+      _ => (c.lastFromMe && c.lastMessage != null ? '${l.you}: ' : '') +
+          switch (c.lastMessageKind) {
+            MessageKind.voice => '🎙 ${l.voiceMessageShort}',
+            MessageKind.compat => l.compatResultPreview,
+            MessageKind.image when (c.lastMessage ?? '').isEmpty => '📷 ${l.photoMessageShort}',
+            MessageKind.image => '📷 ${c.lastMessage}',
+            _ => (c.lastMessage ?? '').isEmpty ? (c.isConsultation ? l.consultationChatNote : l.saySalam) : c.lastMessage!,
+          },
     };
     return InkWell(
-      onTap: () => context.push(Routes.chatWith(c.id)),
-      onLongPress: c.isConsultation ? null : () => showConversationMenu(context, ref, c),
+      onTap: () => context.pushOnce(Routes.chatWith(c.id)),
+      onLongPress: () => c.isConsultation ? showConsultChatMenu(context, ref, c) : showConversationMenu(context, ref, c),
       child: Opacity(
         opacity: c.isUnmatched ? 0.78 : 1,
         child: Padding(
@@ -327,7 +345,7 @@ class ConversationTile extends ConsumerWidget {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
                   Flexible(child: Text(c.title, overflow: TextOverflow.ellipsis, style: t.bodyMedium.copyWith(fontWeight: unread ? FontWeight.w700 : FontWeight.w500))),
-                  if (c.peer != null) ...[const SizedBox(width: 6), VerificationTicks(profile: c.peer!, size: 15)],
+                  if (c.peer != null) ...[const SizedBox(width: 6), VerificationMark(profile: c.peer!, size: 15)],
                   if (c.isConsultation) ...[const SizedBox(width: 6), OlfaTag(l.consultationTag, style: OlfaTagStyle.accent)],
                   const Spacer(),
                   if (c.lastAt != null) Text(shortTime(context, c.lastAt!), style: t.caption),
@@ -342,9 +360,9 @@ class ConversationTile extends ConsumerWidget {
                       style: t.bodySmall.copyWith(color: unread ? OlfaColors.black : OlfaColors.textMuted, fontWeight: unread ? FontWeight.w500 : FontWeight.w400),
                     ),
                   ),
-                  if (c.expiringSoon && days != null) ...[
+                  if (showCountdown) ...[
                     const SizedBox(width: 8),
-                    OlfaTag(l.expiresShort(days), style: OlfaTagStyle.accent, icon: Icons.schedule_rounded),
+                    OlfaTag(c.isConsultation ? l.consultDaysLeft(days) : l.expiresShort(days), style: c.expiringSoon ? OlfaTagStyle.accent : OlfaTagStyle.neutral, icon: Icons.schedule_rounded),
                   ],
                   if (c.isUnmatched && c.rematch?.status == RematchStatus.pending) ...[
                     const SizedBox(width: 8),
@@ -492,8 +510,13 @@ class OfflineBar extends StatelessWidget {
 /// locally and on the server) and messages whose text matches (server, all
 /// unlocked conversations, including archived ones).
 class _SearchResults extends ConsumerWidget {
-  const _SearchResults({required this.query, required this.index});
+  const _SearchResults({required this.query, required this.typed, required this.index});
+
+  /// Debounced query sent to the server.
   final String query;
+
+  /// What is in the field right now: names are filtered locally on every key.
+  final String typed;
   final ConversationIndex index;
 
   @override
@@ -501,14 +524,16 @@ class _SearchResults extends ConsumerWidget {
     final l = AppLocalizations.of(context);
     final t = context.type;
     final res = ref.watch(chatSearchProvider(query));
-    final q = query.toLowerCase();
     final byId = {for (final c in index.visible) c.id: c};
     final serverNames = res.valueOrNull?.conversationIds ?? const <String>[];
+    // Arabic-aware: "احمد" finds "أحمد", "ساره" finds "سارة" (same folding as the server).
+    final local = index.visible.where((c) => foldedContains(c.title, typed)).toList();
     final names = <Conversation>[
-      ...index.visible.where((c) => c.title.toLowerCase().contains(q)),
-      ...serverNames.map((id) => byId[id]).whereType<Conversation>().where((c) => !c.title.toLowerCase().contains(q)),
+      ...local,
+      ...serverNames.map((id) => byId[id]).whereType<Conversation>().where((c) => !local.contains(c)),
     ];
     final messages = res.valueOrNull?.messages ?? const <ChatMessage>[];
+    final waiting = res.isLoading && !res.hasValue;
     return ListView(
       padding: EdgeInsets.only(bottom: OlfaSize.navBarClearance(context)),
       children: [
@@ -521,7 +546,7 @@ class _SearchResults extends ConsumerWidget {
           Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: SectionLabel(l.searchMessages)),
           for (final m in messages)
             InkWell(
-              onTap: () => context.push(Routes.chatWith(m.conversationId)),
+              onTap: () => context.pushOnce(Routes.chatWith(m.conversationId)),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -541,8 +566,17 @@ class _SearchResults extends ConsumerWidget {
               ),
             ),
         ],
-        if (!res.isLoading && names.isEmpty && messages.isEmpty)
-          Padding(padding: const EdgeInsets.all(32), child: Text(l.noResultsFor(query), textAlign: TextAlign.center, style: t.bodyMedium.copyWith(color: OlfaColors.textMuted))),
+        if (res.hasError && messages.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+            child: InfoBanner(
+              icon: Icons.wifi_off_rounded,
+              text: failureMessage(context, res.error!),
+              trailing: TextButton(onPressed: () => ref.invalidate(chatSearchProvider(query)), child: Text(l.retry)),
+            ),
+          ),
+        if (!waiting && !res.hasError && names.isEmpty && messages.isEmpty)
+          Padding(padding: const EdgeInsets.all(32), child: Text(l.noResultsFor(typed), textAlign: TextAlign.center, style: t.bodyMedium.copyWith(color: OlfaColors.textMuted))),
       ],
     );
   }
@@ -556,19 +590,55 @@ class _Highlighted extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final base = context.type.bodySmall.copyWith(color: OlfaColors.textMuted);
-    final i = text.toLowerCase().indexOf(query.toLowerCase());
-    if (i < 0 || query.isEmpty) return Text(text, maxLines: 2, overflow: TextOverflow.ellipsis, style: base);
+    final m = foldedMatch(text, query); // indexes into the original text
+    if (m == null) return Text(text, maxLines: 2, overflow: TextOverflow.ellipsis, style: base);
     // keep the match visible in long messages
-    final start = i > 40 ? i - 30 : 0;
-    final pre = (start > 0 ? '…' : '') + text.substring(start, i);
+    final start = m.start > 40 ? m.start - 30 : 0;
+    final pre = (start > 0 ? '…' : '') + text.substring(start, m.start);
     return Text.rich(
       TextSpan(style: base, children: [
         TextSpan(text: pre),
-        TextSpan(text: text.substring(i, i + query.length), style: const TextStyle(color: OlfaColors.primary, fontWeight: FontWeight.w700)),
-        TextSpan(text: text.substring(i + query.length)),
+        TextSpan(text: text.substring(m.start, m.end), style: const TextStyle(color: OlfaColors.primary, fontWeight: FontWeight.w700)),
+        TextSpan(text: text.substring(m.end)),
       ]),
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
     );
   }
+}
+
+
+/// Archive / move back for a consultation chat (the 30-day rule is the same in both places).
+Future<void> showConsultChatMenu(BuildContext context, WidgetRef ref, Conversation c) async {
+  final l = AppLocalizations.of(context);
+  final actions = ref.read(conversationActionsProvider);
+  final archived = c.consultState == ConsultChatState.archived;
+  await showModalBottomSheet<void>(
+    context: context,
+    builder: (sheet) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Padding(padding: const EdgeInsets.fromLTRB(4, 0, 4, 12), child: Text(c.title, style: sheet.type.h3)),
+          TileGroup(children: [
+            OlfaListTile(
+              icon: archived ? Icons.unarchive_outlined : Icons.inventory_2_outlined,
+              title: archived ? l.consultRestoreAction : l.consultArchiveAction,
+              showChevron: false,
+              onTap: () async {
+                Navigator.of(sheet).pop();
+                try {
+                  await (archived ? actions.restore(c.id) : actions.archive(c.id));
+                  if (context.mounted) showToast(context, archived ? l.restored : l.archived);
+                } on Failure catch (e) {
+                  if (context.mounted) showToast(context, failureMessage(context, e));
+                }
+              },
+            ),
+          ]),
+          Padding(padding: const EdgeInsets.fromLTRB(4, 12, 4, 0), child: Text(l.consultRetentionNote, style: sheet.type.caption)),
+        ]),
+      ),
+    ),
+  );
 }

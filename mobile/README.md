@@ -21,7 +21,7 @@ lib/
   app/                         MaterialApp.router, theme + locale wiring
   core/
     theme/                     Design tokens: colours, typography, spacing, radius, Material 3 theme
-    localization/              ARB (ar, en) — 327 keys, locale provider
+    localization/              ARB (ar, en, fr) — 1029 keys, locale provider (phone language, else English)
     routing/                   GoRouter: 26 route ids + floating-nav tab shell
     network/ security/ errors/ Dio client, secure token store, typed Failures
     widgets/                   Component library (see below)
@@ -63,3 +63,14 @@ PrimaryButton · SecondaryButton · OlfaIconButton · ProfileCard · OlfaAvatar 
 - **لم يُشغَّل `flutter analyze` / `flutter test` بعد**: بيئة إنشاء المستودع لا تحتوي Flutter SDK. شغّلهما محليًا وأرسل أي خطأ.
 - الصور حاليًا Placeholders (لا توجد روابط صور في الوضع التجريبي)؛ اختيار الصور ورفعها (image_picker + ضغط + Presigned URL) في المرحلة 3.
 - Firebase وIn-App Purchase مؤجلة للمرحلة 3.
+
+## الأمان والتحقق (الدفعة 8)
+
+- **حماية صور الأعضاء من لقطات الشاشة** (`core/security/screen_protection.dart`، حزمة `screen_protector`):
+  - أندرويد: FLAG_SECURE على التطبيق كله، فتخرج لقطات الشاشة والتسجيل سوداء، ولا تظهر المعاينة في قائمة التطبيقات.
+  - iOS: طبقة آمنة تجعل لقطة الشاشة فارغة، وغطاء كامل أثناء تسجيل الشاشة أو بثّها (`CaptureShield`)، وتمويه في قائمة التطبيقات.
+  - حدود صريحة: لا يمكن منع التصوير بكاميرا جهاز آخر، والأجهزة المكسورة الحماية (root/jailbreak) قد تتجاوز النظام.
+- **سيلفي التحقق** بعد الصور في أول تسجيل (`features/verification`): ثمانية معايير مكتوبة، وإشارة يد عشوائية لمرة واحدة، وفحص الوجه على الجهاز بـ ML Kit دون إرسال الصورة إلى Google، ثم فحص الخادم، ثم مراجعة فريق التحقق. التفاصيل في [docs/VERIFICATION.md](../docs/VERIFICATION.md).
+- **الحساب المغلق** (`features/account/closed_account_screen.dart`): إغلاق نهائي أو حتى تاريخ محدد، مع السبب وإمكانية مراسلة الدعم.
+
+> تحتاج الحزم الجديدة `screen_protector` و`google_mlkit_face_detection` و`file_picker` إلى `flutter pub get`. يتطلب ML Kit حدًا أدنى iOS 15.5 / Android minSdk 21.

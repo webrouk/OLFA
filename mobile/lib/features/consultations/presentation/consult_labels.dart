@@ -17,7 +17,7 @@ const kCurrencyExponent = {'AED': 2, 'SAR': 2, 'QAR': 2, 'OMR': 3, 'KWD': 3, 'BH
 /// Integer minor units → localized amount (never floats in storage).
 String money(BuildContext context, int minor, String currency) {
   final exp = kCurrencyExponent[currency] ?? 2;
-  final f = NumberFormat.currency(locale: langOf(context) == 'ar' ? 'ar_AE' : 'en', name: currency, symbol: '$currency ', decimalDigits: exp);
+  final f = NumberFormat.currency(locale: switch (langOf(context)) { 'ar' => 'ar_AE', 'fr' => 'fr', _ => 'en' }, name: currency, symbol: '$currency ', decimalDigits: exp);
   var div = 1;
   for (var i = 0; i < exp; i++) {
     div *= 10;
@@ -51,13 +51,16 @@ String serviceLabel(AppLocalizations l, ConsultationService s) => switch (s) {
 String kindLabel(AppLocalizations l, CounselorKind k) => k == CounselorKind.psychologist ? l.kindPsychologist : l.kindFamilyCounselor;
 
 String languageName(BuildContext context, String code) {
-  final ar = langOf(context) == 'ar';
+  // (Arabic, English, French)
   const names = {
-    'ar': ('العربية', 'Arabic'), 'en': ('الإنجليزية', 'English'), 'fr': ('الفرنسية', 'French'), 'tr': ('التركية', 'Turkish'), 'ur': ('الأردية', 'Urdu'),
-    'fa': ('الفارسية', 'Persian'), 'de': ('الألمانية', 'German'), 'es': ('الإسبانية', 'Spanish'), 'id': ('الإندونيسية', 'Indonesian'), 'ms': ('الملايوية', 'Malay'),
+    'ar': ('العربية', 'Arabic', 'Arabe'), 'en': ('الإنجليزية', 'English', 'Anglais'), 'fr': ('الفرنسية', 'French', 'Français'),
+    'tr': ('التركية', 'Turkish', 'Turc'), 'ur': ('الأردية', 'Urdu', 'Ourdou'), 'fa': ('الفارسية', 'Persian', 'Persan'),
+    'de': ('الألمانية', 'German', 'Allemand'), 'es': ('الإسبانية', 'Spanish', 'Espagnol'), 'id': ('الإندونيسية', 'Indonesian', 'Indonésien'),
+    'ms': ('الملايوية', 'Malay', 'Malais'),
   };
   final n = names[code];
-  return n == null ? code : (ar ? n.$1 : n.$2);
+  if (n == null) return code;
+  return switch (langOf(context)) { 'ar' => n.$1, 'fr' => n.$3, _ => n.$2 };
 }
 
 (String, Color, Color) statusStyle(AppLocalizations l, ConsultationStatus s) => switch (s) {
@@ -101,14 +104,56 @@ class StarRow extends StatelessWidget {
       );
 }
 
+/// Counselors have no photo: their initials (or an icon) on the burgundy tint.
 class CounselorAvatar extends StatelessWidget {
-  const CounselorAvatar({super.key, this.size = 56});
+  const CounselorAvatar({super.key, this.size = 56, this.name});
   final double size;
+  final String? name;
+
+  static String initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty && !RegExp(r'^(د|د\.|Dr\.?|Pr\.?)$', caseSensitive: false).hasMatch(p)).toList();
+    if (parts.isEmpty) return '';
+    final first = parts.first.characters.first;
+    return parts.length == 1 ? first : first + parts.last.characters.first;
+  }
+
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) {
+    final text = name == null ? '' : initials(name!).toUpperCase();
+    return ExcludeSemantics(
+      child: Container(
         width: size,
         height: size,
+        alignment: Alignment.center,
         decoration: BoxDecoration(color: OlfaColors.primaryTint(), shape: BoxShape.circle),
-        child: Icon(Icons.support_agent_rounded, color: OlfaColors.primary, size: size * 0.46),
-      );
+        child: text.isEmpty
+            ? Icon(Icons.support_agent_rounded, color: OlfaColors.primary, size: size * 0.46)
+            : Text(text, style: TextStyle(color: OlfaColors.primary, fontWeight: FontWeight.w700, fontSize: size * 0.34, height: 1)),
+      ),
+    );
+  }
 }
+
+/// "★★★★☆ 4.6 (12)" — or "New" when there are no ratings yet.
+class RatingLine extends StatelessWidget {
+  const RatingLine({super.key, required this.avg, required this.count, this.size = 13});
+  final double avg;
+  final int count;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    if (count == 0) {
+      return Text(l.noReviewsYet, style: TextStyle(fontSize: size - 1, color: OlfaColors.textMuted));
+    }
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      StarRow(value: avg, size: size),
+      const SizedBox(width: 6),
+      Text('${avg.toStringAsFixed(1)} (${l.reviewsCount(count)})', style: TextStyle(fontSize: size - 1, color: OlfaColors.textMuted)),
+    ]);
+  }
+}
+
+/// The lowest-priced active offering ("from …"), or null.
+CounselorOffering? cheapestOffering(Counselor c) => c.offerings.isEmpty ? null : c.offerings.reduce((a, b) => a.priceMinor <= b.priceMinor ? a : b);

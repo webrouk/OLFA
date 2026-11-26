@@ -144,12 +144,22 @@ String failureMessage(BuildContext context, Object error) {
         _ => l.errorEntitlement,
       },
     AlreadyActedFailure() => l.errorDuplicate,
+    AccountRestrictedFailure(:final permanent) => permanent ? l.closedPermanentTitle : l.closedTemporaryTitle,
+    SlotUnavailableFailure() => l.slotTaken,
+    SelfieChecksFailure() => l.selfieFailedTitle,
     ValidationFailure() => l.errorValidation,
     UnauthorizedFailure() => l.errorUnauthorized,
     ServerFailure(:final code) => switch (code) {
         'conversation_closed' => l.chatClosedUnmatched,
         'rematch_used' => l.rematchAlreadyUsed,
         'not_paid' => l.consultPayFirst,
+        'account_type_locked' => l.errAccountTypeLocked,
+        'wrong_account_type' => l.errWrongAccountType,
+        'account_banned' => l.errAccountBanned,
+        'insufficient_balance' => l.errInsufficientBalance,
+        'review_required' => l.errReviewRequired,
+        'store_verification_failed' => l.errStoreVerification,
+        'selfie_required' => l.selfieStatusMissing,
         _ => l.errorGeneric,
       },
   };
@@ -183,12 +193,20 @@ class AsyncView<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return value.when(
+    // While new data loads (refresh, or a filter changed), the current data
+    // stays on screen with a thin progress line — no flash back to a skeleton.
+    final child = value.when(
       skipLoadingOnRefresh: true,
+      skipLoadingOnReload: true,
       data: data,
       loading: () => loading ?? const LoadingSkeleton(),
       error: (e, _) => ErrorState(error: e, onRetry: onRetry),
     );
+    if (!(value.isLoading && value.hasValue)) return child;
+    return Stack(fit: StackFit.passthrough, children: [
+      child,
+      const Positioned(top: 0, left: 0, right: 0, child: LinearProgressIndicator(minHeight: 2, color: OlfaColors.primary, backgroundColor: Colors.transparent)),
+    ]);
   }
 }
 

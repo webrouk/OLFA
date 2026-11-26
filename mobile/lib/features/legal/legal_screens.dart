@@ -7,14 +7,16 @@ import 'legal_content.dart';
 
 /// Terms of Use / Privacy Policy, in the app's language, readable offline.
 class LegalScreen extends StatelessWidget {
-  const LegalScreen.terms({super.key}) : privacy = false;
-  const LegalScreen.privacy({super.key}) : privacy = true;
+  const LegalScreen.terms({super.key}) : privacy = false, professional = false;
+  const LegalScreen.privacy({super.key}) : privacy = true, professional = false;
+  const LegalScreen.professional({super.key}) : privacy = false, professional = true;
   final bool privacy;
+  final bool professional;
 
   @override
   Widget build(BuildContext context) {
     final lang = langOf(context);
-    final doc = privacy ? privacyOf(lang) : termsOf(lang);
+    final doc = professional ? professionalPolicyOf(lang) : privacy ? privacyOf(lang) : termsOf(lang);
     final t = context.type;
     return Scaffold(
       appBar: AppBar(title: Text(doc.title)),

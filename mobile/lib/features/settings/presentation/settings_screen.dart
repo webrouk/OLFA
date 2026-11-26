@@ -11,8 +11,10 @@ import '../../../core/theme/olfa_spacing.dart';
 import '../../../core/theme/olfa_typography.dart';
 import '../../../core/widgets/olfa_widgets.dart';
 import '../../../shared/services/demo_backend.dart';
+import '../../account/account_type.dart';
 import '../../authentication/data/auth_repository_impl.dart';
 import '../data/settings_repository.dart';
+import '../../../shared/components/labels.dart';
 
 /// Notification preferences kept locally for the UI phase (synced in Phase 3).
 class NotificationPrefs extends Notifier<({bool matches, bool likes})> {
@@ -43,9 +45,14 @@ class SettingsScreen extends ConsumerWidget {
             OlfaListTile(
               icon: Icons.language_rounded,
               title: l.language,
-              subtitle: ref.read(localeProvider.notifier).choice == LanguageChoice.system ? '${l.languageSystem} · ${lang == 'ar' ? 'العربية' : 'English'}' : (lang == 'ar' ? 'العربية' : 'English'),
+              subtitle: ref.read(localeProvider.notifier).choice == LanguageChoice.system
+                  ? '${l.languageSystem} · ${kNativeLanguageNames[lang] ?? 'English'}'
+                  : (kNativeLanguageNames[lang] ?? 'English'),
               onTap: () => context.push(Routes.languageSettings),
             ),
+            // members only: an account run by a family member on the owner's behalf
+            if (!(ref.watch(accountTypeProvider)?.isProfessional ?? false))
+              OlfaListTile(icon: Icons.family_restroom_rounded, title: l.accountManagement, onTap: () => context.push(Routes.accountManagement)),
           ]),
           SectionLabel(l.pushNotifications),
           TileGroup(children: [
@@ -300,7 +307,8 @@ class _FrozenAccountScreenState extends ConsumerState<FrozenAccountScreen> {
 }
 
 /// Language: follow the device (default, matches iOS per-app language and
-/// Android 13+ app languages) or choose Arabic / English inside the app.
+/// Android 13+ app languages) or choose Arabic / English / French inside the
+/// app. A device in any other language gets English.
 class LanguageSettingsScreen extends ConsumerWidget {
   const LanguageSettingsScreen({super.key});
 
@@ -322,8 +330,8 @@ class LanguageSettingsScreen extends ConsumerWidget {
       body: ListView(padding: const EdgeInsets.fromLTRB(20, 4, 20, 28), children: [
         TileGroup(children: [
           opt(LanguageChoice.system, l.languageSystem, l.languageSystemSub),
-          opt(LanguageChoice.ar, 'العربية', 'Arabic'),
-          opt(LanguageChoice.en, 'English', 'الإنجليزية'),
+          for (final c in const [LanguageChoice.ar, LanguageChoice.en, LanguageChoice.fr])
+            opt(c, kNativeLanguageNames[c.name]!, languageNameIn(langOf(context), c.name)),
         ]),
         const SizedBox(height: 12),
         Text(l.languageNote, style: context.type.caption),

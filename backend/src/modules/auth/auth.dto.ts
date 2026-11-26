@@ -27,7 +27,7 @@ export class VerifyOtpDto {
   @ApiProperty() @IsString() @Length(8, 80) deviceId: string;
   @ApiProperty({ enum: ['ios', 'android', 'web'] }) @IsIn(['ios', 'android', 'web']) platform: 'ios' | 'android' | 'web';
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(20) appVersion?: string;
-  @ApiPropertyOptional({ enum: ['ar', 'en'] }) @IsOptional() @IsIn(['ar', 'en']) locale?: 'ar' | 'en';
+  @ApiPropertyOptional({ enum: ['ar', 'en', 'fr'] }) @IsOptional() @IsIn(['ar', 'en', 'fr']) locale?: 'ar' | 'en' | 'fr';
   @ApiPropertyOptional({ example: 'Asia/Dubai' }) @IsOptional() @IsString() @MaxLength(64) timezone?: string;
 }
 

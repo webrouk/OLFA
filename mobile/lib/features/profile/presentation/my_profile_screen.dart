@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/localization/bidi_text.dart';
 import '../../../core/localization/generated/app_localizations.dart';
+import '../../../core/routing/navigation.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theme/olfa_colors.dart';
 import '../../../core/theme/olfa_spacing.dart';
@@ -12,7 +14,6 @@ import '../../../shared/components/labels.dart';
 import '../../../shared/models/models.dart';
 import '../../subscriptions/application/entitlements_controller.dart';
 import '../application/profile_controllers.dart';
-import '../domain/profile_draft.dart';
 import '../../consultations/application/consultation_providers.dart';
 import '../../../shared/components/verification_ticks.dart';
 import '../../settings/data/settings_repository.dart';
@@ -53,19 +54,32 @@ class MyProfileScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Flexible(child: Text('${me.name}, ${me.age}', style: t.h2)),
-                ...[const SizedBox(width: 8), VerificationTicks(profile: me, size: 22)],
+                Flexible(child: Text(nameAge(context, me.name, me.age), style: t.h2)),
+                ...[const SizedBox(width: 8), VerificationMark(profile: me, size: 22)],
               ]),
               Center(child: Text('${me.city} · ${countryLabel(context, me.countryIso)}', style: t.caption)),
-              const SizedBox(height: 18),
-              OlfaCard(
-                padding: const EdgeInsets.all(16),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [Expanded(child: Text(l.profileCompleteness, style: t.bodySmall.copyWith(fontWeight: FontWeight.w600))), Text('${me.completeness}%', textDirection: TextDirection.ltr, style: const TextStyle(color: OlfaColors.primary, fontWeight: FontWeight.w700, fontFamily: 'Montserrat'))]),
-                  const SizedBox(height: 10),
-                  ClipRRect(borderRadius: OlfaRadius.all(4), child: LinearProgressIndicator(value: me.completeness / 100, minHeight: 8, color: OlfaColors.primary, backgroundColor: OlfaColors.gray)),
-                  if (me.completeness < 100) ...[const SizedBox(height: 10), Text(l.completenessTip, style: t.caption)],
-                ]),
+              const SizedBox(height: 8),
+              Center(
+                child: TextButton.icon(
+                  onPressed: () => context.pushOnce(Routes.profile(me.id), extra: me),
+                  icon: const Icon(Icons.visibility_outlined, size: 18),
+                  label: Text(l.viewAsOthers),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Completeness: tapping it opens the editor on what is missing.
+              InkWell(
+                borderRadius: OlfaRadius.all(OlfaRadius.card),
+                onTap: me.completeness < 100 ? () => _edit(context, ref, me) : null,
+                child: OlfaCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [Expanded(child: Text(l.profileCompleteness, style: t.bodySmall.copyWith(fontWeight: FontWeight.w600))), Text('${me.completeness}%', textDirection: TextDirection.ltr, style: t.number(15, color: OlfaColors.primary))]),
+                    const SizedBox(height: 10),
+                    ClipRRect(borderRadius: OlfaRadius.all(4), child: LinearProgressIndicator(value: me.completeness / 100, minHeight: 8, color: OlfaColors.primary, backgroundColor: OlfaColors.gray)),
+                    if (me.completeness < 100) ...[const SizedBox(height: 10), Text(l.completenessTip, style: t.caption)],
+                  ]),
+                ),
               ),
               const SizedBox(height: 12),
               // Who can see me — mirrors Privacy & security (server-enforced).
@@ -73,7 +87,12 @@ class MyProfileScreen extends ConsumerWidget {
                 final priv = ref.watch(privacyProvider).valueOrNull;
                 return priv == null ? const SizedBox.shrink() : VisibilityCard(settings: priv, onTap: () => context.push(Routes.privacy));
               }),
-              const SizedBox(height: 12),
+              SectionLabel(l.sectionAboutMe),
+              TileGroup(children: [
+                OlfaListTile(icon: Icons.edit_outlined, title: l.editProfile, onTap: () => _edit(context, ref, me)),
+                OlfaListTile(icon: Icons.people_alt_outlined, title: l.prefsTitleShort, onTap: () => context.pushOnce(Routes.partnerPreferences)),
+              ]),
+              SectionLabel(l.sectionSubscription),
               OlfaCard(
                 color: paid ? OlfaColors.black : OlfaColors.white,
                 borderColor: paid ? OlfaColors.black : OlfaColors.gray,
@@ -90,26 +109,26 @@ class MyProfileScreen extends ConsumerWidget {
                   PrimaryButton(label: paid ? l.manage : l.upgrade, expand: false, inverted: paid, onPressed: () => context.push(Routes.plans)),
                 ]),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               TileGroup(children: [
-                OlfaListTile(icon: Icons.edit_outlined, title: l.editProfile, onTap: () => _edit(context, ref, me)),
-                OlfaListTile(icon: Icons.people_alt_outlined, title: l.prefsTitleShort, onTap: () => _editPrefs(context, ref, me)),
-                OlfaListTile(icon: Icons.workspace_premium_outlined, title: l.screenPlans, onTap: () => context.push(Routes.plans)),
                 OlfaListTile(icon: Icons.receipt_long_outlined, title: l.screenPayments, onTap: () => context.push(Routes.payments)),
               ]),
-              const SizedBox(height: 12),
+              SectionLabel(l.screenConsultations),
               // Family & marital consultations — booking, and the counselor side.
               TileGroup(children: [
                 OlfaListTile(icon: Icons.support_agent_rounded, title: l.screenConsultations, subtitle: l.consultTileSub, accent: true, onTap: () => context.push(Routes.consultations)),
-                OlfaListTile(icon: Icons.event_note_outlined, title: l.screenMyConsultations, onTap: () => context.push(Routes.myConsultations)),
                 Consumer(builder: (context, ref, _) {
-                  final c = ref.watch(myCounselorProvider).valueOrNull;
-                  return c?.status == CounselorStatus.approved
-                      ? OlfaListTile(icon: Icons.dashboard_customize_outlined, title: l.screenCounselorDesk, onTap: () => context.push(Routes.counselorDesk))
-                      : OlfaListTile(icon: Icons.badge_outlined, title: l.becomeCounselor, subtitle: c?.status == CounselorStatus.pending ? l.counselorPending : null, onTap: () => context.push(Routes.counselorApply));
+                  final pending = ref.watch(pendingReviewsProvider).valueOrNull ?? const [];
+                  return OlfaListTile(
+                    icon: Icons.event_note_outlined,
+                    title: l.screenMyConsultations,
+                    subtitle: pending.isEmpty ? null : l.reviewsWaiting(pending.length),
+                    trailing: pending.isEmpty ? null : OlfaTag('${pending.length}', style: OlfaTagStyle.primary),
+                    onTap: () => context.push(Routes.myConsultations),
+                  );
                 }),
               ]),
-              const SizedBox(height: 12),
+              SectionLabel(l.sectionAccount),
               TileGroup(children: [
                 OlfaListTile(icon: Icons.shield_outlined, title: l.screenPrivacy, onTap: () => context.push(Routes.privacy)),
                 OlfaListTile(icon: Icons.notifications_none_rounded, title: l.screenNotifications, onTap: () => context.push(Routes.notifications)),
@@ -124,13 +143,7 @@ class MyProfileScreen extends ConsumerWidget {
   }
 
   void _edit(BuildContext context, WidgetRef ref, UserProfile me) {
-    ref.read(profileDraftProvider.notifier).update((_) => ProfileDraft.fromProfile(me));
-    context.push(Routes.editProfile);
-  }
-
-  void _editPrefs(BuildContext context, WidgetRef ref, UserProfile me) {
-    final d = ref.read(profileDraftProvider);
-    if (d.gender == null) ref.read(profileDraftProvider.notifier).update((_) => ProfileDraft.fromProfile(me));
-    context.push(Routes.preferences);
+    ref.read(profileDraftProvider.notifier).loadForEditing(me);
+    context.pushOnce(Routes.editProfile);
   }
 }
