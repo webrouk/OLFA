@@ -99,6 +99,9 @@ abstract interface class ConsultationsRepository {
 
   // counselor
   Future<Counselor?> myCounselorProfile();
+
+  /// Last 30 days of profile views and requests (counselor Plus / Premium; locked on Free).
+  Future<ProInsights> myInsights();
   Future<String> uploadCredential(List<int> bytes, String mime);
   Future<Counselor> apply(CounselorApplication a);
   Future<void> saveOffering({required ConsultationService service, required String language, required int durationMinutes, required int priceMinor, required String currency, bool active = true});

@@ -110,4 +110,46 @@ void main() {
     await tester.pumpAndSettle();
     expect(tapped, 4);
   });
+
+  group('counselor bar: same design, counselor pages', () {
+    Widget proBar(int index, {ValueChanged<int>? onTap}) => host(
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Builder(
+              builder: (c) => FloatingNavBar(
+                items: OlfaNavItems.professional(AppLocalizations.of(c)),
+                index: index,
+                badges: const {0: 3, 2: 1},
+                layout: OlfaNavItems.professionalLayout,
+                onTap: onTap ?? (_) {},
+              ),
+            ),
+          ),
+          locale: const Locale('ar'),
+        );
+
+    testWidgets('Requests first on the right, then Chats, Wallet, Profile; Performance on the round button', (tester) async {
+      await tester.pumpWidget(proBar(0));
+      final xs = ['ملفي', 'المحفظة', 'المحادثات', 'الطلبات'].map((s) => tester.getCenter(find.text(s)).dx).toList();
+      for (var i = 1; i < xs.length; i++) {
+        expect(xs[i], greaterThan(xs[i - 1]));
+      }
+      expect(roundButton(tester).right, lessThan(capsule(tester).left));
+      for (final member in ['استكشاف', 'الزواج', 'الإعجابات', 'دردشة']) {
+        expect(find.text(member), findsNothing, reason: 'no member tabs for counselors');
+      }
+      expect(find.byType(NavDot), findsNWidgets(2), reason: 'requests + chats');
+    });
+
+    testWidgets('each item opens its counselor tab', (tester) async {
+      var tapped = -1;
+      await tester.pumpWidget(proBar(0, onTap: (i) => tapped = i));
+      for (final (label, tab) in [('المحادثات', 2), ('المحفظة', 1), ('ملفي', 3), ('الطلبات', 0)]) {
+        await tester.tap(find.text(label));
+        expect(tapped, tab, reason: label);
+      }
+      await tester.tapAt(roundButton(tester).center);
+      expect(tapped, 4, reason: 'round button = performance');
+    });
+  });
 }

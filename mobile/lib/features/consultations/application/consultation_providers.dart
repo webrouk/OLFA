@@ -45,3 +45,6 @@ final slotsProvider = FutureProvider.autoDispose.family<SlotList, (String, Strin
 
 final myScheduleProvider = FutureProvider.autoDispose<CounselorSchedule>((ref) => ref.watch(consultationsRepositoryProvider).mySchedule());
 final myReviewsProvider = FutureProvider.autoDispose<MyReviews>((ref) => ref.watch(consultationsRepositoryProvider).myReviews());
+
+/// The counselor's own last 30 days (locked on the free plan).
+final myInsightsProvider = FutureProvider.autoDispose<ProInsights>((ref) => ref.watch(consultationsRepositoryProvider).myInsights());

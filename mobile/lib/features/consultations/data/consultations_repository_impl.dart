@@ -143,6 +143,12 @@ class ApiConsultationsRepository implements ConsultationsRepository {
       });
 
   @override
+  Future<ProInsights> myInsights() => guard(() async {
+        final r = await _dio.get<Map<String, dynamic>>('/counselors/me/insights');
+        return ApiMappers.proInsights(r.data!);
+      });
+
+  @override
   Future<String> uploadCredential(List<int> bytes, String mime) => guard(() async {
         final r = await _dio.post<Map<String, dynamic>>('/counselors/me/credentials/upload-url', data: {'mime': mime});
         final key = r.data!['key'] as String;
@@ -303,6 +309,8 @@ class DemoConsultationsRepository implements ConsultationsRepository {
   Future<IntegrityCase?> respondIntegrity(String id, String response) => _b.respondIntegrity(id, response);
   @override
   Future<Counselor?> myCounselorProfile() => _b.myCounselor();
+  @override
+  Future<ProInsights> myInsights() => _b.proInsights();
   @override
   Future<String> uploadCredential(List<int> bytes, String mime) async => 'credentials/demo/${DateTime.now().microsecondsSinceEpoch}';
   @override

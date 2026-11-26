@@ -33,12 +33,20 @@ abstract final class OlfaNavItems {
   /// icon only.
   static const memberLayout = OlfaNavLayout(bar: [0, 2, 3, 4], solo: 1);
 
+  /// Counselor tabs (router indexes): 0 requests (the desk), 1 wallet, 2 chats,
+  /// 3 profile, 4 performance. No Discovery, likes or member search.
   static List<OlfaNavItem> professional(AppLocalizations l) => [
-        OlfaNavItem(Icons.dashboard_customize_outlined, Icons.dashboard_customize_rounded, l.navDesk),
+        OlfaNavItem(Icons.inbox_outlined, Icons.inbox_rounded, l.navRequests),
         OlfaNavItem(Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, l.navWallet),
-        OlfaNavItem(Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, l.navMessages),
+        OlfaNavItem(Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, l.navChats),
         OlfaNavItem(Icons.person_outline_rounded, Icons.person_rounded, l.navProfile),
+        OlfaNavItem(Icons.insights_outlined, Icons.insights_rounded, l.navPerformance),
       ];
+
+  /// Counselor phone bar, same design as the members': Requests · Chats ·
+  /// Wallet · Profile in the capsule (Arabic: Requests first on the right) and
+  /// Performance (plan, placement, last 30 days) on the round button.
+  static const professionalLayout = OlfaNavLayout(bar: [0, 2, 1, 3], solo: 4);
 }
 
 /// Where each tab sits on the phone bar. [bar] lists tab indexes in reading

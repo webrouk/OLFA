@@ -4,6 +4,7 @@ import { apiConfigured, GET, session, setSessionHandlers } from './api';
 import type { Lang } from './i18n';
 import { Login, NotConnected, TotpSetup } from './pages/auth';
 import { AdsPage } from './pages/ads';
+import { PlansPage } from './pages/plans';
 import { CompatPage } from './pages/compat';
 import { Counselors, Integrity } from './pages/counselors';
 import { FaqPage, Settings } from './pages/config';
@@ -78,6 +79,9 @@ function App() {
       break;
     case 'compat':
       page = <CompatPage />;
+      break;
+    case 'plans':
+      page = <PlansPage />;
       break;
     case 'ads':
       page = <AdsPage />;

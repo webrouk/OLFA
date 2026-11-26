@@ -91,10 +91,10 @@ void main() {
     ));
     await tester.pumpAndSettle();
     final l = await AppLocalizations.delegate.load(const Locale('en'));
-    for (final label in [l.navDesk, l.navWallet, l.navMessages, l.navProfile]) {
+    for (final label in [l.navRequests, l.navWallet, l.navChats, l.navProfile, l.navPerformance]) {
       expect(find.text(label), findsOneWidget);
     }
-    await tester.tap(find.text(l.navMessages));
+    await tester.tap(find.text(l.navChats));
     expect(tapped, 2);
     expect(find.text('2'), findsOneWidget);
   });

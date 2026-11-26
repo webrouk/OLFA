@@ -265,3 +265,15 @@ Errors `403 ACCOUNT_BANNED` / `ACCOUNT_SUSPENDED` carry `{permanent, until, reas
 - Scoring (`src/domain/compat.ts`): answers compared per topic; SCALE agreement = 1 − |a − b| / range, MATCH = same value; weighted mean, 0–100; per-domain scores.
 - DB guarantees: answers only from members, only for questions in their own set, only existing options, frozen once the result exists (P0074); no result row unless both finished (P0075); answered questions keep their options (P0073).
 - Admin (`settings.manage`): `GET|POST /v1/admin/compat/questions`, `PUT /v1/admin/compat/questions/:id`, `POST /v1/admin/compat/questions/:id/active {active}`, `PUT /v1/admin/compat/enabled {active}`; `GET /v1/admin/compat/stats` (users.read) — totals only.
+
+## Counselor plans, directory placement, insights (migrations 20261127080000, 20261127090000)
+Licensed professionals have their own account area: no Discovery, likes, member search or member plans (app redirect + `@MembersOnly` on the server), and never ads (ads only run in Discovery).
+- **Plans:** `PRO_PLUS` and `PRO_PREMIUM` (`subscription_plans.audience = PROFESSIONAL`); `FREE` is everyone's base. A member can't hold a counselor plan and a counselor can't hold a member plan: `WRONG_ACCOUNT_TYPE` from `POST /v1/subscriptions/{apple|google}`, and DB trigger P0076.
+- **Features** (admin-editable, DB trigger P0077): `directory_boost` 0/1/2 (FREE = 0), `featured_badge`, `profile_insights` (FREE = off). Defaults: Plus → boost 1 + insights; Premium → boost 2 + badge + insights.
+- `GET /v1/plans?audience=PROFESSIONAL` → Free + counselor plans. Without the parameter → member plans (older apps are unchanged).
+- `GET /v1/subscriptions/products` → only the products the signed-in account can buy (each with `audience`).
+- `/v1/subscriptions/me|apple|google|restore` are open to counselors (each account type buys only its own plans).
+- `GET /v1/counselors` order: boost (Premium, Plus, Free), then rating, number of ratings, id. Items carry `featured`; `nextCursor` is opaque (an old-style cursor restarts from the top).
+- `GET /v1/counselors/:id` → also `featured`; a member opening it counts one profile view per day (`counselor_profile_views`, kept 90 days, viewer never exposed).
+- `GET /v1/counselors/me/insights` (professionals) → `{ available: false, plan }` on Free, otherwise `{ available: true, plan, featured, boost, days: 30, views, uniqueVisitors, requests, conversion }` (conversion = paid requests ÷ unique visitors, 0–1).
+- Admin: `GET /v1/admin/plans` (with `audience`), `PUT /v1/admin/plans/:code/entitlements` refuses counselor features on member plans and member features on counselor plans. Dashboard page: Plans & features.

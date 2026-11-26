@@ -276,7 +276,7 @@ class CounselorCard extends StatelessWidget {
     final from = cheapestOffering(c);
     return Semantics(
       button: true,
-      label: '${c.name}, ${kindLabel(l, c.kind)}',
+      label: '${c.name}, ${kindLabel(l, c.kind)}${c.featured ? ', ${l.featuredCounselor}' : ''}',
       child: Material(
         color: OlfaColors.white,
         shape: RoundedRectangleBorder(borderRadius: OlfaRadius.all(OlfaRadius.card), side: const BorderSide(color: OlfaColors.gray)),
@@ -295,6 +295,8 @@ class CounselorCard extends StatelessWidget {
                     Text('${kindLabel(l, c.kind)} · ${l.yearsCount(c.yearsExperience)}', style: t.caption, maxLines: 1, overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 3),
                     RatingLine(avg: c.ratingAvg, count: c.ratingCount),
+                    // counselor Premium: "Featured counselor" (the server also lists them first)
+                    if (c.featured) ...[const SizedBox(height: 6), OlfaTag(l.featuredCounselor, style: OlfaTagStyle.primary, icon: Icons.workspace_premium_outlined)],
                   ]),
                 ),
                 Icon(Directionality.of(context) == TextDirection.rtl ? Icons.chevron_left_rounded : Icons.chevron_right_rounded, color: OlfaColors.textMuted),
@@ -358,6 +360,7 @@ class CounselorDetailsScreen extends ConsumerWidget {
                       const SizedBox(height: 2),
                       Text(kindLabel(l, c.kind), style: t.bodySmall.copyWith(color: OlfaColors.primary, fontWeight: FontWeight.w700)),
                       if (c.headline.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(c.headline, style: t.caption, textAlign: TextAlign.center)),
+                      if (c.featured) Padding(padding: const EdgeInsets.only(top: 8), child: OlfaTag(l.featuredCounselor, style: OlfaTagStyle.primary, icon: Icons.workspace_premium_outlined)),
                     ]),
                   ),
                   const SizedBox(height: 16),

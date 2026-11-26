@@ -90,6 +90,17 @@ SELECT p.id, v.k, v.val::jsonb FROM subscription_plans p
 JOIN (VALUES ('FREE','voice_notes_per_conversation','10'), ('PLUS','voice_notes_per_conversation','30'), ('PREMIUM','voice_notes_per_conversation','-1')) v(code, k, val) ON v.code = p.code::text
 ON CONFLICT (plan_id, feature_key) DO NOTHING;
 
+-- Counselor plans (created by migration 20261127090000): their features, and
+-- FREE's counselor features (always off). Counselors never see ads.
+INSERT INTO feature_entitlements (plan_id, feature_key, value)
+SELECT p.id, v.k, v.val::jsonb FROM subscription_plans p
+JOIN (VALUES
+  ('FREE','directory_boost','0'), ('FREE','featured_badge','false'), ('FREE','profile_insights','false'),
+  ('PRO_PLUS','directory_boost','1'), ('PRO_PLUS','featured_badge','false'), ('PRO_PLUS','profile_insights','true'),
+  ('PRO_PREMIUM','directory_boost','2'), ('PRO_PREMIUM','featured_badge','true'), ('PRO_PREMIUM','profile_insights','true')
+) v(code, k, val) ON v.code = p.code::text
+ON CONFLICT (plan_id, feature_key) DO NOTHING;
+
 -- Store products (App Store subscription group "OLFA": Premium = level 1, Plus = level 2;
 -- Play subscriptions with one monthly base plan each). Product ids must match
 -- App Store Connect / Play Console and mobile/lib/features/subscriptions/data/store_products.dart.

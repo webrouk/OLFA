@@ -76,6 +76,11 @@ class ProfessionalProfileScreen extends ConsumerWidget {
               OlfaListTile(icon: Icons.account_balance_outlined, title: l.payoutMethods, onTap: () => context.push(Routes.payoutMethods)),
               OlfaListTile(icon: Icons.receipt_long_outlined, title: l.withdrawalHistory, onTap: () => context.push(Routes.withdrawals)),
             ]),
+            SectionLabel(l.screenProPlans),
+            TileGroup(children: [
+              OlfaListTile(icon: Icons.workspace_premium_outlined, title: l.screenProPlans, subtitle: l.proPlansTileSub, accent: true, onTap: () => context.push(Routes.proPlans)),
+              OlfaListTile(icon: Icons.insights_outlined, title: l.screenProPerformance, onTap: () => context.go(Routes.proPerformance)),
+            ]),
             SectionLabel(l.screenSettings),
             TileGroup(children: [
               OlfaListTile(icon: Icons.gavel_rounded, title: l.professionalPolicy, onTap: () => context.push(Routes.professionalPolicy)),

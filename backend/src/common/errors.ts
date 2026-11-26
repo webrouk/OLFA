@@ -147,6 +147,11 @@ export function fromPgError(e: unknown): AppError | null {
       return new AppError(ErrorCode.INVALID_STATE, 'answer not accepted');
     case 'P0075':
       return new AppError(ErrorCode.INVALID_STATE, 'both people must finish first');
+    // counselor plans (migration 20261127090000)
+    case 'P0076':
+      return new AppError(ErrorCode.WRONG_ACCOUNT_TYPE, 'this plan is for another account type');
+    case 'P0077':
+      return new AppError(ErrorCode.VALIDATION, 'invalid counselor plan feature');
     // escrow / scheduling / support (migration 20261124160000)
     case '23P01': // exclusion constraint: the counselor is already booked at that time
       return new AppError(ErrorCode.SLOT_TAKEN);

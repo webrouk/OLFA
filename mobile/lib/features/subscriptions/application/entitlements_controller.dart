@@ -42,6 +42,9 @@ final entitlementsProvider = AsyncNotifierProvider<EntitlementsController, Entit
 
 final plansProvider = FutureProvider<List<PlanInfo>>((ref) => ref.watch(subscriptionRepositoryProvider).plans());
 
+/// Counselor plans (Free, counselor Plus, counselor Premium).
+final proPlansProvider = FutureProvider<List<PlanInfo>>((ref) => ref.watch(subscriptionRepositoryProvider).plans(professional: true));
+
 final storeSubscriptionProvider = FutureProvider<StoreSubscription?>((ref) => ref.watch(subscriptionRepositoryProvider).storeSubscription());
 
 /// Keeps the store transaction listener alive while signed in, so renewals,

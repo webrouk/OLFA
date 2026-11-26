@@ -71,6 +71,10 @@ abstract final class Routes {
   static const wallet = '/counselor/wallet';
   static const proMessages = '/counselor/messages';
   static const proProfile = '/counselor/profile';
+  /// Counselor tab on the round button: plan, directory placement, last 30 days.
+  static const proPerformance = '/counselor/performance';
+  /// Counselor plans (Free / Plus / Premium for counselors).
+  static const proPlans = '/counselor/plans';
   static const payoutMethods = '/counselor/wallet/payout-methods';
   static const withdrawals = '/counselor/wallet/withdrawals';
   static const professionalPolicy = '/legal/professional';
@@ -80,7 +84,8 @@ abstract final class Routes {
   static bool memberOnly(String loc) =>
       loc.startsWith('/discover') || loc.startsWith('/likes') || loc.startsWith('/matches') || loc == myProfile || loc == conversations ||
       loc == editProfile || loc == partnerPreferences || loc == accountManagement || loc == plans || loc == preferences || loc == profileInfo || loc == archive || loc == unmatched ||
-      loc.startsWith('/consultations');
+      // a counselor may open their own public card (counselorDetails), never booking or the list
+      (loc.startsWith('/consultations') && !RegExp(r'^/consultations/counselor/[^/]+$').hasMatch(loc));
 
   /// The professional workspace (members are sent to Discover).
   static bool professionalOnly(String loc) => loc.startsWith('/counselor/') || loc == professionalInfo;

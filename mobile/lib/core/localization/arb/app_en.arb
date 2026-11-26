@@ -176,13 +176,21 @@
   "navMatches": "Matches",
   "navMessages": "Messages",
   "navMenu": "Menu",
-  "@navMenu": {"description": "Bottom bar: the tab that opens the profile page and settings"},
+  "@navMenu": {
+    "description": "Bottom bar: the tab that opens the profile page and settings"
+  },
   "navChat": "Chat",
-  "@navChat": {"description": "Bottom bar: the messages tab"},
+  "@navChat": {
+    "description": "Bottom bar: the messages tab"
+  },
   "navExplore": "Explore",
-  "@navExplore": {"description": "Bottom bar: the discover tab"},
+  "@navExplore": {
+    "description": "Bottom bar: the discover tab"
+  },
   "navMarriage": "Marriage",
-  "@navMarriage": {"description": "Bottom bar: the matches tab"},
+  "@navMarriage": {
+    "description": "Bottom bar: the matches tab"
+  },
   "navProfile": "Profile",
   "likesLeftToday": "{count} likes left today",
   "@likesLeftToday": {
@@ -1903,5 +1911,149 @@
       }
     }
   },
-  "profileSectionPhotos": "Photos"
+  "profileSectionPhotos": "Photos",
+  "navRequests": "Requests",
+  "@navRequests": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "navChats": "Chats",
+  "@navChats": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "navPerformance": "Performance",
+  "@navPerformance": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "screenProPerformance": "Performance & visibility",
+  "@screenProPerformance": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "screenProPlans": "Counselor plans",
+  "@screenProPlans": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "proPlansBody": "Counselor accounts never show ads. Pick a plan to raise your profile in the counselor directory and see how it is doing.",
+  "@proPlansBody": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "proPlansTileSub": "Higher in the directory, a Featured badge and profile insights",
+  "@proPlansTileSub": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "proPlanTopPriority": "Top placement in the counselor directory",
+  "@proPlanTopPriority": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "proPlanPriority": "Priority placement in the counselor directory",
+  "@proPlanPriority": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "proPlanStandardListing": "Standard placement in the directory, by rating",
+  "@proPlanStandardListing": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "proPlanFeatured": "A “Featured counselor” badge on your card and profile",
+  "@proPlanFeatured": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "proPlanInsights": "Profile insights: views, visitors and requests over 30 days",
+  "@proPlanInsights": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "proPlanCore": "Requests, sessions, chats and wallet in full",
+  "@proPlanCore": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "last30Days": "Last 30 days",
+  "@last30Days": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "growTitle": "What helps clients choose you",
+  "@growTitle": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "growProfile": "Complete your profile, services and prices",
+  "@growProfile": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "growProfileSub": "A clear bio and services in your languages",
+  "@growProfileSub": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "growHours": "Publish your hours",
+  "@growHours": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "growHoursSub": "Clients book open times directly",
+  "@growHoursSub": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "growReply": "Confirm requests quickly",
+  "@growReply": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "growReplySub": "Quick replies build trust",
+  "@growReplySub": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "insightsPrivacyNote": "We never show who visited your profile; each member counts once a day.",
+  "@insightsPrivacyNote": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "visibilityTop": "Your profile appears at the top of the counselor directory.",
+  "@visibilityTop": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "visibilityPriority": "Your profile appears ahead of standard profiles.",
+  "@visibilityPriority": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "visibilityStandard": "Your profile appears in the directory by rating.",
+  "@visibilityStandard": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "featuredCounselor": "Featured counselor",
+  "@featuredCounselor": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "seeProPlans": "See counselor plans",
+  "@seeProPlans": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "manageProPlan": "Manage plan",
+  "@manageProPlan": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "statViews": "Profile views",
+  "@statViews": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "statVisitors": "Unique visitors",
+  "@statVisitors": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "statRequests": "Paid requests",
+  "@statRequests": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "statConversion": "Visitors who requested",
+  "@statConversion": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "insightsLockedTitle": "See how your profile is doing",
+  "@insightsLockedTitle": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "insightsLockedBody": "With counselor Plus or Premium you see views, visitors and requests, and your profile is placed higher.",
+  "@insightsLockedBody": {
+    "description": "Counselor account: bottom bar, performance page or counselor plans"
+  },
+  "yourProPlan": "Your plan: {plan}",
+  "@yourProPlan": {
+    "placeholders": {
+      "plan": {
+        "type": "String"
+      }
+    }
+  }
 }

@@ -11,6 +11,7 @@ import '../../features/profile/presentation/account_type_screen.dart';
 import '../../features/profile/presentation/professional_profile_screen.dart';
 import '../../features/wallet/presentation/wallet_screen.dart';
 import '../../features/consultations/presentation/consultation_screens.dart';
+import '../../features/consultations/presentation/pro_performance_screen.dart';
 import '../../features/discovery/presentation/discover_screen.dart';
 import '../../features/discovery/presentation/search_filters_screen.dart';
 import '../../features/legal/legal_screens.dart';
@@ -113,6 +114,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       _root(Routes.notifications, (_) => const NotificationsScreen()),
       _root(Routes.editProfile, (_) => const EditProfileScreen()),
       _root(Routes.plans, (_) => const PlansScreen()),
+      _root(Routes.proPlans, (_) => const PlansScreen(professional: true)),
       _root(Routes.partnerPreferences, (_) => const EditPartnerPreferencesScreen()),
       _root(Routes.accountManagement, (_) => const AccountManagementScreen()),
       _root(Routes.payments, (_) => const PaymentHistoryScreen()),
@@ -141,7 +143,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(routes: [_tab(4, Routes.myProfile, const MyProfileScreen())]),
         ],
       ),
-      // Professional workspace: desk, wallet, messages (consultation chats), profile
+      // Professional workspace: requests (desk), wallet, chats (consultation chats), profile,
+      // and Performance on the round button. No Discovery, likes or member search (redirect above).
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => ProfessionalShell(shell: shell),
         branches: [
@@ -149,6 +152,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(routes: [_tab(1, Routes.wallet, const WalletScreen())]),
           StatefulShellBranch(routes: [_tab(2, Routes.proMessages, const CounselorInboxScreen())]),
           StatefulShellBranch(routes: [_tab(3, Routes.proProfile, const ProfessionalProfileScreen())]),
+          StatefulShellBranch(routes: [_tab(4, Routes.proPerformance, const ProPerformanceScreen())]),
         ],
       ),
     ],
@@ -235,7 +239,7 @@ class AppShell extends ConsumerWidget {
     return Scaffold(
       extendBody: true,
       body: NavChrome(bottomBar: !keyboard, child: shell),
-      bottomNavigationBar: keyboard ? null : FloatingNavBar(items: items, index: shell.currentIndex, badges: badges, layout: professional ? null : OlfaNavItems.memberLayout, onTap: (i) => _onTap(ref, i)),
+      bottomNavigationBar: keyboard ? null : FloatingNavBar(items: items, index: shell.currentIndex, badges: badges, layout: professional ? OlfaNavItems.professionalLayout : OlfaNavItems.memberLayout, onTap: (i) => _onTap(ref, i)),
     );
   }
 }

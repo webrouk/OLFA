@@ -1,4 +1,4 @@
-import { Controller, Get, Global, Injectable, Module } from '@nestjs/common';
+import { Controller, Get, Global, Injectable, Module, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Prisma, PlanCode } from '@prisma/client';
 import { fromPgError } from '../../common/errors';
@@ -27,6 +27,10 @@ export interface Entitlements {
   voiceNotesPerConversation: number;
   /** Native ads in Discovery: only ever true on the Free plan. */
   showAds: boolean;
+  /** Counselor plans: directory placement 0–2, "Featured counselor", profile insights. */
+  directoryBoost: number;
+  featuredBadge: boolean;
+  profileInsights: boolean;
 }
 
 /** Resolves the user's effective plan and its feature values from the DB. */
@@ -60,6 +64,9 @@ export class EntitlementsService {
       monthlyCompliments: num('monthly_compliments'),
       voiceNotesPerConversation: typeof v['voice_notes_per_conversation'] === 'number' ? (v['voice_notes_per_conversation'] as number) : 10,
       showAds: plan === 'FREE' && bool('show_ads'),
+      directoryBoost: Math.max(0, Math.min(2, num('directory_boost'))),
+      featuredBadge: bool('featured_badge'),
+      profileInsights: bool('profile_insights'),
     };
   }
 
@@ -174,11 +181,12 @@ export class PlansController {
 
   /** Plans and their (admin-managed) features. Prices come from the stores at purchase time. */
   @Public() @Get('plans')
-  async plans() {
+  async plans(@Query('audience') audience?: string) {
+    // Member plans unless counselor plans are asked for (older apps never ask).
     const plans = await this.prisma.subscriptionPlan.findMany({
-      where: { isActive: true },
+      where: { isActive: true, OR: [{ code: 'FREE' }, { audience: audience === 'PROFESSIONAL' ? 'PROFESSIONAL' : 'MEMBER' }] },
       orderBy: { sortOrder: 'asc' },
-      select: { code: true, nameAr: true, nameEn: true, entitlements: { select: { featureKey: true, value: true } }, products: { where: { isActive: true }, select: { provider: true, productId: true, durationDays: true } } },
+      select: { code: true, nameAr: true, nameEn: true, audience: true, entitlements: { select: { featureKey: true, value: true } }, products: { where: { isActive: true }, select: { provider: true, productId: true, durationDays: true } } },
     });
     return plans.map((p) => ({ ...p, entitlements: Object.fromEntries(p.entitlements.map((e) => [e.featureKey, e.value])) }));
   }

@@ -114,3 +114,10 @@
 - **Drag to switch:** slide along the capsule; the marker follows with a light tick on each tab, and the tab opens on release.
 - **Accessibility:** high contrast → opaque black; reduce motion → no glide. Tap targets ≥ 54 px tall; labels capped at 1.2× text scale.
 
+
+## Counselor account: its own bottom bar and pages
+- **Same bar, counselor pages:** the dark glass capsule and the round button, same motion, dots and drag. Capsule, Arabic right → left: الطلبات (Requests — the desk, landing tab), المحادثات (client chats), المحفظة (wallet), ملفي (profile). Round button (far left in Arabic): الأداء (Performance), icon only. Dots: new paid requests, unread chats (`OlfaNavItems.professionalLayout`).
+- **Never for counselors:** Discovery, likes, matches, member search, member plans, booking — the router sends them to Requests. A counselor can still open their own public card from their profile.
+- **Performance:** a black card with the counselor plan and how the profile is placed in the directory ("top", "ahead of standard profiles", "by rating"), with Plans / Manage plan. Then the last 30 days on Plus/Premium (profile views, unique visitors, paid requests, request rate), or a locked card on Free explaining what the plans unlock. Then what helps clients choose you (profile & prices, hours, quick confirmations) and a privacy note (who visited is never shown). Numbers in Latin digits like prices.
+- **Counselor plans:** the plans screen in counselor mode (same store flow, restore, manage, legal lines). Intro: counselor accounts never show ads (a fact for every counselor, not sold as a benefit). Free: standard placement by rating + the full workspace. Plus: priority placement + insights. Premium: top placement + «مستشار مميّز» badge + insights. Also reachable from the counselor profile.
+- **Members see:** a «مستشار مميّز» tag on Premium counselors' cards and profiles, and those counselors first in the list.

@@ -29,8 +29,8 @@ extension DomainLabels on AppLocalizations {
 
   String planLabel(PlanCode p) => switch (p) {
         PlanCode.free => planFree,
-        PlanCode.plus => 'Plus',
-        PlanCode.premium => 'Premium',
+        PlanCode.plus || PlanCode.proPlus => 'Plus',
+        PlanCode.premium || PlanCode.proPremium => 'Premium',
       };
 }
 

@@ -90,9 +90,9 @@ class ApiSubscriptionRepository implements SubscriptionRepository {
       });
 
   @override
-  Future<List<PlanInfo>> plans() async {
+  Future<List<PlanInfo>> plans({bool professional = false}) async {
     final plans = await guard(() async {
-      final r = await _api.dio.get<List<dynamic>>('/plans', options: ApiClient.public());
+      final r = await _api.dio.get<List<dynamic>>('/plans', queryParameters: {if (professional) 'audience': 'PROFESSIONAL'}, options: ApiClient.public());
       return r.data!.map((j) => ApiMappers.plan(Map<String, dynamic>.from(j as Map))).toList();
     });
     // Prices are the store's localized prices — never hard-coded.
@@ -114,6 +114,9 @@ class ApiSubscriptionRepository implements SubscriptionRepository {
                   priorityVisibility: p.priorityVisibility,
                   storeProductId: ids[p.code],
                   localizedPrice: store[ids[p.code]]?.price,
+                  directoryBoost: p.directoryBoost,
+                  featuredBadge: p.featuredBadge,
+                  profileInsights: p.profileInsights,
                 ),
       ];
     } catch (_) {
@@ -163,7 +166,7 @@ class DemoSubscriptionRepository implements SubscriptionRepository {
   @override
   Future<Entitlements> entitlements() => _b.entitlements();
   @override
-  Future<List<PlanInfo>> plans() => _b.listPlans();
+  Future<List<PlanInfo>> plans({bool professional = false}) => _b.listPlans(professional: professional);
   @override
   Future<StoreSubscription?> storeSubscription() => _b.storeSubscription();
   @override

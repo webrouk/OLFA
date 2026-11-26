@@ -121,12 +121,36 @@ enum MessageType {
   @@map("message_type")
 }
 
+/// PRO_* are counselor plans (licensed professionals only; DB trigger P0076).
 enum PlanCode {
   FREE
   PLUS
   PREMIUM
+  PRO_PLUS
+  PRO_PREMIUM
 
   @@map("plan_code")
+}
+
+enum PlanAudience {
+  MEMBER
+  PROFESSIONAL
+
+  @@map("plan_audience")
+}
+
+/// One row per member per day who opened a counselor's profile (insights for
+/// counselor plans; kept 90 days; who looked is never shown).
+model CounselorProfileView {
+  counselorId String           @map("counselor_id") @db.Uuid
+  viewerId    String           @map("viewer_id") @db.Uuid
+  day         DateTime         @default(dbgenerated("((now() AT TIME ZONE 'utc'::text))::date")) @db.Date
+  counselor   CounselorProfile @relation(fields: [counselorId], references: [userId], onDelete: Cascade)
+  viewer      User             @relation("CounselorProfileViews", fields: [viewerId], references: [id], onDelete: Cascade)
+
+  @@id([counselorId, day, viewerId])
+  @@index([day], map: "counselor_profile_views_day_idx")
+  @@map("counselor_profile_views")
 }
 
 enum SubscriptionStatus {
@@ -341,6 +365,7 @@ model User {
   rematchRequests      RematchRequest[]
 
   selfieChallenges SelfieChallenge[]
+  counselorProfileViews CounselorProfileView[] @relation("CounselorProfileViews")
   @@map("users")
 }
 
@@ -650,6 +675,8 @@ model SubscriptionPlan {
   nameEn        String               @map("name_en") @db.VarChar(40)
   isActive      Boolean              @default(true) @map("is_active")
   sortOrder     Int                  @default(0) @map("sort_order") @db.SmallInt
+  /// Who can subscribe: members or licensed professionals (PRO_* codes).
+  audience      PlanAudience         @default(MEMBER)
   updatedAt     DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   entitlements  FeatureEntitlement[]
   products      PlanProduct[]
@@ -1119,6 +1146,7 @@ model CounselorProfile {
   walletEntries    WalletEntry[]
   integritySignals CounselorIntegritySignal[]
   integrityCases   CounselorIntegrityCase[]
+  profileViews     CounselorProfileView[]
   schedule         CounselorSchedule?
   availability     CounselorAvailability[]
   timeOff          CounselorTimeOff[]

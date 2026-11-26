@@ -6,7 +6,8 @@ import { ArrayMaxSize, IsArray, IsOptional, IsString, MaxLength, ValidateNested 
 import { timingSafeEqual } from 'node:crypto';
 import { ENV, Env } from '../../config/env';
 import { AppError, ErrorCode } from '../../common/errors';
-import { AllowPending, AuthUser, CurrentUser, MembersOnly, Public, RateLimit } from '../../common/http';
+import { AllowPending, AuthUser, CurrentUser, Public, RateLimit } from '../../common/http';
+import { AccountKind, Audience, audienceOf, planFitsAccount } from '../../domain/pro-plans';
 import { AuditService, PrismaService } from '../../common/infra';
 import { currencyExponent } from '../../domain/payments';
 import { appleSnapshot, classifyChange, deriveStatus, googleSnapshot, manageUrl, PlanLevel, resolveOwner, StoreSnapshot } from '../../domain/store-subscriptions';
@@ -50,15 +51,19 @@ export class SubscriptionsService {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  async products() {
-    const rows = await this.prisma.planProduct.findMany({ where: { isActive: true, plan: { isActive: true } }, select: { provider: true, productId: true, durationDays: true, plan: { select: { code: true, sortOrder: true } } } });
-    return rows.map((r) => ({ plan: r.plan.code, provider: r.provider, productId: r.productId, durationDays: r.durationDays }));
+  /** Store products the signed-in account can buy: member plans for members, counselor plans for professionals. */
+  async products(accountType?: AccountKind | null) {
+    const rows = await this.prisma.planProduct.findMany({
+      where: { isActive: true, plan: { isActive: true, ...(accountType ? { audience: audienceOf(accountType) } : {}) } },
+      select: { provider: true, productId: true, durationDays: true, plan: { select: { code: true, sortOrder: true, audience: true } } },
+    });
+    return rows.map((r) => ({ plan: r.plan.code, audience: r.plan.audience, provider: r.provider, productId: r.productId, durationDays: r.durationDays }));
   }
 
   private async planOf(provider: PaymentProvider, productId: string) {
-    const p = await this.prisma.planProduct.findUnique({ where: { provider_productId: { provider, productId } }, select: { planId: true, plan: { select: { code: true } } } });
+    const p = await this.prisma.planProduct.findUnique({ where: { provider_productId: { provider, productId } }, select: { planId: true, plan: { select: { code: true, audience: true } } } });
     if (!p) throw new AppError(ErrorCode.STORE_VERIFICATION_FAILED, `unknown product ${productId}`);
-    return { planId: p.planId, code: p.plan.code as PlanLevel };
+    return { planId: p.planId, code: p.plan.code as PlanLevel, audience: p.plan.audience as Audience };
   }
 
   /** The heart of it: write the store's current state for one subscription. */
@@ -84,6 +89,14 @@ export class SubscriptionsService {
     }
     if (!owner) {
       this.log.warn(`store event for an unknown subscription ${provider}:${s.originalId.slice(0, 12)}…`);
+      return null;
+    }
+
+    // Member plans for members, counselor plans for professionals (also a DB trigger).
+    const acct = await this.prisma.user.findUnique({ where: { id: owner }, select: { accountType: true } });
+    if (!planFitsAccount(plan.audience, acct?.accountType as AccountKind | null)) {
+      if (requester) throw new AppError(ErrorCode.WRONG_ACCOUNT_TYPE, 'This plan is for another account type');
+      this.log.warn(`store event for a plan that does not fit the account ${provider}:${s.originalId.slice(0, 12)}…`);
       return null;
     }
 
@@ -288,26 +301,27 @@ export class SubscriptionsController {
   constructor(private readonly subs: SubscriptionsService) {}
 
   @AllowPending() @Get('products')
-  products() {
-    return this.subs.products();
+  products(@CurrentUser() u: AuthUser) {
+    return this.subs.products(u.accountType as AccountKind | null);
   }
 
-  @AllowPending() @MembersOnly() @Get('me')
+  // members and counselors alike: each can only buy the plans of their audience (checked in apply)
+  @AllowPending() @Get('me')
   me(@CurrentUser() u: AuthUser) {
     return this.subs.current(u.id);
   }
 
-  @AllowPending() @MembersOnly() @RateLimit(30, 3600) @Post('apple') @HttpCode(200)
+  @AllowPending() @RateLimit(30, 3600) @Post('apple') @HttpCode(200)
   apple(@CurrentUser() u: AuthUser, @Body() dto: AppleVerifyDto) {
     return this.subs.verifyApple(u.id, dto);
   }
 
-  @AllowPending() @MembersOnly() @RateLimit(30, 3600) @Post('google') @HttpCode(200)
+  @AllowPending() @RateLimit(30, 3600) @Post('google') @HttpCode(200)
   google(@CurrentUser() u: AuthUser, @Body() dto: GoogleVerifyDto) {
     return this.subs.verifyGoogle(u.id, dto);
   }
 
-  @AllowPending() @MembersOnly() @RateLimit(10, 3600) @Post('restore') @HttpCode(200)
+  @AllowPending() @RateLimit(10, 3600) @Post('restore') @HttpCode(200)
   restore(@CurrentUser() u: AuthUser, @Body() dto: RestoreDto) {
     return this.subs.restore(u.id, dto);
   }

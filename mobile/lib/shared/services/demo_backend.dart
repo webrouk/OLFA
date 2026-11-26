@@ -33,7 +33,12 @@ class DemoBackend {
     PlanCode.free: PlanInfo(code: PlanCode.free, dailyLikes: 10, dailyMessages: 1, dailyUndos: 0, advancedFilters: false, seeWhoLikedYou: false, priorityVisibility: false),
     PlanCode.plus: PlanInfo(code: PlanCode.plus, dailyLikes: 100, dailyMessages: 5, dailyUndos: 3, advancedFilters: true, seeWhoLikedYou: true, priorityVisibility: false, storeProductId: 'olfa.plus.monthly'),
     PlanCode.premium: PlanInfo(code: PlanCode.premium, dailyLikes: 200, dailyMessages: 10, dailyUndos: 10, advancedFilters: true, seeWhoLikedYou: true, priorityVisibility: true, storeProductId: 'olfa.premium.monthly'),
+    PlanCode.proPlus: PlanInfo(code: PlanCode.proPlus, dailyLikes: 0, dailyMessages: 0, dailyUndos: 0, advancedFilters: false, seeWhoLikedYou: false, priorityVisibility: false, storeProductId: 'olfa.pro.plus.monthly', directoryBoost: 1, profileInsights: true),
+    PlanCode.proPremium: PlanInfo(code: PlanCode.proPremium, dailyLikes: 0, dailyMessages: 0, dailyUndos: 0, advancedFilters: false, seeWhoLikedYou: false, priorityVisibility: false, storeProductId: 'olfa.pro.premium.monthly', directoryBoost: 2, featuredBadge: true, profileInsights: true),
   };
+
+  /// The counselor account's own plan (demo): counselor plans never mix with member ones.
+  PlanCode proPlan = PlanCode.free;
 
   final _liked = <String>{};
   final _passed = <String>{};
@@ -97,7 +102,8 @@ class DemoBackend {
   Entitlements entitlementsNow() {
     final p = plans[plan]!;
     return Entitlements(
-      plan: plan,
+      // a counselor account shows its counselor plan
+      plan: accountType.isProfessional ? proPlan : plan,
       dailyLikes: p.dailyLikes,
       likesUsed: likesUsed,
       dailyMessages: p.dailyMessages,
@@ -121,11 +127,31 @@ class DemoBackend {
   }
 
   Future<Entitlements> entitlements() => _call(entitlementsNow, ms: 200);
-  Future<List<PlanInfo>> listPlans() => _call(() => plans.values.toList());
+  Future<List<PlanInfo>> listPlans({bool professional = false}) =>
+      _call(() => plans.values.where((p) => p.code == PlanCode.free || p.code.isPro == professional).toList());
+
+  /// Counselor insights (demo figures, clearly sample data in demo mode only).
+  Future<ProInsights> proInsights() => _call(() {
+        final paid = proPlan != PlanCode.free;
+        return ProInsights(
+          available: paid,
+          plan: proPlan,
+          featured: proPlan == PlanCode.proPremium,
+          boost: proPlan == PlanCode.proPremium ? 2 : (proPlan == PlanCode.proPlus ? 1 : 0),
+          views: paid ? 184 : 0,
+          uniqueVisitors: paid ? 121 : 0,
+          requests: paid ? 9 : 0,
+          conversion: paid ? 0.07 : 0,
+        );
+      }, ms: 300);
 
   Future<void> purchase(PlanCode code) => _call(() {
         // Real flow: StoreKit / Play Billing → server receipt validation.
-        plan = code;
+        if (code.isPro) {
+          proPlan = code;
+        } else {
+          plan = code;
+        }
         _payments.insert(
           0,
           PaymentRecord(
@@ -134,7 +160,7 @@ class DemoBackend {
             store: 'App Store',
             date: DateTime.now(),
             status: PaymentStatus.succeeded,
-            amountMinor: code == PlanCode.premium ? 7999 : 3999,
+            amountMinor: code == PlanCode.premium || code == PlanCode.proPremium ? 7999 : 3999,
             currency: 'AED',
             reference: 'DEMO${8800 + _payments.length}',
           ),
@@ -198,7 +224,7 @@ class DemoBackend {
 
   /// Returns the created match, or null when the like is not mutual.
   int complimentsUsed = 0;
-  int get monthlyCompliments => switch (plan) { PlanCode.free => 3, PlanCode.plus => 10, PlanCode.premium => 20 };
+  int get monthlyCompliments => switch (plan) { PlanCode.free || PlanCode.proPlus || PlanCode.proPremium => 3, PlanCode.plus => 10, PlanCode.premium => 20 };
 
   Future<MatchItem?> like(String id, {String? compliment}) => _call(() {
         if (_liked.contains(id)) throw const AlreadyActedFailure();
@@ -269,7 +295,7 @@ class DemoBackend {
   // ───────────── conversations (same rules as olfa_conversation_list) ─────────────
   static const inboxDays = 15, inboxWarnAfter = 10, archiveDays = 30, archiveWarnBefore = 7, unmatchedDays = 30;
 
-  int get visibleLimit => switch (plan) { PlanCode.free => 5, PlanCode.plus => 10, PlanCode.premium => -1 };
+  int get visibleLimit => switch (plan) { PlanCode.free || PlanCode.proPlus || PlanCode.proPremium => 5, PlanCode.plus => 10, PlanCode.premium => -1 };
 
   Conversation _row(MatchItem m, _DemoConv st) {
     final msgs = _messages[m.conversationId] ?? const <ChatMessage>[];
@@ -565,7 +591,7 @@ class DemoBackend {
       }, ms: 250);
 
   ({int limit, int? remaining}) _voiceLeft(String convId) {
-    final limit = switch (plan) { PlanCode.free => 10, PlanCode.plus => 30, PlanCode.premium => -1 };
+    final limit = switch (plan) { PlanCode.free || PlanCode.proPlus || PlanCode.proPremium => 10, PlanCode.plus => 30, PlanCode.premium => -1 };
     if (limit < 0 || convId.startsWith('k-')) return (limit: -1, remaining: null);
     final used = (_messages[convId] ?? const <ChatMessage>[]).where((m) => m.fromMe && m.kind == MessageKind.voice).length;
     return (limit: limit, remaining: (limit - used).clamp(0, limit).toInt());
@@ -642,6 +668,7 @@ class DemoBackend {
         ],
         ratingAvg: 4.9,
         ratingCount: 128,
+        featured: true, // sample: on counselor Premium
       ),
       Counselor(
         id: 'k2',
@@ -728,6 +755,7 @@ class DemoBackend {
         return Counselor(
           id: c.id, kind: c.kind, name: c.name, headline: c.headline, bio: c.bio, yearsExperience: c.yearsExperience, licenseAuthority: c.licenseAuthority,
           licenseCountry: c.licenseCountry, languages: c.languages, services: c.services, offerings: c.offerings, ratingAvg: c.ratingAvg, ratingCount: c.ratingCount,
+          featured: c.featured,
           reviews: [
             CounselorReview(rating: 5, by: ar ? 'مريم' : 'Mariam', comment: ar ? 'نصائح عملية غيّرت طريقة حوارنا.' : 'Practical advice that changed how we talk.', createdAt: DateTime.now().subtract(const Duration(days: 4))),
             CounselorReview(rating: 5, by: ar ? 'خالد' : 'Khaled', comment: ar ? 'مستمع رائع ومتفهم.' : 'A wonderful, understanding listener.', createdAt: DateTime.now().subtract(const Duration(days: 11))),
@@ -1051,10 +1079,10 @@ class DemoBackend {
   bool autoRenew = true;
   bool billingIssue = false;
   Future<StoreSubscription?> storeSubscription() => _call(
-        () => plan == PlanCode.free
+        () => (accountType.isProfessional ? proPlan : plan) == PlanCode.free
             ? null
             : StoreSubscription(
-                plan: plan,
+                plan: accountType.isProfessional ? proPlan : plan,
                 status: billingIssue ? StoreSubStatus.gracePeriod : (autoRenew ? StoreSubStatus.active : StoreSubStatus.cancelled),
                 autoRenew: autoRenew,
                 expiresAt: DateTime.now().add(const Duration(days: 23)),
@@ -1066,6 +1094,15 @@ class DemoBackend {
 
   /// Store rules: upgrades apply now; downgrades wait for the renewal date.
   Future<void> changePlan(PlanCode code) async {
+    final current = code.isPro ? proPlan : plan;
+    if (code.isPro) {
+      if (current == PlanCode.free || code.index > current.index) {
+        await purchase(code);
+      } else {
+        await _call(() => proPlan = code, ms: 700);
+      }
+      return;
+    }
     if (plan == PlanCode.free || code.index > plan.index) {
       pendingDowngrade = null;
       await purchase(code);

@@ -7,6 +7,8 @@ import { ENV, Env } from '../../config/env';
 import { AppError, ErrorCode, fromPgError } from '../../common/errors';
 import { AllowPending, AuthAdmin, AuthUser, CurrentAdmin, CurrentUser, MembersOnly, OlfaRequest, ProfessionalsOnly, Public, RateLimit, Req, RequirePermissions } from '../../common/http';
 import { QUESTIONNAIRE_VERSION } from '../../domain/integrity';
+import { decodeDirectoryCursor, encodeDirectoryCursor, insightsSummary } from '../../domain/pro-plans';
+import { EntitlementsService } from '../quotas/quotas.module';
 import { BansService, IntegrityService } from '../integrity/integrity.module';
 import { AuditService, PrismaService, SettingsService } from '../../common/infra';
 import { splitFee } from '../../domain/payments';
@@ -65,6 +67,7 @@ export class ConsultationsService {
     @Inject(PAYMENT_GATEWAY) private readonly gateway: PaymentGateway,
     @Inject(ENV) private readonly env: Env,
     private readonly integrity: IntegrityService,
+    private readonly entitlements: EntitlementsService,
     private readonly bans: BansService,
   ) {}
 
@@ -210,27 +213,62 @@ export class ConsultationsService {
 
   // ── client side ──────────────────────────────────────────────────
 
+  /**
+   * The directory: counselors on a counselor plan come first (Premium, then Plus),
+   * then by rating and number of ratings. `featured` marks Premium's badge.
+   */
   async list(q: CounselorListQuery) {
-    const where: Prisma.CounselorProfileWhereInput = {
-      status: 'APPROVED',
-      user: { status: 'ACTIVE', deletedAt: null },
-      kind: q.kind,
-      offerings: { some: { active: true, service: q.service, language: q.language, durationMinutes: q.durationMinutes } },
-    };
-    const items = await this.prisma.counselorProfile.findMany({
-      where,
-      select: publicCounselor,
-      orderBy: [{ ratingAvg: 'desc' }, { ratingCount: 'desc' }, { userId: 'asc' }],
-      take: PAGE + 1,
-      ...(q.cursor ? { cursor: { userId: q.cursor }, skip: 1 } : {}),
-    });
-    const more = items.length > PAGE;
-    return { items: items.slice(0, PAGE), nextCursor: more ? items[PAGE - 1].userId : null };
+    const c = decodeDirectoryCursor(q.cursor);
+    const rows = await this.prisma.$queryRaw<{ user_id: string; boost: number; featured: boolean; rating_avg: Prisma.Decimal; rating_count: number }[]>(Prisma.sql`
+      WITH d AS (
+        SELECT cp.user_id, olfa_counselor_boost(cp.user_id) AS boost, olfa_has_feature(cp.user_id, 'featured_badge') AS featured, cp.rating_avg, cp.rating_count
+        FROM counselor_profiles cp JOIN users u ON u.id = cp.user_id
+        WHERE cp.status = 'APPROVED' AND u.status = 'ACTIVE' AND u.deleted_at IS NULL
+          AND (${q.kind ?? null}::text IS NULL OR cp.kind::text = ${q.kind ?? null})
+          AND EXISTS (SELECT 1 FROM counselor_offerings o WHERE o.counselor_id = cp.user_id AND o.active
+            AND (${q.service ?? null}::text IS NULL OR o.service::text = ${q.service ?? null})
+            AND (${q.language ?? null}::text IS NULL OR o.language = ${q.language ?? null})
+            AND (${q.durationMinutes ?? null}::int IS NULL OR o.duration_minutes = ${q.durationMinutes ?? null}))
+      )
+      SELECT * FROM d
+      WHERE ${c === null} OR boost < ${c?.boost ?? 0} OR (boost = ${c?.boost ?? 0} AND (rating_avg < ${c?.rating ?? 0}
+        OR (rating_avg = ${c?.rating ?? 0} AND (rating_count < ${c?.count ?? 0} OR (rating_count = ${c?.count ?? 0} AND user_id > ${c?.id ?? '00000000-0000-0000-0000-000000000000'}::uuid))))))
+      ORDER BY boost DESC, rating_avg DESC, rating_count DESC, user_id ASC
+      LIMIT ${PAGE + 1}`);
+    const page = rows.slice(0, PAGE);
+    const profiles = await this.prisma.counselorProfile.findMany({ where: { userId: { in: page.map((r) => r.user_id) } }, select: publicCounselor });
+    const byId = new Map(profiles.map((p) => [p.userId, p]));
+    const items = page.flatMap((r) => (byId.has(r.user_id) ? [{ ...byId.get(r.user_id)!, featured: r.featured }] : []));
+    const last = page[page.length - 1];
+    const nextCursor = rows.length > PAGE ? encodeDirectoryCursor({ boost: last.boost, rating: Number(last.rating_avg), count: last.rating_count, id: last.user_id }) : null;
+    return { items, nextCursor };
   }
 
-  async details(id: string) {
+  /** A member opened a counselor's profile: one view per member per day, for the counselor's insights. */
+  private async recordView(counselorId: string, viewer?: AuthUser) {
+    if (!viewer || viewer.id === counselorId || viewer.accountType !== 'MEMBER') return;
+    await this.prisma.counselorProfileView.createMany({ data: [{ counselorId, viewerId: viewer.id }], skipDuplicates: true }).catch(() => undefined);
+  }
+
+  /** Counselor insights (counselor Plus / Premium): last 30 days. Locked on Free. */
+  async insights(userId: string) {
+    const ent = await this.entitlements.forUser(userId);
+    if (!ent.profileInsights) return { available: false as const, plan: ent.plan };
+    const since = new Date(Date.now() - 30 * 86_400_000);
+    const day = new Date(since.toISOString().slice(0, 10));
+    const [views, visitors, requests] = await Promise.all([
+      this.prisma.counselorProfileView.count({ where: { counselorId: userId, day: { gte: day } } }),
+      this.prisma.counselorProfileView.groupBy({ by: ['viewerId'], where: { counselorId: userId, day: { gte: day } } }).then((g) => g.length),
+      this.prisma.consultation.count({ where: { counselorId: userId, createdAt: { gte: since }, paymentId: { not: null } } }),
+    ]);
+    return { available: true as const, plan: ent.plan, featured: ent.featuredBadge, boost: ent.directoryBoost, ...insightsSummary(views, visitors, requests) };
+  }
+
+  async details(id: string, viewer?: AuthUser) {
     const p = await this.prisma.counselorProfile.findFirst({ where: { userId: id, status: 'APPROVED' }, select: publicCounselor });
     if (!p) throw new AppError(ErrorCode.NOT_FOUND);
+    await this.recordView(id, viewer);
+    const featured = (await this.entitlements.forUser(id)).featuredBadge;
     const reviews = await this.prisma.consultationReview.findMany({
       where: { counselorId: id, hidden: false },
       orderBy: { createdAt: 'desc' },
@@ -240,6 +278,7 @@ export class ConsultationsService {
     // reviewers are shown by first name only
     return {
       ...p,
+      featured,
       ratings: await this.ratingBreakdown(id),
       hasSchedule: (await this.prisma.counselorAvailability.count({ where: { counselorId: id } })) > 0,
       reviews: reviews.filter((r) => r.rating != null).map((r) => ({
@@ -747,6 +786,10 @@ export class ConsultationsController {
   apply(@CurrentUser() u: AuthUser, @Body() dto: CounselorApplyDto) {
     return this.svc.apply(u.id, dto);
   }
+  @ProfessionalsOnly() @Get('counselors/me/insights')
+  insights(@CurrentUser() u: AuthUser) {
+    return this.svc.insights(u.id);
+  }
   @AllowPending() @ProfessionalsOnly() @Get('counselors/me')
   mine(@CurrentUser() u: AuthUser) {
     return this.svc.mine(u.id);
@@ -818,8 +861,8 @@ export class ConsultationsController {
   }
 
   @Get('counselors/:id')
-  details(@Param('id', ParseUUIDPipe) id: string) {
-    return this.svc.details(id);
+  details(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.svc.details(id, u);
   }
   @MembersOnly() @RateLimit(20, 3600) @Post('consultations')
   book(@CurrentUser() u: AuthUser, @Body() dto: BookDto) {

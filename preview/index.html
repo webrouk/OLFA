@@ -828,7 +828,7 @@ function admin(live){const d=ADEV[S.adev];const narrow=d.W<1000;
 /* ═══════════ CHROME + RENDER ═══════════ */
 const $=s=>document.querySelector(s);
 function chrome(){
- $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.17</small></span></div>
+ $('#tool').innerHTML=`<div class="brand">${LOGO(32)}<span>${S.lang==='ar'?'أُلْفَة':'OLFA'} <small>· Live Preview · v0.18</small></span></div>
  <div class="seg"><button class="${S.mode==='app'?'on':''}" data-ui="mode" data-a="app">${t('vApp')}</button><button class="${S.mode==='admin'?'on':''}" data-ui="mode" data-a="admin">${t('vAdmin')}</button></div>
  ${S.mode==='app'?`<div class="seg"><button class="${S.view==='one'?'on':''}" data-ui="view" data-a="one">${t('vOne')}</button><button class="${S.view==='all'?'on':''}" data-ui="view" data-a="all">${t('vAll')}</button></div>`:''}
  <div class="seg"><button class="${S.lang==='ar'?'on':''}" data-ui="lang" data-a="ar">ع RTL</button><button class="${S.lang==='en'?'on':''}" data-ui="lang" data-a="en">EN LTR</button><button class="${S.lang==='fr'?'on':''}" data-ui="lang" data-a="fr">FR LTR</button></div>
@@ -1199,7 +1199,7 @@ SC.capply=()=>{const a=S.capp;if(a.status)return `<div class="full">${bar(t('app
  ${chk(a.agree,t('applyAgree'),'capAgree')}</div><div class="foot sticky-foot"><button class="btn" data-act="capSubmit" ${a.agree?'':'disabled'}>${t('submitApp')}</button></div></div>`};
 SC.cdesk=()=>{const inc=S.desk.filter(d=>d.st==='paid'),cf=S.desk.filter(d=>d.st==='conf');const card=d=>`<div class="bk"><div class="top"><div style="display:flex;gap:10px;align-items:center">${av(null,40)}<div><div class="t1" style="font-weight:600">${AR()?d.cl[0]:d.cl[1]}</div><div class="cap">${t('sv_'+d.svc)} · ${d.dur} ${t('min')} · ${t('l_'+d.lang)}</div></div></div><b class="ltr">${money(d.price)}</b></div>
  <div style="display:flex;gap:8px;justify-content:flex-end">${d.st==='paid'?`<button class="btn sm out" data-act="deskDecline" data-a="${d.id}">${t('declineBtn')}</button><button class="btn sm" data-act="deskConfirm" data-a="${d.id}">${t('confirmBtn')}</button>`:`<button class="btn sm out" data-act="deskDone" data-a="${d.id}">${t('markDone')}</button><button class="btn sm" data-act="deskChat" data-a="${d.id}">${I('chat',16)} ${t('startChat2')}</button>`}</div></div>`;
- return `<div>${bar(t('deskT'))}<div class="pad"><div class="sec" style="margin-top:4px">${t('incoming')} · <span class="ltr">${inc.length}</span></div><div style="display:grid;gap:10px">${inc.map(card).join('')||`<p class="cap">${t('deskEmpty')}</p>`}</div>
+ return `<div>${bar(t('deskT'),{back:false})}<div class="pad"><div class="sec" style="margin-top:4px">${t('incoming')} · <span class="ltr">${inc.length}</span></div><div style="display:grid;gap:10px">${inc.map(card).join('')||`<p class="cap">${t('deskEmpty')}</p>`}</div>
  <div class="sec">${t('confirmed')} · <span class="ltr">${cf.length}</span></div><div style="display:grid;gap:10px;margin-bottom:24px">${cf.map(card).join('')}</div></div></div>`};
 
 /* ── sheets ── */
@@ -1564,7 +1564,7 @@ SC.cdesk=()=>{const inc=S.desk.filter(d=>d.st==='paid'),up=S.desk.filter(d=>d.st
   <div class="bs" style="margin-top:10px;display:flex;gap:6px;align-items:center">${I(d.st==='paid'?'card':'cal',16)} ${d.st==='paid'?pick('دُفعت اليوم 10:24','Paid today 10:24'):pick('غدًا 7:00 م','Tomorrow 7:00 pm')}</div>
   ${d.st==='paid'?`<div style="background:var(--g);border-radius:12px;padding:10px;margin-top:10px" class="bs">${pick('نرغب في تحسين أسلوب الحوار بيننا.','We would like to improve how we communicate.')}</div><div style="display:flex;gap:10px;margin-top:12px"><button class="btn out" data-act="deskDecline" data-a="${d.id}">${t('declineBtn')}</button><button class="btn" data-act="deskConfirm" data-a="${d.id}">${I('cal',17)} ${t('confSched')}</button></div>`
   :d.st==='conf'?`<div style="display:flex;gap:10px;margin-top:12px"><button class="btn out" data-act="deskDone" data-a="${d.id}">${t('markDone')}</button><button class="btn" data-act="deskChat">${I('chat',17)} ${t('startChat2')}</button></div>`:''}</div>`;
- return `<div>${bar(t('deskT'))}<div class="pad"><div class="deskhd"><div style="display:flex;gap:12px;align-items:center">${av(null,48)}<span style="flex:1"><b style="font-size:16px">${AR()?COUNSELORS[0].ar:COUNSELORS[0].en}</b><div style="opacity:.7;font-size:12px">${t('kFamily')}</div></span><span class="tag" style="background:var(--p);color:#fff">● ${t('dLive')}</span></div>
+ return `<div>${bar(t('deskT'),{back:false})}<div class="pad"><div class="deskhd"><div style="display:flex;gap:12px;align-items:center">${av(null,48)}<span style="flex:1"><b style="font-size:16px">${AR()?COUNSELORS[0].ar:COUNSELORS[0].en}</b><div style="opacity:.7;font-size:12px">${t('kFamily')}</div></span><span class="tag" style="background:var(--p);color:#fff">● ${t('dLive')}</span></div>
  <div class="st"><span><b class="ltr">${inc.length}</b><small>${t('dReq')}</small></span><span><b class="ltr">${up.length}</b><small>${t('dUp')}</small></span><span><b class="ltr">4.9</b><small>${t('dRating')}</small></span><span><b class="ltr" style="font-size:14px">${money(1680)}</b><small>${t('dMonth')}</small></span></div></div>
  <div class="list" style="margin-top:12px;padding:10px 12px;display:flex;gap:8px;align-items:center"><span style="color:var(--p)">${I('card',18)}</span><span style="flex:1;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none">${Object.entries(S.capp.price).map(([m,p])=>`<span class="tag">${t('sv_MARITAL')} · ${m}′ · ${money(p)}</span>`).join('')}</span><button class="btn sm ghost">${pick('تعديل','Edit')}</button></div>
  <div class="seg" style="margin:16px 0 14px">${[['req','dReq',inc.length],['up','dUp'],['done','dDone']].map(([k,l,n])=>`<button class="${tab===k?'on':''}" data-act="deskTab" data-a="${k}">${t(l)}${n?` · <span class="ltr">${n}</span>`:''}</button>`).join('')}</div>
@@ -2144,7 +2144,7 @@ L8({filtersT:['الفلاتر','Filters','Filtres'],clearF:['مسح الفلات
 const NAVCOUNT=()=>isPro()?{cdesk:S.desk.filter(d=>d.st==='paid').length,pchats:convs().filter(c=>c.unread>0&&c.kind==='consult').length}
  :{likes:opp().filter(p=>p.likesYou).length,convs:convs().filter(c=>(c.unread||0)>0&&c.folder!=='archive').length};
 const cbadge=n=>`<b class="cbadge ltr">${n>99?'99+':n}</b>`;
-const NAVITEMS=()=>isPro()?[['cdesk','counsel','navDesk'],['wallet','card','navWallet'],['pchats','chat','nMessages'],['prome','user','nProfile']]
+const NAVITEMS=()=>isPro()?[['cdesk','cal','nRequests'],['wallet','card','navWallet'],['pchats','chat','nChats'],['prome','user','nProfile'],['pperf','chart','nPerf']]
  :[['discover','discover','nExplore'],['likes','heart','nLikes'],['matches','match','nMarriage'],['convs','chat','nChat'],['me','user','nMenu']];
 navbar=function(on,rail){const n=NAVCOUNT();
  return `<nav class="${rail?'rail':'nav'}" aria-label="main">${rail?`<div class="rail-logo">${LOGO(36)}</div>`:''}${NAVITEMS().map(([k,ic,l])=>`<button class="${on===k?'on':''}" data-tab="${k}" aria-current="${on===k}" aria-label="${t(l)}${n[k]?' — '+tf('navNew',{n:n[k]}):''}"><span class="nic">${I(k===on&&ic==='heart'?'heartf':ic,23,on===k?2.1:1.8)}${n[k]?cbadge(n[k]):''}</span><span>${t(l)}</span></button>`).join('')}</nav>`};
@@ -2561,9 +2561,11 @@ Object.assign(T.ar,{nMenu:'القائمة',nChat:'دردشة',nExplore:'استك
 /* phone bar (members): a capsule — Explore · Marriage · Chat · Menu in reading order, so in Arabic Explore comes first on the right —
    and Likes on its own round glass button at the far end (far left in Arabic), icon only. Professionals keep all their tabs in the capsule. */
 const BAR_M=['discover','matches','convs','me'],SOLO_M='likes';
+/* counselors: same bar — Requests · Chats · Wallet · Profile (Arabic: Requests first on the right), Performance on the round button */
+const BAR_P=['cdesk','pchats','wallet','prome'],SOLO_P='pperf';
 navbar=function(on,rail){const h=_navbar14(on,rail);if(rail||DEVICES[S.dev].W>=840)return h; // tablets turn the bar into a side rail
  const all=NAVITEMS(),n=NAVCOUNT(),pro=isPro();
- const bar=pro?all:BAR_M.map(k=>all.find(x=>x[0]===k)),solo=pro?null:all.find(x=>x[0]===SOLO_M);
+ const bar=(pro?BAR_P:BAR_M).map(k=>all.find(x=>x[0]===k)),solo=all.find(x=>x[0]===(pro?SOLO_P:SOLO_M));
  const btn=([k,ic,l],round)=>`<button class="${on===k?'on':''}" data-tab="${k}" aria-current="${on===k}" aria-label="${t(l)}${n[k]?' — '+tf('navNew',{n:n[k]}):''}"><span class="nic">${I(k===on&&ic==='heart'?'heartf':ic,23,on===k?2.1:1.8)}${n[k]?'<i class="ndot"></i>':''}</span>${round?'':`<span>${t(l)}</span>`}</button>`; /* a dot, not a number; the count stays in aria-label */
  const i=bar.findIndex(x=>x[0]===on);
  return `<nav class="nav glass${solo?' hasSolo':''}" aria-label="main" style="--n:${bar.length}"><i class="npill${i<0?' off':''}" aria-hidden="true" data-to="${Math.max(0,i)}"></i>${bar.map(x=>btn(x)).join('')}</nav>${solo?`<div class="nsolo${on===solo[0]?' on':''}">${btn(solo,true)}</div>`:''}`};
@@ -2594,6 +2596,55 @@ document.addEventListener('pointerup',e=>{if(!scrub)return;const s2=scrub;scrub=
  const kill=ev=>{ev.stopPropagation();ev.preventDefault();document.removeEventListener('click',kill,true)};document.addEventListener('click',kill,true);setTimeout(()=>document.removeEventListener('click',kill,true),50);
  if(s2.k!=null){const b=s2.nav.querySelectorAll('button')[s2.k];S.hist=[];go(b.dataset.tab,false)}},true);
 
+
+/* ===== v0.18 — counselor account: own bottom bar (same design), Performance, counselor plans, Featured counselor ===== */
+L8({nRequests:['الطلبات','Requests','Demandes'],nChats:['المحادثات','Chats','Discussions'],nPerf:['الأداء','Performance','Performance'],
+ s_pperf:['الأداء والظهور','Performance & visibility','Performance et visibilité'],s_pplans:['خطط المستشارين','Counselor plans','Formules conseillers'],
+ ppBody:['حساب المستشار خالٍ من الإعلانات دائمًا. اختر خطة تزيد ظهور ملفك في دليل المستشارين وتعرض لك إحصاءات زيارته.','Counselor accounts never show ads. Pick a plan to raise your profile in the counselor directory and see how it is doing.','Les comptes conseillers n’affichent jamais de publicité. Choisissez une formule pour mieux apparaître dans l’annuaire et suivre votre profil.'],
+ ppTop:['أعلى أولوية في ترتيب دليل المستشارين','Top placement in the counselor directory','Placement en tête de l’annuaire'],ppPri:['أولوية في ترتيب دليل المستشارين','Priority placement in the counselor directory','Placement prioritaire dans l’annuaire'],ppStd:['ظهور عادي في دليل المستشارين حسب التقييم','Standard placement in the directory, by rating','Placement standard dans l’annuaire, selon la note'],
+ ppFeat:['شارة «مستشار مميّز» على بطاقتك وملفك','A “Featured counselor” badge on your card and profile','Un badge « Conseiller mis en avant » sur votre carte et votre profil'],ppIns:['إحصاءات ملفك: المشاهدات والزوار والطلبات خلال 30 يومًا','Profile insights: views, visitors and requests over 30 days','Statistiques : vues, visiteurs et demandes sur 30 jours'],ppCore:['الطلبات والجلسات والمحادثات والمحفظة كاملة','Requests, sessions, chats and wallet in full','Demandes, séances, discussions et portefeuille au complet'],
+ last30:['آخر 30 يومًا','Last 30 days','30 derniers jours'],growT:['ما يساعد العملاء على اختيارك','What helps clients choose you','Ce qui aide les clients à vous choisir'],
+ gr1:['أكمل ملفك وخدماتك وأسعارك','Complete your profile, services and prices','Complétez profil, services et tarifs'],gr1d:['نبذة واضحة وخدمات بلغاتك','A clear bio and services in your languages','Une bio claire et des services dans vos langues'],
+ gr2:['انشر ساعات عملك','Publish your hours','Publiez vos horaires'],gr2d:['يحجز العملاء الأوقات المتاحة مباشرة','Clients book open times directly','Les clients réservent directement les créneaux libres'],
+ gr3:['أكّد الطلبات بسرعة','Confirm requests quickly','Confirmez vite les demandes'],gr3d:['الرد السريع يرفع ثقة العملاء','Quick replies build trust','Une réponse rapide inspire confiance'],
+ insPriv:['لا نعرض هوية من زار ملفك؛ تُحسب الزيارة مرة واحدة لكل عضو في اليوم.','We never show who visited your profile; each member counts once a day.','Nous ne montrons jamais qui a visité votre profil ; chaque membre compte une fois par jour.'],
+ visTop:['يظهر ملفك في أعلى دليل المستشارين.','Your profile appears at the top of the counselor directory.','Votre profil apparaît en tête de l’annuaire.'],visPri:['يظهر ملفك قبل الملفات العادية في الدليل.','Your profile appears ahead of standard profiles.','Votre profil apparaît avant les profils standard.'],visStd:['يظهر ملفك في الدليل حسب تقييمك.','Your profile appears in the directory by rating.','Votre profil apparaît dans l’annuaire selon votre note.'],
+ featC:['مستشار مميّز','Featured counselor','Conseiller mis en avant'],seePP:['خطط المستشارين','See counselor plans','Voir les formules'],mngPP:['إدارة الخطة','Manage plan','Gérer la formule'],yourPP:['خطتك: {p}','Your plan: {p}','Votre formule : {p}'],
+ stV:['مشاهدات الملف','Profile views','Vues du profil'],stU:['زوار مختلفون','Unique visitors','Visiteurs uniques'],stR:['طلبات استشارة مدفوعة','Paid requests','Demandes payées'],stC:['نسبة الطلب من الزوار','Visitors who requested','Visiteurs ayant demandé'],
+ insLT:['اعرف كيف يؤدي ملفك','See how your profile is doing','Suivez votre profil'],insLD:['مع بلس أو بريميوم للمستشارين ترى المشاهدات والزوار والطلبات، ويظهر ملفك أعلى في الدليل.','With counselor Plus or Premium you see views, visitors and requests, and your profile is placed higher.','Avec Plus ou Premium conseillers : vues, visiteurs, demandes, et un meilleur placement.'],
+ ppTile:['ظهور أعلى في الدليل، شارة «مستشار مميّز»، وإحصاءات ملفك','Higher in the directory, a Featured badge and profile insights','Mieux placé dans l’annuaire, badge « mis en avant » et statistiques']});
+['s_pperf','s_pplans'].forEach(k=>{FRX[T.en[k]]=T.fr[k]});
+Object.assign(S,{proPlan:'free',ppSel:'proplus'});
+NAVTAB.pperf='pperf';
+PRO_ONLY.push('pperf','pplans');GROUPS.find(g=>g[0]==='g8')[1].push('pperf','pplans');ORDER=GROUPS.flatMap(g=>g[1]);
+const PPN={free:()=>t('free'),proplus:()=>'Plus',propremium:()=>'Premium'};
+const PPB={free:0,proplus:1,propremium:2};
+SC.pperf=()=>{const p=S.proPlan,b=PPB[p],paid=p!=='free';const nf=n=>new Intl.NumberFormat(S.lang==='fr'?'fr':'en').format(n);
+ const tile=(ic,v,l)=>`<div class="list" style="padding:14px;display:grid;gap:4px" role="group" aria-label="${l}: ${v}">${I(ic,22)}<b class="ltr" style="font:700 24px Montserrat,Tajawal,sans-serif;text-align:start">${v}</b><span class="cap">${l}</span></div>`;
+ return `<div>${bar(t('s_pperf'),{back:false})}<div class="pad">
+ <div style="background:var(--k);color:#fff;border-radius:24px;padding:16px"><div style="display:flex;align-items:center;gap:8px">${I('crown',20)}<span class="h3" style="flex:1;color:#fff">${tf('yourPP',{p:PPN[p]()})}</span>${p==='propremium'?`<span class="tag pf">${I('badge',12,2)} ${t('featC')}</span>`:''}</div>
+ <p class="bs" style="opacity:.8;margin:8px 0 14px">${t(b===2?'visTop':b===1?'visPri':'visStd')}</p><button class="btn wh sm" data-go="pplans">${paid?t('mngPP'):t('seePP')}</button></div>
+ <div class="h3" style="margin:20px 0 10px">${t('last30')}</div>
+ ${paid?`<div class="g2" style="gap:10px">${tile('eye',nf(p==='propremium'?412:184),t('stV'))}${tile('user',nf(p==='propremium'?263:121),t('stU'))}${tile('cal',nf(p==='propremium'?21:9),t('stR'))}${tile('chart',new Intl.NumberFormat(S.lang==='fr'?'fr':'en',{style:'percent'}).format(p==='propremium'?.08:.07),t('stC'))}</div>`
+  :`<div class="list" style="padding:16px">${I('lock',22)}<div class="h3" style="margin:8px 0 4px">${t('insLT')}</div><p class="bs mut" style="margin:0 0 12px">${t('insLD')}</p><button class="btn sm" data-go="pplans">${t('seePP')}</button></div>`}
+ <div class="h3" style="margin:20px 0 10px">${t('growT')}</div>
+ <div class="list">${row('user',t('gr1'),t('gr1d'),{go:'prome'})}${row('cal',t('gr2'),t('gr2d'),{go:'schedule'})}${row('bell',t('gr3'),t('gr3d'),{go:'cdesk'})}</div>
+ <p class="cap" style="margin:12px 0 0">${t('insPriv')}</p></div></div>`};
+SC.pplans=()=>{const cur=S.proPlan,sel=S.ppSel;
+ const card=(k,hl)=>{const b=PPB[k];const feats=[t(b===2?'ppTop':b===1?'ppPri':'ppStd')];if(k==='propremium')feats.push(t('ppFeat'));if(k!=='free')feats.push(t('ppIns'));else feats.push(t('ppCore'));
+  return `<button class="plan ${hl?'hl':''} ${sel===k?'on':''}" data-act="ppSel" data-a="${k}"><div class="pt"><div style="display:flex;align-items:center;gap:8px"><span class="h3" style="font-size:19px">${PPN[k]()}</span>${hl?`<span class="tag pf">${t('popular')}</span>`:''}${cur===k?`<span class="tag ${hl?'':'p'}">${t('current')}</span>`:''}</div><span class="radio ${sel===k?'on':''}" style="${hl?'border-color:var(--w)':''}"></span></div><div class="cap" style="${hl?'color:var(--w60)':''};margin-top:4px">${k==='free'?t('free'):t('priceStore')+' / '+t('month')}</div><ul>${feats.map(f=>`<li>${I('check',17,2.4)}<span>${f}</span></li>`).join('')}</ul></button>`};
+ return `<div class="full">${bar(t('s_pplans'))}<div class="pad"><p class="bm mut" style="margin:-4px 0 18px">${t('ppBody')}</p>${card('free')}${card('proplus',true)}${card('propremium')}
+ <p class="cap" style="margin:6px 0 4px">${t('legal')}</p><div style="display:flex;gap:16px;margin:8px 0 6px" class="bs"><button class="link">${t('restore')}</button><button class="link">${t('terms')}</button><button class="link">${t('privPol')}</button></div></div>
+ <div class="foot sticky-foot"><button class="btn" data-act="ppBuy" ${sel===cur?'disabled':''}>${sel===cur?t('current'):t('subscribe')}</button></div></div>`};
+Object.assign(ACT,{ppSel:a=>{S.ppSel=a;render()},ppBuy:()=>{S.proPlan=S.ppSel;COUNSELORS[0].featured=S.proPlan==='propremium';toast(t('subscribed'));go('pperf')}});
+/* the counselor's profile: plans + performance */
+const _prome18=SC.prome;SC.prome=()=>{const h=_prome18();const blk=`<div class="list" style="margin-bottom:14px">${row('crown',t('s_pplans'),t('ppTile'),{go:'pplans',p:true})}${row('chart',t('s_pperf'),'',{go:'pperf'})}</div>`;
+ const i=h.lastIndexOf('<div class="list"');return i<0?h:h.slice(0,i)+blk+h.slice(i)};
+/* members: a Featured counselor mark (counselor Premium); the directory lists them first */
+COUNSELORS[0].featured=true;
+const featTag=()=>`<span class="tag p" style="margin-top:6px;display:inline-flex;gap:4px">${I('crown',12,2)} ${t('featC')}</span>`;
+const _cons18=SC.consult;SC.consult=()=>{let h=_cons18();COUNSELORS.filter(c=>c.featured).forEach(c=>{const st=h.indexOf(`data-act="openCounselor" data-a="${c.id}"`);if(st<0)return;const r=h.indexOf('<div class="rating">',st);if(r<0)return;const e=h.indexOf('</div>',r)+6;h=h.slice(0,e)+featTag()+h.slice(e)});return h};
+const _cnsl18=SC.counselor;SC.counselor=()=>{let h=_cnsl18();const c=cnsl(S.cnsl);if(!c||!c.featured)return h;const i=h.indexOf('<div class="pad"');if(i<0)return h;const j=h.indexOf('>',i)+1;return h.slice(0,j)+`<div style="text-align:center;margin:-4px 0 10px">${featTag()}</div>`+h.slice(j)};
 try{const q=new URLSearchParams(location.hash.slice(1));if(q.get('lang'))S.lang=q.get('lang');if(SC[q.get('s')])S.screen=q.get('s');if(q.get('mode'))S.mode=q.get('mode');if(q.get('dev')&&DEVICES[q.get('dev')])S.dev=q.get('dev');if(q.get('view'))S.view=q.get('view');if(q.get('adm'))S.adm=q.get('adm');if(q.get('adev'))S.adev=q.get('adev');if(q.get('acct'))S.acct=q.get('acct');if(q.get('sheet'))S.sheet=q.get('sheet');if(q.get('cid'))S.cid=q.get('cid');if(q.get('detail'))S.detail=+q.get('detail')}catch(e){}
 render();
 </script>

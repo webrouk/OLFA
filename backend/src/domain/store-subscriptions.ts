@@ -210,8 +210,9 @@ export function deriveStatus(s: StoreSnapshot, now: Date, storedAutoRenew = true
   return { status, entitled, expiresAt: s.expiresAt, autoRenew };
 }
 
-export type PlanLevel = 'FREE' | 'PLUS' | 'PREMIUM';
-const RANK: Record<PlanLevel, number> = { FREE: 0, PLUS: 1, PREMIUM: 2 };
+export type PlanLevel = 'FREE' | 'PLUS' | 'PREMIUM' | 'PRO_PLUS' | 'PRO_PREMIUM';
+/** Counselor plans rank like their member counterparts (a member and a counselor never share a subscription). */
+const RANK: Record<PlanLevel, number> = { FREE: 0, PLUS: 1, PREMIUM: 2, PRO_PLUS: 1, PRO_PREMIUM: 2 };
 
 export type PlanChange = 'new' | 'renewal' | 'upgrade' | 'downgrade_scheduled' | 'downgrade' | 'none';
 

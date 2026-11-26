@@ -20,8 +20,11 @@ import '../application/entitlements_controller.dart';
 /// prices come from the store — never hard-coded. Plan changes follow store
 /// rules: an upgrade starts now, a downgrade at the next renewal, and
 /// cancelling happens in the store (the app links there).
+/// [professional]: the counselor plans (Free, Plus, Premium for counselors),
+/// with their own benefits; the same store flow.
 class PlansScreen extends ConsumerStatefulWidget {
-  const PlansScreen({super.key});
+  const PlansScreen({super.key, this.professional = false});
+  final bool professional;
   @override
   ConsumerState<PlansScreen> createState() => _PlansScreenState();
 }
@@ -93,8 +96,10 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     final t = context.type;
     final ent = ref.watch(entitlementsProvider).valueOrNull;
     final store = ref.watch(storeSubscriptionProvider).valueOrNull;
+    final pro = widget.professional;
     final current = ent?.plan ?? PlanCode.free;
-    final sel = _selected ?? (current == PlanCode.free ? PlanCode.plus : current);
+    final plusCode = pro ? PlanCode.proPlus : PlanCode.plus;
+    final sel = _selected ?? (current == PlanCode.free ? plusCode : current);
     final date = DateFormat.yMMMd(Localizations.localeOf(context).toLanguageTag());
 
     final String label;
@@ -112,10 +117,10 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(l.screenPlans)),
+      appBar: AppBar(title: Text(pro ? l.screenProPlans : l.screenPlans)),
       body: AsyncView<List<PlanInfo>>(
-        value: ref.watch(plansProvider),
-        onRetry: () => ref.invalidate(plansProvider),
+        value: ref.watch(pro ? proPlansProvider : plansProvider),
+        onRetry: () => ref.invalidate(pro ? proPlansProvider : plansProvider),
         data: (plans) => Column(
           children: [
             Expanded(
@@ -123,7 +128,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                   children: [
-                    Text(l.plansBody, style: t.bodyMedium.copyWith(color: OlfaColors.textMuted)),
+                    Text(pro ? l.proPlansBody : l.plansBody, style: t.bodyMedium.copyWith(color: OlfaColors.textMuted)),
                     const SizedBox(height: 14),
                     if (store != null) ...[
                       if (store.billingIssue)
@@ -142,7 +147,7 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
                       const SizedBox(height: 14),
                     ],
                     for (final p in plans) ...[
-                      SubscriptionCard(plan: p, highlight: p.code == PlanCode.plus, selected: sel == p.code, current: current == p.code, onTap: () => setState(() => _selected = p.code)),
+                      SubscriptionCard(plan: p, professional: pro, highlight: p.code == plusCode, selected: sel == p.code, current: current == p.code, onTap: () => setState(() => _selected = p.code)),
                       const SizedBox(height: 12),
                     ],
                     Text(l.planChangeRules, style: t.caption),

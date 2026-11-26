@@ -4,7 +4,8 @@ abstract interface class SubscriptionRepository {
   Future<Entitlements> entitlements();
 
   /// Plans with quotas from the server and prices from the store.
-  Future<List<PlanInfo>> plans();
+  /// Member plans, or the counselor plans (with Free) when [professional].
+  Future<List<PlanInfo>> plans({bool professional = false});
 
   /// Store subscription as the server last verified it; null on Free.
   Future<StoreSubscription?> storeSubscription();

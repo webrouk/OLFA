@@ -31,7 +31,17 @@ enum VerificationLevel {
       selfie && identity ? full : (selfie || identity ? partial : none);
 }
 
-enum PlanCode { free, plus, premium }
+/// Member plans (free / plus / premium) and counselor plans (proPlus /
+/// proPremium — licensed professionals only, with their own benefits).
+enum PlanCode {
+  free,
+  plus,
+  premium,
+  proPlus,
+  proPremium;
+
+  bool get isPro => this == proPlus || this == proPremium;
+}
 
 /// Chosen once during sign-up. Members look for marriage; professionals
 /// (psychologist / family counselor) get the counselor workspace and never
@@ -352,8 +362,17 @@ class PlanInfo {
     required this.priorityVisibility,
     this.storeProductId,
     this.localizedPrice,
+    this.directoryBoost = 0,
+    this.featuredBadge = false,
+    this.profileInsights = false,
   });
   final PlanCode code;
+
+  /// Counselor plans: placement in the counselor directory (0–2), the
+  /// "Featured counselor" mark, profile insights. Always off on member plans.
+  final int directoryBoost;
+  final bool featuredBadge;
+  final bool profileInsights;
   final int dailyLikes;
   final int dailyMessages;
   final int dailyUndos;
@@ -847,6 +866,7 @@ class Counselor {
     this.reviews = const [],
     this.status,
     this.rejectReason,
+    this.featured = false,
   });
   final String id;
   final CounselorKind kind;
@@ -866,6 +886,26 @@ class Counselor {
   /// Only present on the counselor's own profile.
   final CounselorStatus? status;
   final String? rejectReason;
+
+  /// "Featured counselor" (counselor Premium); the server also lists them first.
+  final bool featured;
+}
+
+/// A counselor's last 30 days (counselor Plus / Premium). Who looked is never shown.
+class ProInsights {
+  const ProInsights({required this.available, required this.plan, this.featured = false, this.boost = 0, this.views = 0, this.uniqueVisitors = 0, this.requests = 0, this.conversion = 0});
+
+  /// False on the free plan: the screen shows what the plans unlock instead.
+  final bool available;
+  final PlanCode plan;
+  final bool featured;
+  final int boost;
+  final int views;
+  final int uniqueVisitors;
+  final int requests;
+
+  /// Requests per unique visitor, 0–1.
+  final double conversion;
 }
 
 class Consultation {

@@ -113,8 +113,22 @@ abstract final class ApiMappers {
       seeWhoLikedYou: e['see_who_liked_you'] == true,
       priorityVisibility: e['priority_visibility'] == true,
       storeProductId: products.isEmpty ? null : products.first['productId'] as String?,
+      directoryBoost: n('directory_boost').clamp(0, 2),
+      featuredBadge: e['featured_badge'] == true,
+      profileInsights: e['profile_insights'] == true,
     );
   }
+
+  static ProInsights proInsights(Map<String, dynamic> j) => ProInsights(
+        available: j['available'] == true,
+        plan: fromApiEnum(PlanCode.values, j['plan'], PlanCode.free),
+        featured: j['featured'] == true,
+        boost: (j['boost'] as num?)?.toInt() ?? 0,
+        views: (j['views'] as num?)?.toInt() ?? 0,
+        uniqueVisitors: (j['uniqueVisitors'] as num?)?.toInt() ?? 0,
+        requests: (j['requests'] as num?)?.toInt() ?? 0,
+        conversion: (j['conversion'] as num?)?.toDouble() ?? 0,
+      );
 
   static ChatMessage message(Map<String, dynamic> j, String conversationId, String myId) {
     final receipts = (j['receipts'] as List? ?? const []).cast<Map>();
@@ -272,6 +286,7 @@ abstract final class ApiMappers {
             .toList(),
         status: j['status'] == null ? null : fromApiEnum(CounselorStatus.values, j['status'], CounselorStatus.pending),
         rejectReason: j['rejectReason'] as String?,
+        featured: j['featured'] == true,
       );
 
   static Consultation consultation(Map<String, dynamic> j) {

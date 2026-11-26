@@ -75,7 +75,12 @@ const FEATURE_KEYS: Record<string, 'number' | 'boolean'> = {
   incognito: 'boolean',
   priority_visibility: 'boolean',
   show_ads: 'boolean', // Free plan only — refused for paid plans here and by a DB trigger
+  // counselor plans (DB trigger P0077: only on FREE = off, and PRO_* plans)
+  directory_boost: 'number',
+  featured_badge: 'boolean',
+  profile_insights: 'boolean',
 };
+const PRO_KEYS = new Set(['directory_boost', 'featured_badge', 'profile_insights']);
 
 class AdUnitsDto {
   @ApiProperty({ description: 'AdMob native ad unit id for Android, or empty' }) @IsString() @Length(0, 60) android!: string;
@@ -287,6 +292,12 @@ export class AdminService {
   /** Quota / feature edits apply to all users of the plan within ~30 s, no app update needed. */
   async setEntitlements(code: PlanCode, dto: EntitlementsDto, admin: AuthAdmin) {
     if (code !== 'FREE' && dto.values.show_ads === true) throw new AppError(ErrorCode.VALIDATION, 'Paid plans never show ads', { field: 'show_ads' });
+    const pro = code.startsWith('PRO_');
+    for (const k of Object.keys(dto.values)) {
+      if (PRO_KEYS.has(k) && !pro && code !== 'FREE') throw new AppError(ErrorCode.VALIDATION, 'Counselor features belong to counselor plans', { field: k });
+      if (pro && !PRO_KEYS.has(k) && k !== 'show_ads') throw new AppError(ErrorCode.VALIDATION, 'Member features belong to member plans', { field: k });
+    }
+    if (dto.values.directory_boost !== undefined && ((dto.values.directory_boost as number) > 2 || (code === 'FREE' && dto.values.directory_boost !== 0))) throw new AppError(ErrorCode.VALIDATION, 'Boost is 0–2, and 0 on the free plan', { field: 'directory_boost' });
     for (const [k, v] of Object.entries(dto.values)) {
       const t = FEATURE_KEYS[k];
       if (!t || typeof v !== t || (t === 'number' && (!Number.isInteger(v) || (v as number) < 0 || (v as number) > 10000))) {
